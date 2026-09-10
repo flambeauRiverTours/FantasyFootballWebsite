@@ -50,8 +50,10 @@ about it — and this is where the bugs that matter live.
 Ends with a console app printing the real standings and asserting both
 invariants across a whole season.
 
-- [ ] **T09** DTOs and JSON config — 2 h
-      snake_case, nullable numerics, `players_points` as a string-keyed map.
+- [x] **T09** DTOs and JSON config — 2 h
+      Six DTOs, shared `SleeperJson.Options`, and `SleeperMapper` as the single
+      wire-to-domain boundary. 20 binding tests against the real payloads.
+      **A7 (`custom_points`) still wants confirming against Sleeper's docs.**
 - [ ] **T10** Typed HttpClient — 2 h
       state, league, users, rosters, matchups, players.
 - [ ] **T11** Token-bucket handler — 2 h
@@ -275,6 +277,26 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T09 framed
+
+`FantasyLeague.Sleeper` now has six DTOs under `Dtos/`, a shared
+`SleeperJson.Options`, a public `PlayerRef`/`RosterWeek`, and `SleeperMapper` as
+the one place Sleeper's shapes become the domain's. DTOs stay `internal` per the
+manual; `InternalsVisibleTo` lets the test project bind them.
+
+20 tests, passing first run, against payloads Sleeper actually returned rather
+than the shapes the design assumed — including that `16.92` survives the parse as
+a decimal, that `season` binds from the string `"2026"`, and that three `"0"`
+empty starter slots appear in a single real week.
+
+Three findings recorded as amendments: **A6** the design is wrong about unset
+team names, **A7** `custom_points` is a commissioner override that must win, and
+**A8** unresolved player ids are reported rather than dropped.
+
+Left deliberately off `RosterDto`: its own `players` and `starters`. They are the
+roster as it stands today, and D2 requires the week's roster from the matchup
+payload instead — omitting them means the wrong one cannot be reached for.
 
 ### 2026-09-10 — T07 verified, T08 done
 

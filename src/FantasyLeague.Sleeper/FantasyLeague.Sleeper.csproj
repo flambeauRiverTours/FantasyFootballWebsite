@@ -1,3 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\FantasyLeague.Core\FantasyLeague.Core.csproj" />
+  </ItemGroup>
 
+  <ItemGroup>
+    <!-- DTOs are internal; the test project binds them against tests/fixtures. -->
+    <InternalsVisibleTo Include="FantasyLeague.Core.Tests" />
+  </ItemGroup>
 </Project>

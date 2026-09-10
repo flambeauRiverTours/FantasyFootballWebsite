@@ -204,8 +204,64 @@ year.
 
 ---
 
+## A6 · An unset team name is absent, not an empty string
+
+§03 says team name resolves as `users[].metadata.team_name` falling back to
+`display_name`, and that *"a manager who never set a team name has an empty
+string, not a missing key."*
+
+**That is not what this league returns.** Checked against `/league/{id}/users` on
+2026-09-10: for two of six managers the `team_name` key is **absent from
+`metadata` altogether**, and `metadata` itself can be null on a user.
+
+So resolution must collapse three cases, not one: key absent, value null, value
+empty or whitespace. `SleeperMapper.ResolveTeamName` uses
+`string.IsNullOrWhiteSpace` for exactly that, with a final `Roster {n}` fallback
+so an orphaned roster or a manager with neither name never renders as a blank row.
+
+Code written to the design's wording — testing `team_name == ""` — would have
+produced two blank team names in the standings.
+
+---
+
+## A7 · A commissioner override wins over the scored points
+
+The matchup payload carries **`custom_points`** alongside `points`. It is null on
+every entry in the captured week, and it is the value Sleeper displays once a
+commissioner has corrected a score.
+
+`SleeperMapper.ToRosterWeek` therefore maps actual as `custom_points ?? points`.
+The failure mode of ignoring it is quiet and nasty: a single stat correction
+would leave this site's standings permanently disagreeing with the Sleeper app,
+with nothing to indicate which was right and no invariant that could catch it —
+`sum(starters_points) == points` compares against `points`, not the override.
+
+**Worth confirming against Sleeper's documentation before relying on it.** The
+mapping is written the safe way round; if it turns out `custom_points` is
+additive rather than a replacement, one line changes.
+
+---
+
+## A8 · An unresolved player is reported, never dropped
+
+`RosterWeek` carries `UnresolvedPlayerIds` — ids on a roster that the player map
+could not explain.
+
+This exists because the map is refreshed daily (§03), so a player signed and
+rostered between refreshes is genuinely absent for a few hours. Dropping him
+quietly would lower that team's ideal points, and **`ideal >= actual` cannot
+catch it**: undercounting is the restrictive direction the invariant is blind to,
+the same blind spot T16's warning describes for slot eligibility.
+
+Callers decide what to do — the finalize timer should refuse to freeze a week
+with unresolved ids rather than write numbers it knows are low. What must not
+happen is the list being ignored.
+
+---
+
 ## Where the design is now out of date
 
+- **§03 is wrong about team names** — see A6.
 - **§08, §10, D11 assume twelve teams.** The league has **six rosters, five of
   them scoring** (A1). §08's "roughly 12 teams × 18 weeks is 216 rows" becomes
   ~108. More substantively, the legibility arguments soften: five lines on a
