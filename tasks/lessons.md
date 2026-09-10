@@ -165,3 +165,41 @@ and later weeks reference players it does not contain.
 **Rule:** A derived fixture must be rebuilt from every captured week on disk, not
 only the ones fetched this run. `scripts/capture_fixtures.py` globs
 `wk*-matchups.json` for exactly this reason.
+
+## Registering a handler in DI does not put it in the HTTP pipeline
+
+**What happened:** `AddTransient<RateLimitHandler>()` was called, but
+`AddHttpMessageHandler<RateLimitHandler>()` never was, so the token bucket was
+not in the chain and every Sleeper request bypassed it. Nothing failed: the
+handler simply sat in the container unused. `AddSleeperClient()` returns the
+`IHttpClientBuilder` that represents the pipeline, and the call site dropped it.
+
+**Rule:** Both calls are needed and they mean different things —
+`AddTransient` is the supplier, `AddHttpMessageHandler` is the customer. Assemble
+the pipeline inside the extension method that owns the client, so it cannot be
+registered without its handlers, and assert the behaviour rather than the
+registration: a test with an empty bucket must see zero requests reach the
+primary handler.
+
+## Handler order decides whether retries are rate limited
+
+**What happened:** The manual adds the rate limiter before the resilience
+handler. Handlers run first-added-outermost, so that puts the retry loop *inside*
+the bucket: one token, up to four network requests. Measured, not assumed.
+
+**Rule:** Put the retrying strategy outermost and the limiter inside it, so every
+real attempt spends a token. The trade-off is that token-wait time then counts
+against the attempt timeout, which only matters if the bucket is routinely empty
+— and if it is, the budget is wrong anyway.
+
+## AddStandardResilienceHandler disables HttpClient.Timeout
+
+**What happened:** Time was spent worrying about layering `HttpClient.Timeout`
+against the pipeline's `TotalRequestTimeout`. The resilience handler settles it
+itself: it sets `HttpClient.Timeout` to `InfiniteTimeSpan`, and **overrides an
+explicit value** — a client configured with 20 seconds still comes out infinite.
+
+**Rule:** With the standard resilience handler in the chain, do not configure
+`HttpClient.Timeout`; it will be ignored. Tune `TotalRequestTimeout` and
+`AttemptTimeout` instead, and check assumptions about a library's behaviour by
+running it rather than reasoning from its documentation.

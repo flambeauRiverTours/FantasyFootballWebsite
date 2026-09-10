@@ -17,6 +17,8 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
         .UseFunctionsWorkerDefaults()
         .UseAzureMonitorExporter();
 }
+// Registers the client together with its resilience pipeline and rate limit;
+// the host does not need to know how that pipeline is assembled.
 builder.Services.AddSleeperClient();
 
 builder.Build().Run();

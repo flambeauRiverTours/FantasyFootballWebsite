@@ -268,31 +268,34 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_timeout_is_bounded()
+        public void The_pipeline_owns_the_timeout_not_the_client()
         {
-            // Currently HttpClient's 100 second default: AddSleeperClient sets no
-            // timeout of its own. The specific value belongs to T12, where
-            // HttpClient.Timeout has to be reconciled with the resilience
-            // pipeline's own total-request timeout -- HttpClient.Timeout covers
-            // the whole operation including retries, so setting it below the
-            // pipeline's budget cuts retries off partway. This asserts only that
-            // it is finite, which must stay true whatever T12 decides.
+            // AddStandardResilienceHandler forces HttpClient.Timeout to infinite,
+            // and overrides any value configured on the client. That is deliberate:
+            // HttpClient.Timeout covers the whole operation including retries, so
+            // leaving it finite would cut the pipeline off part way through and
+            // surface as a bare TaskCanceledException naming no cause.
+            //
+            // The real budget is the pipeline's TotalRequestTimeout, 30s by
+            // default. Setting c.Timeout in AddSleeperClient would be silently
+            // ignored, so this asserts the arrangement rather than a number.
             using var provider = Provider();
             var http = provider.GetRequiredService<IHttpClientFactory>()
                 .CreateClient(nameof(SleeperClient));
 
-            http.Timeout.Should().BeGreaterThan(TimeSpan.Zero);
-            http.Timeout.Should().NotBe(Timeout.InfiniteTimeSpan,
-                "an unbounded client can hold a Consumption-plan request open indefinitely");
+            http.Timeout.Should().Be(Timeout.InfiniteTimeSpan,
+                "the resilience pipeline bounds the operation instead");
         }
 
         [Fact]
-        public void Registration_returns_a_builder_for_the_handlers_still_to_come()
+        public void Registration_returns_the_builder_so_a_host_can_add_more()
         {
-            // T11's token bucket and T12's resilience policy chain onto this.
+            // The return value is the pipeline handle. Dropping it is how the
+            // rate limit handler ended up registered but never attached.
             var services = new ServiceCollection();
 
             services.AddSleeperClient().Should().BeAssignableTo<IHttpClientBuilder>();
         }
+
     }
 }

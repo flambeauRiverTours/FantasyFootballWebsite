@@ -58,10 +58,12 @@ invariants across a whole season.
       state, league, users, rosters, matchups, players, registered through
       `AddSleeperClient` so the client and DTOs stay internal. 24 tests over a
       stub handler — no network. **Open decision: F3, the client timeout.**
-- [ ] **T11** Token-bucket handler — 2 h
-      `DelegatingHandler` at 50/min, shared by HTTP and timer paths.
-- [ ] **T12** Polly policies — 1 h
-      429 and transient retry, exponential backoff with jitter, bounded queue.
+- [x] **T11** Token-bucket handler — 2 h
+      `DelegatingHandler` at 50/min, shared by HTTP and timer paths. Assembled
+      inside `AddSleeperClient` so the client cannot be registered without it.
+- [x] **T12** Polly policies — 1 h
+      `AddStandardResilienceHandler`, outermost so every retry spends its own
+      token. Local rate-limit refusals are excluded from retry.
 - [ ] **T13** Single-flight cache — 2 h
       Per-key TTL, concurrent callers await one in-flight fetch.
 - [ ] **T14** Player dump job — 1.5 h
@@ -203,16 +205,17 @@ should be a type the caller handles rather than a fabricated zero.
       `minWeeks: 4`, so this is only a caller error with a confusing message.
       `finalWeeks.Count == 0` in the guard would settle it.
 
-- [ ] **F3 · `AddSleeperClient` sets no timeout, so the client uses HttpClient's
-      100-second default.** The manual's T10 snippet sets 20 seconds. Removing it
-      is defensible — `HttpClient.Timeout` covers the whole operation *including*
-      retries, so a value below the resilience pipeline's total-request budget
-      cuts retries off partway, and letting T12 own timeouts avoids that fight.
-      But T12 does not exist yet, so today a hung Sleeper request holds a
-      Consumption-plan invocation open for a hundred seconds. Decide at T12
-      whether the client or the pipeline owns this, and set it deliberately
-      either way. `The_timeout_is_bounded` asserts only that it is finite, which
-      stays true whichever way it goes.
+- [x] **F3 · Resolved: the resilience pipeline owns the timeout.**
+      `AddStandardResilienceHandler` sets `HttpClient.Timeout` to
+      `InfiniteTimeSpan` and **overrides any value configured on the client** —
+      verified: a client with an explicit 20 second timeout still comes out
+      infinite once resilience is added. That is deliberate, because
+      `HttpClient.Timeout` covers the whole operation including retries and would
+      otherwise cut the pipeline off part way through, surfacing as a bare
+      `TaskCanceledException` naming no cause. The real budget is the pipeline's
+      `TotalRequestTimeout`, 30 seconds, with a 10 second `AttemptTimeout` inside
+      it. Nothing to change; the arrangement is now asserted by
+      `The_pipeline_owns_the_timeout_not_the_client`.
 
 ## Blocked on the season
 
@@ -290,6 +293,34 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T11 and T12 wired and tested
+
+The whole outbound pipeline now lives in `AddSleeperClient`, so the host cannot
+register the client without its rate limit. 12 new tests, suite at 121 passing.
+
+The defect worth recording: the handler had been registered with
+`AddTransient` but never attached with `AddHttpMessageHandler`, so nothing was
+in the pipeline and every Sleeper call bypassed the bucket. DI knowing how to
+build a thing is not the same as the chain using it, and the returned
+`IHttpClientBuilder` being discarded is what hid it.
+`The_rate_limiter_is_actually_in_the_pipeline` now fails if that recurs.
+
+Order was chosen rather than inherited. Handlers run first-added-outermost —
+proven, not assumed — so resilience goes first and the rate limiter second, and
+every retry passes back down through the bucket and spends its own token. The
+reverse order lets one token cover four network requests, which is exactly the
+retry-loop case the limit exists to contain.
+
+Local rate-limit refusals now throw `SleeperRateLimitExceededException`. It
+derives from `HttpRequestException` so existing handling is unsurprised, but is a
+distinct type so `ShouldRetry` can exclude it — the manual's `ShouldHandle` would
+otherwise have retried a purely local refusal that no amount of backoff can help.
+
+**A note on the circuit breaker.** Its default `MinimumThroughput` is 100 calls
+within a 30 second sampling window. This design makes about one call in 30
+seconds, so the breaker can never open. It is inert here — worth knowing so
+nobody reasons about behaviour it will never exhibit.
 
 ### 2026-09-10 — T10 reviewed and covered
 
