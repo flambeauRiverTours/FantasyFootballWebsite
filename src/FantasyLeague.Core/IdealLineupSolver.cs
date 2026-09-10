@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace FantasyLeague.Core
+﻿namespace FantasyLeague.Core
 {
     /// <summary>
     /// Provides a solver for the ideal lineup problem in fantasy sports. The solver uses dynamic programming to calculate the maximum points that can be achieved by selecting players for the given slots, while respecting the position constraints of each slot.
