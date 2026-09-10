@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FantasyLeague.Core/FantasyLeague.Core.csproj" />
+    <Project Path="src/FantasyLeague.Data/FantasyLeague.Data.csproj" />
+    <Project Path="src/FantasyLeague.Functions/FantasyLeague.Functions.csproj" />
+    <Project Path="src/FantasyLeague.Sleeper/FantasyLeague.Sleeper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FantasyLeague.Core.Tests/FantasyLeague.Core.Tests.csproj" />
+  </Folder>
+</Solution>
