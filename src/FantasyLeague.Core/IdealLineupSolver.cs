@@ -68,7 +68,7 @@ namespace FantasyLeague.Core
                 }
                 dp = next; chosen = nextChosen;
             }
-         
+
             var best = Array.IndexOf(dp, dp.Max());
 
             var lineup = new List<PlayerId>();

@@ -35,8 +35,9 @@ about it — and this is where the bugs that matter live.
       Exact ideal lineup over 2^11 slot states. `dp.Max()`, not `dp[full]`.
       Points and lineup both verified against exhaustive search — 48 tests plus a
       50,000-case fuzz, zero discrepancies.
-- [ ] **T06** Solver fixtures and tests — 3 h `±`
-      Real weeks from T02, plus a constructed case where greedy loses and a bye-week hole.
+- [~] **T06** Solver fixtures and tests — 3 h `±`
+      All four named cases written and passing; fixtures captured and reproducible
+      via `scripts/capture_fixtures.py`. **Blocked on data** — see B1–B4 below.
 - [ ] **T07** Consistency maths — 1 h
       Population sigma, CV, mean/min/max. Returns null below four final weeks.
 - [ ] **T08** Sigma edge-case tests — 1.5 h
@@ -176,6 +177,34 @@ listed separately so that cutting it is a decision rather than an omission.
 
 ---
 
+## Blocked on the season
+
+Work that is written, understood and simply waiting for games to be played.
+Dates are the Tuesday each NFL week finalizes, so the data is settled by then.
+
+| | Take on | What | Why it has to wait |
+|---|---|---|---|
+| **B1** | **2026-09-15** | Re-capture week 1 | The committed fixture is mid-week-1: only the Thursday game had been played, and four of six rosters sit on 0.00. Three of the six `ideal >= actual` assertions are currently `0 >= 0`. |
+| **B2** | **2026-09-29** | Capture weeks 2 and 3 | T06 asks for two or three real weeks. By this date all three are final. Also the first point at which waivers will have moved players, which is what `player-positions.json` staleness protection exists for. |
+| **B3** | **2026-10-06** | First non-null σ | D1 returns null below four finalized weeks, so T07/T08's boundary case cannot be exercised against real data until week 4 is in. |
+| **B4** | **week 5 or 6** — confirm from the NFL schedule; finalize dates are 2026-10-13 and 2026-10-20 | Capture a bye week | The only way to exercise a `players_points` entry being genuinely absent (the `0m` default) and a bye-shaped partial fill against real data. Week 1 has neither — every rostered player had a points entry. |
+
+Each is one command once the date passes:
+
+```bash
+export SLEEPER_LEAGUE_ID=...          # never committed; see A2
+python scripts/capture_fixtures.py    # every completed week
+```
+
+Then re-run the suite. `A_roster_short_at_a_position_leaves_that_slot_empty`
+pins per-roster fill counts from the week-1 capture and will need its expected
+numbers refreshed when rosters change.
+
+**B5 · Strengthen `ideal >= actual` once B1 and B2 land.** Today it passes with
+almost no signal. With real scores it should also assert that at least one roster
+has a genuine `ideal > actual` gap — otherwise the metric could silently be
+returning `actual` and every test would still be green.
+
 ## Open questions
 
 Q1, Q2, Q3, Q7 and Q8 were settled on 2026-09-10 against the live league.
@@ -224,6 +253,28 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T06 unblocked work
+
+Added `scripts/capture_fixtures.py`: reads the league ID from
+`SLEEPER_LEAGUE_ID`, captures every completed week, and rebuilds
+`player-positions.json` over the **union** of all captured weeks rather than
+per-run — a map built from week 1 alone goes stale as soon as waivers move
+anyone. It refuses to run without the env var, never echoes a URL containing the
+league ID, and re-reads its own output to assert no league ID was written.
+Verified it reproduces the committed fixtures byte-for-byte.
+
+Hardened the fixture tests. They previously filtered rosters with
+`positions.ContainsKey(id)`, so a player missing from the position map was
+silently dropped — quietly lowering ideal with every test still green, the same
+silent-undercount failure mode as A3, but in the harness. All three call sites
+now go through a `Roster(...)` helper that asserts every player resolves and
+names the fix in the failure message.
+
+47 passing, 1 skipped, format gate clean.
+
+Everything else in T06 is waiting on games being played — recorded as B1–B5
+under **Blocked on the season**.
 
 ### 2026-09-10 — T05 tests, and a bug in the lineup reconstruction
 
