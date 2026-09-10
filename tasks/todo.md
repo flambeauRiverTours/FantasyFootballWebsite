@@ -38,10 +38,12 @@ about it — and this is where the bugs that matter live.
 - [~] **T06** Solver fixtures and tests — 3 h `±`
       All four named cases written and passing; fixtures captured and reproducible
       via `scripts/capture_fixtures.py`. **Blocked on data** — see B1–B4 below.
-- [ ] **T07** Consistency maths — 1 h
+- [x] **T07** Consistency maths — 1 h
       Population sigma, CV, mean/min/max. Returns null below four final weeks.
-- [ ] **T08** Sigma edge-case tests — 1.5 h
+- [x] **T08** Sigma edge-case tests — 1.5 h
       Zero, one and three weeks; a genuine 0.0 score; a non-final week excluded.
+      20 tests in `SpreadCalculatorTests.cs`, all passing. Two edges the manual
+      does not list are open — see below.
 
 ## M1 · Sleeper client — 16 h
 
@@ -177,6 +179,26 @@ listed separately so that cutting it is a decision rather than an omission.
 
 ---
 
+## Open follow-ups from T08
+
+Neither blocks anything. Both are the same shape as D1's argument that absence
+should be a type the caller handles rather than a fabricated zero.
+
+- [ ] **F1 · `Cv` reports 0.0 when the mean is zero but sigma is not.**
+      `SpreadCalculator` guards the division with `meanD == 0 ? 0 : sigma / meanD`.
+      For four all-zero weeks that is honest — sigma is zero too. But
+      `[-10, 10, -10, 10]` gives sigma 10 and **CV 0.0**, which claims perfect
+      consistency for a team swinging ten points a week. That needs weekly totals
+      that go negative, so it takes scoring settings this league may not have —
+      but the fix is one line: make `Cv` a `double?` and return null when the mean
+      is zero, exactly as sigma returns null below four weeks. A gap in the D3
+      chart toggle is honest; a zero is not.
+- [ ] **F2 · `Calculate([], 0)` throws `InvalidOperationException`.**
+      `Average()` on an empty sequence, surfacing as "Sequence contains no
+      elements" rather than anything about weeks. Unreachable at the default
+      `minWeeks: 4`, so this is only a caller error with a confusing message.
+      `finalWeeks.Count == 0` in the guard would settle it.
+
 ## Blocked on the season
 
 Work that is written, understood and simply waiting for games to be played.
@@ -253,6 +275,24 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T07 verified, T08 done
+
+`SpreadCalculatorTests.cs`: 20 tests over four classes, all passing first run.
+T07's implementation is correct as written.
+
+Every row of the manual's T08 table is covered. The population-versus-sample
+distinction is pinned with `[8, 12, 8, 12]`, chosen because population sigma is
+exactly 2.0 while Bessel's correction would give 2.3094 — far enough apart that
+no rounding tolerance can blur them.
+
+The last row, the one the manual says will actually break in production, is
+tested through the real pipeline: five `TeamWeek` records, one with
+`IsFinal: false`, filtered before the call. There is a companion test asserting
+that *zeroing* the unfinished week rather than dropping it gives a different
+answer, since that is the tempting wrong fix.
+
+Two edges outside the manual's table are recorded as F1 and F2 above.
 
 ### 2026-09-10 — T06 unblocked work
 
