@@ -110,3 +110,34 @@ matching.
 **Rule:** Inside a FluentAssertions collection predicate, use `==` and `||`
 rather than `is`/`or`. The pattern syntax is fine everywhere a plain lambda is
 accepted; it is only expression trees that reject it.
+
+## Parent pointers go stale over a rolling-array DP
+
+**What happened:** The ideal-lineup solver returned correct point totals but a
+corrupt lineup — the same player listed twice, and the lineup's points not
+summing to the total. `dp[m2]` was computed from the previous row's `dp[mask]`,
+while the reconstruction walked `from[mask]` from the final row. A later player
+improving `dp[mask]` silently rewrote `from[mask]`, so the chain described a
+different history than the value was built from.
+
+**Rule:** When a DP compresses to one row, parent pointers must not survive
+across rows. Either keep the full `from[i][mask]` table and walk *i* downwards,
+or store the accumulated answer itself per state — here a `long` bitmask of
+chosen player indices, written in the same row the value came from. Never mix a
+value from row *i−1* with a pointer read from row *n*.
+
+**And test it:** the value being right hid this completely. Assert that the
+reconstructed answer is *consistent with* the value — no duplicates, correct
+sum, within bounds — not just that the number matches. A seeded fuzz against
+brute force found it in seconds; the hand-written examples all passed.
+
+## Fixtures catch wrong assumptions in tests, not just in code
+
+**What happened:** A test asserted every roster could fill all eleven slots in
+week 1, reasoning there are no byes in week 1. It failed — roster 4 rosters no
+kicker at all, roster 5 no defence. The solver was right and the test was wrong.
+
+**Rule:** When a fixture-based test fails, check the fixture before the code. Real
+data encodes facts nobody thought to state — here that a six-team league is
+thin enough for managers to be short at a position outright, which is also why
+the `"0"` empty-starter case is routine rather than theoretical.

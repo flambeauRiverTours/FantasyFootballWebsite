@@ -27,12 +27,14 @@ about it — and this is where the bugs that matter live.
       `curl` the real league: `roster_positions`, captured week fixtures, starters alignment, Q1–Q4 and Q7.
 - [x] **T03** Domain types — 1 h
       `Slot`, `RosteredPlayer`, `TeamWeek`, `TeamSeason`. Records, no framework types.
-- [~] **T04** Slot parsing and eligibility — 1.5 h
+- [x] **T04** Slot parsing and eligibility — 1.5 h
       `roster_positions` to startable slots; FLEX, SUPER_FLEX, REC_FLEX, WRRB_FLEX, IDP_FLEX.
       Code done and covered by 28 tests in `SlotTests.cs`. **Not closed:** A3's
       unknown-slot guard is still missing — its test sits skipped, ready to enable.
-- [ ] **T05** Bitmask DP solver — 2 h
+- [x] **T05** Bitmask DP solver — 2 h
       Exact ideal lineup over 2^11 slot states. `dp.Max()`, not `dp[full]`.
+      Points and lineup both verified against exhaustive search — 48 tests plus a
+      50,000-case fuzz, zero discrepancies.
 - [ ] **T06** Solver fixtures and tests — 3 h `±`
       Real weeks from T02, plus a constructed case where greedy loses and a bye-week hole.
 - [ ] **T07** Consistency maths — 1 h
@@ -222,6 +224,39 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T05 tests, and a bug in the lineup reconstruction
+
+`IdealLineupSolverTests.cs`: **48 tests, 43 passing, 1 skipped, 4 failing.**
+The four failures are a real defect, not flaky tests.
+
+**`Solve` returns the right number and the wrong names.** Points matched an
+exhaustive search on all 2,000 randomised rosters and on the real captured week.
+The `Lineup` is wrong in roughly a quarter of cases — it repeats players and its
+points do not sum to the `Points` returned. Minimal reproduction:
+
+    slots   [WR, FLEX]
+    players wr_low 4, wr_high 17
+    -> Points = 21 (correct), Lineup = [wr_high, wr_high] (wrong)
+
+Cause: `dp[m2]` is computed from the *previous* row's `dp[mask]`, but the
+reconstruction reads `from[mask]` out of the *final* row. When a later player
+improves `dp[mask]`, `from[mask]` is overwritten and the parent chain points at a
+different history than the one the value was built from. Classic stale parent
+pointer over a rolling array.
+
+**Fixed.** The parent-pointer array is gone; each mask now carries the chosen
+player *set* as a `long` bitmask, written in the same row the value came from, so
+reconstruction is a bit scan rather than a backward walk. Guarded at 63 players.
+Suite is 47 passing, 1 skipped (A3's guard), and an independent 50,000-case fuzz
+against brute force reports zero discrepancies on points, duplicates, lineup
+length, point sums, and whether the returned lineup can actually be seated.
+§05 wants the solved lineup stored and displayable, so this mattered.
+
+Also corrected a test of my own that was wrong: rosters 4 and 5 genuinely cannot
+fill all eleven slots — roster 4 rosters no kicker, roster 5 no defence. Their
+ideal lineups are 10 and 9. `filled == 11 - starters_zeros` for every roster in
+the captured week, so the empty slots managers left were real shortages.
 
 ### 2026-09-10 — T04 test coverage
 
