@@ -54,8 +54,10 @@ invariants across a whole season.
       Six DTOs, shared `SleeperJson.Options`, and `SleeperMapper` as the single
       wire-to-domain boundary. 20 binding tests against the real payloads.
       **A7 (`custom_points`) still wants confirming against Sleeper's docs.**
-- [ ] **T10** Typed HttpClient — 2 h
-      state, league, users, rosters, matchups, players.
+- [x] **T10** Typed HttpClient — 2 h
+      state, league, users, rosters, matchups, players, registered through
+      `AddSleeperClient` so the client and DTOs stay internal. 24 tests over a
+      stub handler — no network. **Open decision: F3, the client timeout.**
 - [ ] **T11** Token-bucket handler — 2 h
       `DelegatingHandler` at 50/min, shared by HTTP and timer paths.
 - [ ] **T12** Polly policies — 1 h
@@ -201,6 +203,17 @@ should be a type the caller handles rather than a fabricated zero.
       `minWeeks: 4`, so this is only a caller error with a confusing message.
       `finalWeeks.Count == 0` in the guard would settle it.
 
+- [ ] **F3 · `AddSleeperClient` sets no timeout, so the client uses HttpClient's
+      100-second default.** The manual's T10 snippet sets 20 seconds. Removing it
+      is defensible — `HttpClient.Timeout` covers the whole operation *including*
+      retries, so a value below the resilience pipeline's total-request budget
+      cuts retries off partway, and letting T12 own timeouts avoids that fight.
+      But T12 does not exist yet, so today a hung Sleeper request holds a
+      Consumption-plan invocation open for a hundred seconds. Decide at T12
+      whether the client or the pipeline owns this, and set it deliberately
+      either way. `The_timeout_is_bounded` asserts only that it is finite, which
+      stays true whichever way it goes.
+
 ## Blocked on the season
 
 Work that is written, understood and simply waiting for games to be played.
@@ -277,6 +290,34 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T10 reviewed and covered
+
+`SleeperClientTests.cs`: 24 tests across URL construction, response handling and
+registration, all against a recording `HttpMessageHandler` — no network, runs in
+milliseconds.
+
+The URL theory pins all six endpoints to their absolute addresses. That is the
+base-address trap made permanent: the base ends with a slash and every relative
+path begins without one, and swapping either makes `Uri` resolution drop the
+`/v1` segment and fail as a 404 that names nothing.
+
+Two of my own tests were wrong and got corrected rather than the code:
+
+- I asserted a cancelled call never reaches the handler. It does — `HttpClient`
+  enters the handler pipeline before observing the token. The throw is the real
+  assertion; the extra one was testing my stub.
+- I asserted a timeout under 60 seconds. There is none — see **F3**.
+
+Also confirmed against the live API and worth remembering at T15: a week that
+has not been played returns a **complete payload of zeroes**, not absent fields.
+Week 18 gives `points: 0.0`, eleven zero `starters_points` and nineteen zero
+`players_points`. It is byte-identical in shape to a week where everyone was
+blanked, and three of six rosters really did score 0.00 in week 1. So `isFinal`
+can only come from `/state/nfl`. An out-of-range week (99) returns `[]`.
+
+That contradicts the manual's stated reason for making numerics nullable
+("entries with no points at all"). The advice stands; the reason does not.
 
 ### 2026-09-10 — T09 framed
 

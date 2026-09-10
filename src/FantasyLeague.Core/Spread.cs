@@ -24,4 +24,4 @@
                               mean, finalWeeks.Min(), finalWeeks.Max(), finalWeeks.Count);
         }
     }
- }
+}
