@@ -64,7 +64,7 @@ invariants across a whole season.
 - [x] **T12** Polly policies — 1 h
       `AddStandardResilienceHandler`, outermost so every retry spends its own
       token. Local rate-limit refusals are excluded from retry.
-- [ ] **T13** Single-flight cache — 2 h
+- [x] **T13** Single-flight cache — 2 h
       Per-key TTL, concurrent callers await one in-flight fetch.
 - [ ] **T14** Player dump job — 1.5 h
       5 MB fetch, projected to id → name/team/fantasy_positions.

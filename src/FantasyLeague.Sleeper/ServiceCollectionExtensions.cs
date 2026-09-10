@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
@@ -72,6 +73,10 @@ namespace FantasyLeague.Sleeper
             });
 
             builder.AddHttpMessageHandler<RateLimitHandler>();
+
+            //Add the hybrid cache to the service collection, so that it can be used by the SleeperClient and other services.
+            services.AddHybridCache();
+            services.TryAddTransient<SleeperReaderCache>();
 
             return builder;
         }
