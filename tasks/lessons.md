@@ -84,3 +84,29 @@ for p in src/*/ tests/*/; do n=$(basename "$p"); \
 ```
 
 Check this *before* adding project references, not after the first NU1201.
+
+## FluentAssertions 8.x is not free for commercial use
+
+**What happened:** Reaching for FluentAssertions by reflex would have pulled 8.x,
+which moved from Apache-2.0 to the Xceed Community Licence — free for
+non-commercial use only. The nuspec shows it plainly: 7.2.0 declares
+`<license type="expression">Apache-2.0</license>`, 8.10.0 declares
+`<license type="file">`.
+
+**Rule:** Pin **7.2.0** for a permissive licence, or switch to
+**AwesomeAssertions** (an Apache-2.0 fork of FA 7, currently 9.x) if ongoing
+updates matter. Check the licence field of any assertion, mocking or test
+package before adding it — this class of package changed terms several times
+across the ecosystem, and a licence is much cheaper to check than to unpick.
+
+## Expression trees cannot contain `is` patterns
+
+**What happened:** `startable.Should().NotContain(s => s.Code is "BN" or "IR")`
+failed to compile with CS8122. FluentAssertions takes an
+`Expression<Func<T,bool>>` for collection predicates so it can print the
+predicate in the failure message, and expression trees do not support pattern
+matching.
+
+**Rule:** Inside a FluentAssertions collection predicate, use `==` and `||`
+rather than `is`/`or`. The pattern syntax is fine everywhere a plain lambda is
+accepted; it is only expression trees that reject it.

@@ -34,6 +34,44 @@ Fine, but with no slack if a slot is ever added.
 
 ---
 
+## A5 · The `starters` alignment holds — verified, not assumed
+
+Checked against the live league on 2026-09-10, week 1: **63 of 63 non-empty
+starters were eligible for the slot at their own index. Zero violations.**
+
+So `starters[i]` does correspond to the *i*th startable slot, and the positional
+radar (§11, M6) rests on solid ground. Fixtures are in
+[`tests/fixtures/`](../tests/fixtures/README.md).
+
+This does **not** retire the guard §11 specifies. One week of one league is
+evidence, not a contract — Sleeper documents no such promise, and a mid-season
+rules change would break it silently. Keep the finalize-time assertion that
+`starters.Count == startableSlots.Count`, and skip slot attribution for any week
+that fails it.
+
+Also confirmed in the same capture, all of which the design predicted:
+
+- **Empty starter slots are the string `"0"`** — three of them across two
+  rosters in a single week, so this is routine rather than theoretical.
+- **DEF ids are team abbreviations** (`"BAL"`, `"DEN"`), never numeric.
+- **`sum(starters_points) == points`** held for all six rosters, including the
+  four still on zero.
+- **Every `players` entry had a `players_points` entry.** Still treat a missing
+  one as `0m` — week 1 has no byes, so this case has not actually been exercised.
+
+### What is not yet available
+
+2026 is the league's first season (A4) and week 1 was mid-flight when this was
+captured, so there is **no finalized week anywhere in the data**. Consequences:
+
+- T06's fixtures are structural for now. `ideal >= actual` can be tested; nothing
+  that depends on a final score can.
+- σ needs four finalized weeks (D1), so the earliest it returns anything but
+  null is after week 4.
+- There is no history to backfill. T30 has nothing to do until August 2027.
+
+Re-capture after each week finalizes.
+
 ## A1 · One dummy team is excluded from every metric
 
 **"POON SQUAD" is a placeholder, not a competitor.** It is excluded from the

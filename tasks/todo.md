@@ -23,12 +23,14 @@ about it — and this is where the bugs that matter live.
 
 - [x] **T01** Solution scaffold — 1.5 h
       Five projects, `Directory.Build.props`, nullable enabled, warnings as errors, `.editorconfig`.
-- [ ] **T02** Sleeper recon — 1.5 h
+- [x] **T02** Sleeper recon — 1.5 h
       `curl` the real league: `roster_positions`, captured week fixtures, starters alignment, Q1–Q4 and Q7.
-- [ ] **T03** Domain types — 1 h
+- [x] **T03** Domain types — 1 h
       `Slot`, `RosteredPlayer`, `TeamWeek`, `TeamSeason`. Records, no framework types.
-- [ ] **T04** Slot parsing and eligibility — 1.5 h
+- [~] **T04** Slot parsing and eligibility — 1.5 h
       `roster_positions` to startable slots; FLEX, SUPER_FLEX, REC_FLEX, WRRB_FLEX, IDP_FLEX.
+      Code done and covered by 28 tests in `SlotTests.cs`. **Not closed:** A3's
+      unknown-slot guard is still missing — its test sits skipped, ready to enable.
 - [ ] **T05** Bitmask DP solver — 2 h
       Exact ideal lineup over 2^11 slot states. `dp.Max()`, not `dp[full]`.
 - [ ] **T06** Solver fixtures and tests — 3 h `±`
@@ -220,6 +222,44 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-10 — T04 test coverage
+
+Wired `Core.Tests` to `Core`, added FluentAssertions **7.2.0** (the last
+Apache-2.0 release — 8.x moved to the Xceed Community licence, free only for
+non-commercial use), and replaced the `UnitTest1.cs` placeholder with
+`SlotTests.cs`: **28 passing, 1 skipped.**
+
+The fixtures from T02 are copied into the test output, so `Slot.Parse` is
+exercised against this league's real 19-entry `roster_positions` rather than an
+invented one — 11 startable slots in documented order, 8 distinct for the radar
+axes.
+
+The skipped test is `Parse_rejects_an_unrecognised_slot_code`. It is written and
+correct; it stays skipped until A3's guard exists. Deleting the `Skip` argument
+is the whole enabling step.
+
+Build clean, `dotnet format --verify-no-changes` passes.
+
+### 2026-09-10 — T02 recon captured, T01 tidied
+
+**T02 (partial).** Captured week 1 to `tests/fixtures/` — the matchups payload,
+the `roster_positions` array, and a slim `playerId → fantasyPositions` map for
+the 114 rostered players so the fixture set is self-contained. Verified the
+`starters[i]` ↔ slot alignment: 63/63, zero violations (**A5**). Confirmed the
+`"0"` empty-slot quirk, DEF-as-abbreviation, and `sum(starters_points) ==
+points`. Still open: the capture is mid-week-1, so re-capture after it finalizes,
+add weeks 2–3, and answer Q4.
+
+**T01 tidy.** Added `.editorconfig`; removed the leftover `Class1.cs` from
+Sleeper and Data; deleted the `TargetFramework`, `ImplicitUsings` and `Nullable`
+lines from all five csproj files so `Directory.Build.props` is finally
+authoritative — all five now resolve to net9.0 from the root file alone. Build
+is clean, 1 test passes, and `dotnet format --verify-no-changes` (the T22 CI
+gate) passes.
+
+Still outstanding from the T01–T04 review: `Core.Tests` has no `ProjectReference`
+to `Core`, and T04's unknown-slot guard (**A3**) is not implemented.
 
 ### 2026-09-10 — moved into the FantasyFootballWebsite repo
 
