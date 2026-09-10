@@ -141,3 +141,27 @@ kicker at all, roster 5 no defence. The solver was right and the test was wrong.
 data encodes facts nobody thought to state — here that a six-team league is
 thin enough for managers to be short at a position outright, which is also why
 the `"0"` empty-starter case is routine rather than theoretical.
+
+## A test harness can hide the same bug the code must not have
+
+**What happened:** The fixture tests built rosters with
+`.Where(id => id != "0" && positions.ContainsKey(id))`. Any player missing from
+`player-positions.json` was silently skipped, which lowers ideal points with the
+test still green — exactly the silent-undercount failure A3 forbids in the
+solver, relocated into the tests. It would have bitten the first time a waiver
+claim brought in a player the map did not cover.
+
+**Rule:** In a fixture-driven test, unresolved reference data is a failure, not a
+filter. Assert the lookup succeeds and say in the message how to refresh it.
+Reserve `Where` for cases the data genuinely encodes — `"0"` really does mean an
+empty starter slot, so filtering that is right.
+
+## Regenerate fixtures over the union, not per run
+
+**What happened:** `player-positions.json` was first built from the players on
+week 1's rosters. Rosters change on waivers, so a map captured once goes stale
+and later weeks reference players it does not contain.
+
+**Rule:** A derived fixture must be rebuilt from every captured week on disk, not
+only the ones fetched this run. `scripts/capture_fixtures.py` globs
+`wk*-matchups.json` for exactly this reason.

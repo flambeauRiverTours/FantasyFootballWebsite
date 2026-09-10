@@ -344,6 +344,37 @@ namespace FantasyLeague.Core.Tests
                             .EnumerateArray().Select(e => e.GetString()!).ToArray());
         }
 
+        /// <summary>
+        /// Builds a roster from a matchup entry, failing loudly if any player is
+        /// absent from the position map.
+        /// </summary>
+        /// <remarks>
+        /// Skipping unresolved players would be the same silent-undercount bug the
+        /// solver itself must avoid: rosters change on waivers, so a position map
+        /// captured in week 1 goes stale, and a dropped player would quietly lower
+        /// ideal with every test still green. Re-run
+        /// <c>scripts/capture_fixtures.py</c> if this fires.
+        /// </remarks>
+        private static List<RosteredPlayer> Roster(
+            JsonElement entry,
+            Dictionary<string, string[]> positions,
+            Func<string, decimal> points)
+        {
+            var ids = entry.GetProperty("players").EnumerateArray()
+                .Select(e => e.GetString()!)
+                .Where(id => id != "0")
+                .ToList();
+
+            var unresolved = ids.Where(id => !positions.ContainsKey(id)).ToList();
+            unresolved.Should().BeEmpty(
+                "every rostered player must appear in player-positions.json; " +
+                "re-run scripts/capture_fixtures.py to refresh it");
+
+            return ids
+                .Select(id => new RosteredPlayer(new PlayerId(id), id, positions[id], points(id)))
+                .ToList();
+        }
+
         [Fact]
         public void Ideal_is_never_below_actual_for_any_roster_in_the_captured_week()
         {
@@ -360,13 +391,10 @@ namespace FantasyLeague.Core.Tests
                 var actual = entry.GetProperty("points").GetDecimal();
                 var scores = entry.GetProperty("players_points");
 
-                var players = entry.GetProperty("players").EnumerateArray()
-                    .Select(e => e.GetString()!)
-                    .Where(id => id != "0" && positions.ContainsKey(id))
-                    .Select(id => new RosteredPlayer(
-                        new PlayerId(id), id, positions[id],
-                        scores.TryGetProperty(id, out var v) ? v.GetDecimal() : 0m))
-                    .ToList();
+                // A player present in `players` but absent from `players_points`
+                // scored zero; that is data, not an error.
+                var players = Roster(entry, positions,
+                    id => scores.TryGetProperty(id, out var v) ? v.GetDecimal() : 0m);
 
                 var (ideal, lineup) = IdealLineupSolver.Solve(players, slots);
 
@@ -401,11 +429,7 @@ namespace FantasyLeague.Core.Tests
             foreach (var entry in week.RootElement.EnumerateArray())
             {
                 var rosterId = entry.GetProperty("roster_id").GetInt32();
-                var players = entry.GetProperty("players").EnumerateArray()
-                    .Select(e => e.GetString()!)
-                    .Where(id => id != "0" && positions.ContainsKey(id))
-                    .Select(id => new RosteredPlayer(new PlayerId(id), id, positions[id], 1m))
-                    .ToList();
+                var players = Roster(entry, positions, _ => 1m);
 
                 IdealLineupSolver.Solve(players, slots).Points
                     .Should().Be(expected[rosterId], $"roster {rosterId}");
@@ -428,11 +452,7 @@ namespace FantasyLeague.Core.Tests
                 var started = entry.GetProperty("starters").EnumerateArray()
                     .Count(e => e.GetString() != "0");
 
-                var players = entry.GetProperty("players").EnumerateArray()
-                    .Select(e => e.GetString()!)
-                    .Where(id => id != "0" && positions.ContainsKey(id))
-                    .Select(id => new RosteredPlayer(new PlayerId(id), id, positions[id], 1m))
-                    .ToList();
+                var players = Roster(entry, positions, _ => 1m);
 
                 IdealLineupSolver.Solve(players, slots).Points
                     .Should().BeGreaterThanOrEqualTo(started, $"roster {rosterId}");
