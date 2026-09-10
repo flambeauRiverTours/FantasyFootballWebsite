@@ -427,3 +427,14 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# ---- Ideal Points: secrets (see docs/amendments.md, A2) ----
+# League IDs and Sleeper user IDs never enter the repository.
+local.settings.json
+appsettings.Development.json
+appsettings.*.Local.json
+*.secrets.json
+secrets/
+*.bicepparam
+!*.example.bicepparam
+tests/fixtures/users*.json
