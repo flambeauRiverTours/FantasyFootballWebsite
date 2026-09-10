@@ -1,0 +1,86 @@
+# Lessons
+
+Rules written after a correction, so the same mistake does not recur.
+One entry per lesson: what happened, and the rule that prevents it.
+
+<!--
+Format:
+
+## <short title>
+**What happened:** …
+**Rule:** …
+-->
+
+## `dotnet new` and `func init` are different tools
+
+**What happened:** The T01 scaffold used
+`dotnet new func --worker-runtime dotnet-isolated`, which fails with
+`'--worker-runtime' is not a valid option`. That flag belongs to `func init`
+from Azure Functions Core Tools. The `dotnet new func` template shipped by
+`Microsoft.Azure.Functions.Worker.ProjectTemplates` is already the
+isolated-worker template — the model is baked into the package, not selected by
+a flag.
+
+**Rule:** Before putting a CLI invocation in the docs, check its options with
+`--help` rather than carrying flags across from a neighbouring tool. Azure has
+several pairs like this (`dotnet new func` / `func init`, `az functionapp` /
+`func azure functionapp publish`) where the flags are not interchangeable.
+
+## A template's explicit property beats `Directory.Build.props`
+
+**What happened:** `dotnet new func` defaults to `net8.0` and writes an explicit
+`<TargetFramework>` into the generated `.csproj`. `Directory.Build.props` is
+imported before the project's own `PropertyGroup`, so the project wins — the
+Functions project would have built as net8.0 against four net9.0 siblings, with
+no warning.
+
+**Rule:** After scaffolding any project, check which properties the template
+wrote locally and whether they shadow the root props file. Either pass the
+right value at generation time (`-F net9.0`) or delete the generated line so it
+inherits. Verify with
+`dotnet msbuild <proj> -getProperty:TargetFramework`.
+
+## The manual's shell blocks are POSIX — use Git Bash
+
+**What happened:** T01's `find . -name "*.csproj" -exec dotnet sln add {} +` was
+run in `cmd`, where `find` is Windows' text-search `find.exe`. It failed with
+`File not found - -NAME`. The same applies to most of the manual: T02 alone uses
+`curl`, `jq`, `mkdir -p`, `for w in 1 2 3` and `$L`.
+
+**Rule:** Run the manual's shell blocks under Git Bash. When a command has to
+work in another shell, give the actual equivalent and verify it, rather than
+assuming a Unix idiom ports. `dotnet sln add **/*.csproj` is not a fallback —
+the CLI does no globbing of its own.
+
+## `dotnet new sln` produces `.slnx` on the .NET 10 SDK
+
+**What happened:** SDK 10.0.400 defaults `dotnet new sln` to the XML solution
+format, so the repo gets `FantasyLeague.slnx`. Harmless for the dotnet CLI, but
+it would silently break anything that globs `*.sln` — a CI step, a deploy
+script, an older Visual Studio.
+
+**Rule:** When a CI or deploy step needs the classic format, create it with
+`dotnet new sln -f sln`. Either way, check what the SDK actually wrote before
+referencing the filename anywhere else.
+
+## Every `dotnet new` template writes its own `TargetFramework`
+
+**What happened:** With `Directory.Build.props` correctly set to `net9.0`, the
+solution still ended up mixed — `dotnet new classlib` and `dotnet new xunit` on
+the .NET 10 SDK each wrote `<TargetFramework>net10.0</TargetFramework>` into
+their own csproj, shadowing the props file. Four projects at net10.0, the
+Functions project at net9.0. It builds only while no project references another;
+the first `ProjectReference` from net9.0 Functions to a net10.0 library fails
+with NU1201.
+
+**Rule:** `Directory.Build.props` sets defaults, not overrides — it is imported
+*before* the project's own `PropertyGroup`, so any property the template writes
+wins. After scaffolding, delete the `<TargetFramework>` line from every
+generated csproj so they all inherit, and confirm with:
+
+```bash
+for p in src/*/ tests/*/; do n=$(basename "$p"); \
+  printf '%-32s ' "$n"; dotnet msbuild "$p$n.csproj" -getProperty:TargetFramework; done
+```
+
+Check this *before* adding project references, not after the first NU1201.
