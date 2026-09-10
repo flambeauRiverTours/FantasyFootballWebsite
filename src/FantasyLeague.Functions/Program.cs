@@ -1,4 +1,5 @@
 ﻿using Azure.Monitor.OpenTelemetry.Exporter;
+using FantasyLeague.Sleeper;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
@@ -16,5 +17,7 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
         .UseFunctionsWorkerDefaults()
         .UseAzureMonitorExporter();
 }
+builder.Services.AddSleeperClient();
 
 builder.Build().Run();
+
