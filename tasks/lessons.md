@@ -203,3 +203,37 @@ explicit value** — a client configured with 20 seconds still comes out infinit
 `HttpClient.Timeout`; it will be ignored. Tune `TotalRequestTimeout` and
 `AttemptTimeout` instead, and check assumptions about a library's behaviour by
 running it rather than reasoning from its documentation.
+
+## `async void` kills the process, it does not just lose the exception
+
+**What happened:** `PlayerMapRefresher.RefreshAsync` was declared `async void`.
+Demonstrated: the caller's `try`/`catch` never fires, the caller continues
+immediately, and the exception surfaces as an unhandled thread-pool exception
+that **terminates the process** — the line after the call never ran. A timer
+invocation would have reported success while the worker died.
+
+**Rule:** `async void` is for UI event handlers and nothing else. Anything that
+awaits returns `Task`. Check the return type of every `async` method that is
+called rather than awaited.
+
+## The null-forgiving operator is load-bearing more often than it looks
+
+**What happened:** I called a `players!` redundant because it followed a null
+check. It was not: it was suppressing CS8620 caused by
+`Dictionary<string, SleeperPlayerDto?>` being passed where
+`IReadOnlyDictionary<string, SleeperPlayerDto>` was expected. Removing it broke
+the build.
+
+**Rule:** Before deleting a `!`, work out which warning it silences. The right
+fix is usually the signature it is papering over — here, tightening the client's
+return type, which removed the need for it at every call site.
+
+## A stub must hand out a fresh HttpResponseMessage per call
+
+**What happened:** A scripted test handler returned the same
+`HttpResponseMessage` instance twice and the second read threw
+`ObjectDisposedException`: `HttpClient` disposes response content once it has
+been read.
+
+**Rule:** Script test responses as data — status plus body — and construct the
+`HttpResponseMessage` inside `SendAsync`.

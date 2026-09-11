@@ -122,7 +122,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task Each_endpoint_has_its_own_key()
         {
-            // Six endpoints, six distinct keys. A collision would serve one
+            // Five endpoints, five distinct keys. A collision would serve one
             // payload where another was asked for, and the deserialiser would
             // most likely succeed at producing nonsense rather than throwing.
             var (reader, socket, provider) = Build();
@@ -133,9 +133,8 @@ namespace FantasyLeague.Core.Tests
                 await reader.GetUsersAsync("L1", default);
                 await reader.GetLeagueAsync("L1", default);
                 await reader.GetStateAsync(default);
-                await reader.GetPlayersAsync(default);
 
-                socket.Attempts.Should().Be(6);
+                socket.Attempts.Should().Be(5);
             }
         }
 
@@ -152,10 +151,9 @@ namespace FantasyLeague.Core.Tests
                     await reader.GetUsersAsync("L1", default);
                     await reader.GetLeagueAsync("L1", default);
                     await reader.GetStateAsync(default);
-                    await reader.GetPlayersAsync(default);
                 }
 
-                socket.Attempts.Should().Be(6, "the second pass should be entirely cached");
+                socket.Attempts.Should().Be(5, "the second pass should be entirely cached");
             }
         }
 
@@ -183,27 +181,5 @@ namespace FantasyLeague.Core.Tests
             }
         }
 
-        [Fact]
-        public async Task A_large_payload_is_still_cached()
-        {
-            // HybridCache refuses to store anything above MaximumPayloadBytes,
-            // one mebibyte by default, and does so quietly -- the call succeeds
-            // and simply never caches. The real player dump is roughly 14 MB, so
-            // if that limit applies here it would be re-fetched on every call.
-            var players = "{" + string.Join(",", Enumerable.Range(0, 12000).Select(i =>
-                $"\"{i}\":{{\"player_id\":\"{i}\",\"full_name\":\"Player Number {i}\"," +
-                $"\"team\":\"KC\",\"position\":\"QB\",\"fantasy_positions\":[\"QB\"]}}")) + "}";
-
-            players.Length.Should().BeGreaterThan(1024 * 1024, "the fixture must exceed the default cap");
-
-            var (reader, socket, provider) = Build(players);
-            using (provider)
-            {
-                await reader.GetPlayersAsync(default);
-                await reader.GetPlayersAsync(default);
-
-                socket.Attempts.Should().Be(1);
-            }
-        }
     }
 }

@@ -78,6 +78,9 @@ namespace FantasyLeague.Sleeper
             services.AddHybridCache();
             services.TryAddTransient<SleeperReaderCache>();
 
+            // singleton: the map it holds is shared state
+            services.TryAddSingleton<PlayerMapRefresher>();
+
             return builder;
         }
 

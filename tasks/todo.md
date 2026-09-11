@@ -66,8 +66,10 @@ invariants across a whole season.
       token. Local rate-limit refusals are excluded from retry.
 - [x] **T13** Single-flight cache — 2 h
       Per-key TTL, concurrent callers await one in-flight fetch.
-- [ ] **T14** Player dump job — 1.5 h
-      5 MB fetch, projected to id → name/team/fantasy_positions.
+- [x] **T14** Player dump job — 1.5 h
+      `PlayerMapRefresher`, a singleton holding the projected map. The
+      `[TimerTrigger]` that calls it and the `Player` table it should persist to
+      both belong to M3.
 - [ ] **T15** Season assembly — 2.5 h
       Matchups to per-team weekly actual and ideal.
 - [ ] **T16** Console harness and live verification — 3 h `±`
@@ -217,6 +219,16 @@ should be a type the caller handles rather than a fabricated zero.
       it. Nothing to change; the arrangement is now asserted by
       `The_pipeline_owns_the_timeout_not_the_client`.
 
+- [ ] **F4 · The cache TTLs move the request budget from 2.2 to 12.2 req/min.**
+      matchups 30s → 5s (2.0 → 12.0), rosters 1h → 5min (0.02 → 0.20), state 5min
+      → 1h (0.20 → 0.02). Still far inside the 50/min bucket, so nothing breaks,
+      but §07's table and the "≤ 2.3 req/min" headline in the design and README
+      are now wrong. Two are worth revisiting: matchups at 5s buys 25 seconds of
+      worst-case staleness for 6× the traffic, because the *client* only polls
+      every 30s (D6); and state at 1h saves 0.18 req/min while making the one
+      value that gates `isFinal` up to an hour stale across Tuesday's rollover.
+      Either restore the design's numbers or amend §07 to match reality.
+
 ## Blocked on the season
 
 Work that is written, understood and simply waiting for games to be played.
@@ -293,6 +305,33 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-11 — T13 and T14
+
+`SleeperReaderCache` (T13) and `PlayerMapRefresher` (T14). Suite at 140 passing.
+
+T13's tests go through the real pipeline, so a cache miss traverses cache →
+client → resilience → rate limiter → socket. The one that matters is
+`Twenty_simultaneous_callers_produce_one_fetch`: twenty concurrent misses, one
+request. That is the entire reason for `HybridCache` over `IMemoryCache`.
+
+T14 started as `async void` with a static mutable map. Demonstrated that an
+`async void` exception is uncatchable by the caller and **terminates the
+process** — the timer invocation would have reported success while the worker
+died. Now `async Task` on an injected singleton with a volatile backing field.
+
+Removed `SleeperReaderCache.GetPlayersAsync`: it cached the 14 MB dump for 24
+hours on the request path, giving two independent copies with different
+lifetimes and no rule about which won. The refresher is the single source of
+player data, which is what T14's "never on a request path" requires.
+
+Tightened `SleeperClient.GetPlayersAsync` from
+`Dictionary<string, SleeperPlayerDto?>` to non-nullable values. The `players!`
+at the call site was not redundant as I had claimed — it was suppressing CS8620
+from that inaccurate signature, and removing the suppression surfaced it.
+
+**Still open:** F4 (the TTL budget), and the `[TimerTrigger]` plus `Player`
+table persistence, both of which belong with M3.
 
 ### 2026-09-10 — T11 and T12 wired and tested
 

@@ -69,9 +69,9 @@ namespace FantasyLeague.Sleeper
         /// </summary>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The players in the NFL.</returns>
-        internal Task<Dictionary<string, SleeperPlayerDto?>?> GetPlayersAsync(CancellationToken cancellationToken = default)
+        internal Task<Dictionary<string, SleeperPlayerDto>?> GetPlayersAsync(CancellationToken cancellationToken = default)
         {
-            return httpClient.GetFromJsonAsync<Dictionary<string, SleeperPlayerDto?>>("players/nfl", SleeperJson.Options, cancellationToken);
+            return httpClient.GetFromJsonAsync<Dictionary<string, SleeperPlayerDto>>("players/nfl", SleeperJson.Options, cancellationToken);
         }
     }
 }
