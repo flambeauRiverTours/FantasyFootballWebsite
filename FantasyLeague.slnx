@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/FantasyLeague.Console/FantasyLeague.Console.csproj" />
     <Project Path="src/FantasyLeague.Core/FantasyLeague.Core.csproj" />
     <Project Path="src/FantasyLeague.Data/FantasyLeague.Data.csproj" />
     <Project Path="src/FantasyLeague.Functions/FantasyLeague.Functions.csproj" />

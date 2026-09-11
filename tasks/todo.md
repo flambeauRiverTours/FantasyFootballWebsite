@@ -50,22 +50,34 @@ about it — and this is where the bugs that matter live.
 Ends with a console app printing the real standings and asserting both
 invariants across a whole season.
 
-- [ ] **T09** DTOs and JSON config — 2 h
-      snake_case, nullable numerics, `players_points` as a string-keyed map.
-- [ ] **T10** Typed HttpClient — 2 h
-      state, league, users, rosters, matchups, players.
-- [ ] **T11** Token-bucket handler — 2 h
-      `DelegatingHandler` at 50/min, shared by HTTP and timer paths.
-- [ ] **T12** Polly policies — 1 h
-      429 and transient retry, exponential backoff with jitter, bounded queue.
-- [ ] **T13** Single-flight cache — 2 h
+- [x] **T09** DTOs and JSON config — 2 h
+      Six DTOs, shared `SleeperJson.Options`, and `SleeperMapper` as the single
+      wire-to-domain boundary. 20 binding tests against the real payloads.
+      **A7 (`custom_points`) still wants confirming against Sleeper's docs.**
+- [x] **T10** Typed HttpClient — 2 h
+      state, league, users, rosters, matchups, players, registered through
+      `AddSleeperClient` so the client and DTOs stay internal. 24 tests over a
+      stub handler — no network. **Open decision: F3, the client timeout.**
+- [x] **T11** Token-bucket handler — 2 h
+      `DelegatingHandler` at 50/min, shared by HTTP and timer paths. Assembled
+      inside `AddSleeperClient` so the client cannot be registered without it.
+- [x] **T12** Polly policies — 1 h
+      `AddStandardResilienceHandler`, outermost so every retry spends its own
+      token. Local rate-limit refusals are excluded from retry.
+- [x] **T13** Single-flight cache — 2 h
       Per-key TTL, concurrent callers await one in-flight fetch.
-- [ ] **T14** Player dump job — 1.5 h
-      5 MB fetch, projected to id → name/team/fantasy_positions.
-- [ ] **T15** Season assembly — 2.5 h
-      Matchups to per-team weekly actual and ideal.
-- [ ] **T16** Console harness and live verification — 3 h `±`
-      Prints the real table, then asserts `starters==points` and `ideal>=actual` across every week.
+- [x] **T14** Player dump job — 1.5 h
+      `PlayerMapRefresher`, a singleton holding the projected map. The
+      `[TimerTrigger]` that calls it and the `Player` table it should persist to
+      both belong to M3.
+- [x] **T15** Season assembly — 2.5 h
+      Matchups to per-team weekly actual and ideal. 19 tests. Both invariants
+      compare against Sleeper's scored points rather than a commissioner
+      override — see **A9**.
+- [x] **T16** Console harness and live verification — 3 h `±`
+      Prints the real table, then asserts `starters==points` and `ideal>=actual`
+      across every week. **Both hold against the live league.** Exit code is
+      non-zero on a violation or an unresolved player.
 
 ## M2 · API and cloud foundation — 18.5 h
 
@@ -199,6 +211,28 @@ should be a type the caller handles rather than a fabricated zero.
       `minWeeks: 4`, so this is only a caller error with a confusing message.
       `finalWeeks.Count == 0` in the guard would settle it.
 
+- [x] **F3 · Resolved: the resilience pipeline owns the timeout.**
+      `AddStandardResilienceHandler` sets `HttpClient.Timeout` to
+      `InfiniteTimeSpan` and **overrides any value configured on the client** —
+      verified: a client with an explicit 20 second timeout still comes out
+      infinite once resilience is added. That is deliberate, because
+      `HttpClient.Timeout` covers the whole operation including retries and would
+      otherwise cut the pipeline off part way through, surfacing as a bare
+      `TaskCanceledException` naming no cause. The real budget is the pipeline's
+      `TotalRequestTimeout`, 30 seconds, with a 10 second `AttemptTimeout` inside
+      it. Nothing to change; the arrangement is now asserted by
+      `The_pipeline_owns_the_timeout_not_the_client`.
+
+- [ ] **F4 · The cache TTLs move the request budget from 2.2 to 12.2 req/min.**
+      matchups 30s → 5s (2.0 → 12.0), rosters 1h → 5min (0.02 → 0.20), state 5min
+      → 1h (0.20 → 0.02). Still far inside the 50/min bucket, so nothing breaks,
+      but §07's table and the "≤ 2.3 req/min" headline in the design and README
+      are now wrong. Two are worth revisiting: matchups at 5s buys 25 seconds of
+      worst-case staleness for 6× the traffic, because the *client* only polls
+      every 30s (D6); and state at 1h saves 0.18 req/min while making the one
+      value that gates `isFinal` up to an hour stale across Tuesday's rollover.
+      Either restore the design's numbers or amend §07 to match reality.
+
 ## Blocked on the season
 
 Work that is written, understood and simply waiting for games to be played.
@@ -275,6 +309,142 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-11 — M1 closed
+
+`FantasyLeague.Console` runs end to end against the live league and both
+invariants hold:
+
+    season 2026   weeks 1-1   final through wk 0
+
+    TEAM                         POINTS     SD    IDEAL   EFF     GAP
+    -----------------------------------------------------------------
+    kuzma4prez                     48.2      -     48.2  100%       -
+    Aaron Donald Relief Fund       35.2      -     42.0   84%   -13.0
+    START TOMMY CUTLETS            16.9      -     44.8   38%   -31.3
+    sullynator9                    11.3      -     11.3  100%   -36.9
+    LilDab                          9.9      -     14.0   71%   -38.3
+    POON SQUAD                      0.0      -      0.0     -   -48.2
+
+    invariants   starters==points  OK   (6 team-weeks)
+                 ideal>=points     OK   (6 team-weeks)
+    unresolved   none
+
+Three blockers cleared on the way. `int.TryParse` on the league id rejected every
+valid input — a Sleeper id is 1.4e18 against an `int.MaxValue` of 2.1e9, and it
+is a string that must never be parsed at all. The csproj targeted net10.0,
+shadowed `Directory.Build.props`, had no project reference and was not in the
+solution, which is why the broken file never failed a build. `AddUserSecrets`
+would have thrown without a `UserSecretsId`; the harness prompts instead.
+
+`SD` is `-` for every team because D1 needs four finalized weeks and there are
+zero. It populates after B3, 2026-10-06.
+
+**This is the milestone the design calls out: thirty hours in, the problem is
+solved.** Everything after this buys a live website rather than a better answer.
+
+### 2026-09-11 — T13 and T14
+
+`SleeperReaderCache` (T13) and `PlayerMapRefresher` (T14). Suite at 140 passing.
+
+T13's tests go through the real pipeline, so a cache miss traverses cache →
+client → resilience → rate limiter → socket. The one that matters is
+`Twenty_simultaneous_callers_produce_one_fetch`: twenty concurrent misses, one
+request. That is the entire reason for `HybridCache` over `IMemoryCache`.
+
+T14 started as `async void` with a static mutable map. Demonstrated that an
+`async void` exception is uncatchable by the caller and **terminates the
+process** — the timer invocation would have reported success while the worker
+died. Now `async Task` on an injected singleton with a volatile backing field.
+
+Removed `SleeperReaderCache.GetPlayersAsync`: it cached the 14 MB dump for 24
+hours on the request path, giving two independent copies with different
+lifetimes and no rule about which won. The refresher is the single source of
+player data, which is what T14's "never on a request path" requires.
+
+Tightened `SleeperClient.GetPlayersAsync` from
+`Dictionary<string, SleeperPlayerDto?>` to non-nullable values. The `players!`
+at the call site was not redundant as I had claimed — it was suppressing CS8620
+from that inaccurate signature, and removing the suppression surfaced it.
+
+**Still open:** F4 (the TTL budget), and the `[TimerTrigger]` plus `Player`
+table persistence, both of which belong with M3.
+
+### 2026-09-10 — T11 and T12 wired and tested
+
+The whole outbound pipeline now lives in `AddSleeperClient`, so the host cannot
+register the client without its rate limit. 12 new tests, suite at 121 passing.
+
+The defect worth recording: the handler had been registered with
+`AddTransient` but never attached with `AddHttpMessageHandler`, so nothing was
+in the pipeline and every Sleeper call bypassed the bucket. DI knowing how to
+build a thing is not the same as the chain using it, and the returned
+`IHttpClientBuilder` being discarded is what hid it.
+`The_rate_limiter_is_actually_in_the_pipeline` now fails if that recurs.
+
+Order was chosen rather than inherited. Handlers run first-added-outermost —
+proven, not assumed — so resilience goes first and the rate limiter second, and
+every retry passes back down through the bucket and spends its own token. The
+reverse order lets one token cover four network requests, which is exactly the
+retry-loop case the limit exists to contain.
+
+Local rate-limit refusals now throw `SleeperRateLimitExceededException`. It
+derives from `HttpRequestException` so existing handling is unsurprised, but is a
+distinct type so `ShouldRetry` can exclude it — the manual's `ShouldHandle` would
+otherwise have retried a purely local refusal that no amount of backoff can help.
+
+**A note on the circuit breaker.** Its default `MinimumThroughput` is 100 calls
+within a 30 second sampling window. This design makes about one call in 30
+seconds, so the breaker can never open. It is inert here — worth knowing so
+nobody reasons about behaviour it will never exhibit.
+
+### 2026-09-10 — T10 reviewed and covered
+
+`SleeperClientTests.cs`: 24 tests across URL construction, response handling and
+registration, all against a recording `HttpMessageHandler` — no network, runs in
+milliseconds.
+
+The URL theory pins all six endpoints to their absolute addresses. That is the
+base-address trap made permanent: the base ends with a slash and every relative
+path begins without one, and swapping either makes `Uri` resolution drop the
+`/v1` segment and fail as a 404 that names nothing.
+
+Two of my own tests were wrong and got corrected rather than the code:
+
+- I asserted a cancelled call never reaches the handler. It does — `HttpClient`
+  enters the handler pipeline before observing the token. The throw is the real
+  assertion; the extra one was testing my stub.
+- I asserted a timeout under 60 seconds. There is none — see **F3**.
+
+Also confirmed against the live API and worth remembering at T15: a week that
+has not been played returns a **complete payload of zeroes**, not absent fields.
+Week 18 gives `points: 0.0`, eleven zero `starters_points` and nineteen zero
+`players_points`. It is byte-identical in shape to a week where everyone was
+blanked, and three of six rosters really did score 0.00 in week 1. So `isFinal`
+can only come from `/state/nfl`. An out-of-range week (99) returns `[]`.
+
+That contradicts the manual's stated reason for making numerics nullable
+("entries with no points at all"). The advice stands; the reason does not.
+
+### 2026-09-10 — T09 framed
+
+`FantasyLeague.Sleeper` now has six DTOs under `Dtos/`, a shared
+`SleeperJson.Options`, a public `PlayerRef`/`RosterWeek`, and `SleeperMapper` as
+the one place Sleeper's shapes become the domain's. DTOs stay `internal` per the
+manual; `InternalsVisibleTo` lets the test project bind them.
+
+20 tests, passing first run, against payloads Sleeper actually returned rather
+than the shapes the design assumed — including that `16.92` survives the parse as
+a decimal, that `season` binds from the string `"2026"`, and that three `"0"`
+empty starter slots appear in a single real week.
+
+Three findings recorded as amendments: **A6** the design is wrong about unset
+team names, **A7** `custom_points` is a commissioner override that must win, and
+**A8** unresolved player ids are reported rather than dropped.
+
+Left deliberately off `RosterDto`: its own `players` and `starters`. They are the
+roster as it stands today, and D2 requires the week's roster from the matchup
+payload instead — omitting them means the wrong one cannot be reached for.
 
 ### 2026-09-10 — T07 verified, T08 done
 

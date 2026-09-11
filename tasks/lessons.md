@@ -165,3 +165,75 @@ and later weeks reference players it does not contain.
 **Rule:** A derived fixture must be rebuilt from every captured week on disk, not
 only the ones fetched this run. `scripts/capture_fixtures.py` globs
 `wk*-matchups.json` for exactly this reason.
+
+## Registering a handler in DI does not put it in the HTTP pipeline
+
+**What happened:** `AddTransient<RateLimitHandler>()` was called, but
+`AddHttpMessageHandler<RateLimitHandler>()` never was, so the token bucket was
+not in the chain and every Sleeper request bypassed it. Nothing failed: the
+handler simply sat in the container unused. `AddSleeperClient()` returns the
+`IHttpClientBuilder` that represents the pipeline, and the call site dropped it.
+
+**Rule:** Both calls are needed and they mean different things —
+`AddTransient` is the supplier, `AddHttpMessageHandler` is the customer. Assemble
+the pipeline inside the extension method that owns the client, so it cannot be
+registered without its handlers, and assert the behaviour rather than the
+registration: a test with an empty bucket must see zero requests reach the
+primary handler.
+
+## Handler order decides whether retries are rate limited
+
+**What happened:** The manual adds the rate limiter before the resilience
+handler. Handlers run first-added-outermost, so that puts the retry loop *inside*
+the bucket: one token, up to four network requests. Measured, not assumed.
+
+**Rule:** Put the retrying strategy outermost and the limiter inside it, so every
+real attempt spends a token. The trade-off is that token-wait time then counts
+against the attempt timeout, which only matters if the bucket is routinely empty
+— and if it is, the budget is wrong anyway.
+
+## AddStandardResilienceHandler disables HttpClient.Timeout
+
+**What happened:** Time was spent worrying about layering `HttpClient.Timeout`
+against the pipeline's `TotalRequestTimeout`. The resilience handler settles it
+itself: it sets `HttpClient.Timeout` to `InfiniteTimeSpan`, and **overrides an
+explicit value** — a client configured with 20 seconds still comes out infinite.
+
+**Rule:** With the standard resilience handler in the chain, do not configure
+`HttpClient.Timeout`; it will be ignored. Tune `TotalRequestTimeout` and
+`AttemptTimeout` instead, and check assumptions about a library's behaviour by
+running it rather than reasoning from its documentation.
+
+## `async void` kills the process, it does not just lose the exception
+
+**What happened:** `PlayerMapRefresher.RefreshAsync` was declared `async void`.
+Demonstrated: the caller's `try`/`catch` never fires, the caller continues
+immediately, and the exception surfaces as an unhandled thread-pool exception
+that **terminates the process** — the line after the call never ran. A timer
+invocation would have reported success while the worker died.
+
+**Rule:** `async void` is for UI event handlers and nothing else. Anything that
+awaits returns `Task`. Check the return type of every `async` method that is
+called rather than awaited.
+
+## The null-forgiving operator is load-bearing more often than it looks
+
+**What happened:** I called a `players!` redundant because it followed a null
+check. It was not: it was suppressing CS8620 caused by
+`Dictionary<string, SleeperPlayerDto?>` being passed where
+`IReadOnlyDictionary<string, SleeperPlayerDto>` was expected. Removing it broke
+the build.
+
+**Rule:** Before deleting a `!`, work out which warning it silences. The right
+fix is usually the signature it is papering over — here, tightening the client's
+return type, which removed the need for it at every call site.
+
+## A stub must hand out a fresh HttpResponseMessage per call
+
+**What happened:** A scripted test handler returned the same
+`HttpResponseMessage` instance twice and the second read threw
+`ObjectDisposedException`: `HttpClient` disposes response content once it has
+been read.
+
+**Rule:** Script test responses as data — status plus body — and construct the
+`HttpResponseMessage` inside `SendAsync`.

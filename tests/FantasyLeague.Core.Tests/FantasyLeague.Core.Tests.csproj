@@ -18,13 +18,13 @@
 
   <ItemGroup>
     <!-- Real Sleeper payloads; see tests/fixtures/README.md -->
-    <Content Include="..\fixtures\*.json"
-             Link="fixtures\%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\fixtures\*.json" Link="fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FantasyLeague.Core\FantasyLeague.Core.csproj" />
+    <ProjectReference Include="..\..\src\FantasyLeague.Sleeper\FantasyLeague.Sleeper.csproj" />
+    <ProjectReference Include="..\..\src\FantasyLeague.Console\FantasyLeague.Console.csproj" />
   </ItemGroup>
 
 </Project>
