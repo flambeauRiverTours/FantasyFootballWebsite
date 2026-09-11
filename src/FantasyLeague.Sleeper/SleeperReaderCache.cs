@@ -16,7 +16,6 @@ namespace FantasyLeague.Sleeper
 
         private static readonly HybridCacheEntryOptions Users = new() { Expiration = TimeSpan.FromHours(1) };
 
-        private static readonly HybridCacheEntryOptions Players = new() { Expiration = TimeSpan.FromHours(24) }; //cache players for 24 hours - should rarely change and is a large payload
 
 
         /// <summary>
@@ -87,19 +86,6 @@ namespace FantasyLeague.Sleeper
             ct2 => new ValueTask<IReadOnlyList<LeagueUserDto?>?>(
                        client.GetUsersAsync(leagueId, ct2)),
             Users,
-            cancellationToken: ct);
-
-        /// <summary>
-        /// Gets the players information, using caching to reduce API calls.
-        /// </summary>
-        /// <param name="ct">CancellationToken</param>
-        /// <returns>Result of the API call</returns>
-        public ValueTask<Dictionary<string, SleeperPlayerDto?>?> GetPlayersAsync(CancellationToken ct) =>
-        cache.GetOrCreateAsync(
-            "players",
-            ct2 => new ValueTask<Dictionary<string, SleeperPlayerDto?>?>(
-                       client.GetPlayersAsync(ct2)),
-            Players,
             cancellationToken: ct);
 
     }
