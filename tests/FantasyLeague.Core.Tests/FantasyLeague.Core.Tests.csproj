@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FantasyLeague.Core\FantasyLeague.Core.csproj" />
     <ProjectReference Include="..\..\src\FantasyLeague.Sleeper\FantasyLeague.Sleeper.csproj" />
+    <ProjectReference Include="..\..\src\FantasyLeague.Console\FantasyLeague.Console.csproj" />
   </ItemGroup>
 
 </Project>

@@ -120,7 +120,7 @@ namespace FantasyLeague.Core.Tests
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
 
             var provider = services.BuildServiceProvider();
-            await provider.GetRequiredService<PlayerMapRefresher>().RefreshAsync(default);
+            await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
 
             return (provider.GetRequiredService<ISeasonService>(), provider);
         }
@@ -266,7 +266,7 @@ namespace FantasyLeague.Core.Tests
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
 
             var provider = services.BuildServiceProvider();
-            await provider.GetRequiredService<PlayerMapRefresher>().RefreshAsync(default);
+            await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
 
             return (provider.GetRequiredService<ISeasonService>(), provider);
         }

@@ -3,7 +3,31 @@ using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Sleeper
 {
-    internal sealed class PlayerMapRefresher(SleeperClient client, ILogger<PlayerMapRefresher> logger)
+    /// <summary>
+    /// Holds the projected player map and replaces it on demand.
+    /// </summary>
+    /// <remarks>The public seam. The implementation and its dependencies stay internal.</remarks>
+    public interface IPlayerMapRefresher
+    {
+        /// <summary>
+        /// Gets the current mapping of player IDs to PlayerRef objects.
+        /// </summary>
+        IReadOnlyDictionary<string, PlayerRef> PlayerMap { get; }
+
+        /// <summary>
+        /// Gets when the map was last replaced, or null if it has never been refreshed.
+        /// </summary>
+        DateTimeOffset? LastRefreshedUtc { get; }
+
+        /// <summary>
+        /// Refreshes the PlayerMap by fetching the latest player data from the Sleeper API.
+        /// </summary>
+        /// <param name="cancellationToken">CancellationToken</param>
+        /// <returns>A task that completes when the map has been replaced.</returns>
+        Task RefreshAsync(CancellationToken cancellationToken);
+    }
+
+    internal sealed class PlayerMapRefresher(SleeperClient client, ILogger<PlayerMapRefresher> logger) : IPlayerMapRefresher
     {
         private volatile IReadOnlyDictionary<string, PlayerRef> playerMap = new Dictionary<string, PlayerRef>();
 
