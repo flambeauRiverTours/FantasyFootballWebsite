@@ -31,7 +31,7 @@ namespace FantasyLeague.Sleeper
     /// </remarks>
     internal sealed class SeasonService(
         SleeperReaderCache reader,
-        PlayerMapRefresher players,
+        IPlayerMapRefresher players,
         ILogger<SeasonService> logger) : ISeasonService
     {
         /// <summary>Float drift tolerance for the starters-sum invariant.</summary>

@@ -74,8 +74,10 @@ invariants across a whole season.
       Matchups to per-team weekly actual and ideal. 19 tests. Both invariants
       compare against Sleeper's scored points rather than a commissioner
       override — see **A9**.
-- [ ] **T16** Console harness and live verification — 3 h `±`
-      Prints the real table, then asserts `starters==points` and `ideal>=actual` across every week.
+- [x] **T16** Console harness and live verification — 3 h `±`
+      Prints the real table, then asserts `starters==points` and `ideal>=actual`
+      across every week. **Both hold against the live league.** Exit code is
+      non-zero on a violation or an unresolved player.
 
 ## M2 · API and cloud foundation — 18.5 h
 
@@ -307,6 +309,39 @@ artifact re-sync where `docs/design.md` and `docs/field-manual.md` do not.
 
 _Add a section here per work session: what changed, what was verified, what is
 still open._
+
+### 2026-09-11 — M1 closed
+
+`FantasyLeague.Console` runs end to end against the live league and both
+invariants hold:
+
+    season 2026   weeks 1-1   final through wk 0
+
+    TEAM                         POINTS     SD    IDEAL   EFF     GAP
+    -----------------------------------------------------------------
+    kuzma4prez                     48.2      -     48.2  100%       -
+    Aaron Donald Relief Fund       35.2      -     42.0   84%   -13.0
+    START TOMMY CUTLETS            16.9      -     44.8   38%   -31.3
+    sullynator9                    11.3      -     11.3  100%   -36.9
+    LilDab                          9.9      -     14.0   71%   -38.3
+    POON SQUAD                      0.0      -      0.0     -   -48.2
+
+    invariants   starters==points  OK   (6 team-weeks)
+                 ideal>=points     OK   (6 team-weeks)
+    unresolved   none
+
+Three blockers cleared on the way. `int.TryParse` on the league id rejected every
+valid input — a Sleeper id is 1.4e18 against an `int.MaxValue` of 2.1e9, and it
+is a string that must never be parsed at all. The csproj targeted net10.0,
+shadowed `Directory.Build.props`, had no project reference and was not in the
+solution, which is why the broken file never failed a build. `AddUserSecrets`
+would have thrown without a `UserSecretsId`; the harness prompts instead.
+
+`SD` is `-` for every team because D1 needs four finalized weeks and there are
+zero. It populates after B3, 2026-10-06.
+
+**This is the milestone the design calls out: thirty hours in, the problem is
+solved.** Everything after this buys a live website rather than a better answer.
 
 ### 2026-09-11 — T13 and T14
 

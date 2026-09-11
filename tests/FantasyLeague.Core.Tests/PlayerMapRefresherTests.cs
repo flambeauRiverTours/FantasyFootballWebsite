@@ -207,8 +207,8 @@ namespace FantasyLeague.Core.Tests
             services.AddSleeperClient();
             using var provider = services.BuildServiceProvider();
 
-            provider.GetRequiredService<PlayerMapRefresher>()
-                .Should().BeSameAs(provider.GetRequiredService<PlayerMapRefresher>());
+            provider.GetRequiredService<IPlayerMapRefresher>()
+                .Should().BeSameAs(provider.GetRequiredService<IPlayerMapRefresher>());
         }
     }
 }
