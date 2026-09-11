@@ -259,9 +259,35 @@ happen is the list being ignored.
 
 ---
 
+## A9 · Both invariants compare against Sleeper's scored points, never the override
+
+§03 states `ideal >= actual` holds "always, with no exceptions". With A7 in
+place that is no longer true, because `actual` is `custom_points ?? points` and a
+commissioner may set `custom_points` to anything at all.
+
+Both checks therefore compare against **`points`**, Sleeper's own computed total:
+
+- `sum(starters_points) == points` — comparing the sum against an override would
+  fire a violation every time that week was assembled, forever, from one
+  correction.
+- `ideal >= points` — §03's rationale is that "the started lineup is by
+  definition one of the candidate assignments the solver considers, so a
+  violation is a solver bug". That reasoning holds against a scored total and
+  not against an arbitrary adjustment.
+
+`RosterWeek` carries both: `Actual` is what the site displays, `Points` is what
+the invariants test.
+
+**The visible consequence:** after a generous override the page can show an ideal
+below the actual. That is correct, not a bug — the manager really did score more
+than their roster could have produced, because someone decided so.
+
+---
+
 ## Where the design is now out of date
 
 - **§03 is wrong about team names** — see A6.
+- **§03's "ideal >= actual, always" no longer holds** once A7's override exists — see A9.
 - **§08, §10, D11 assume twelve teams.** The league has **six rosters, five of
   them scoring** (A1). §08's "roughly 12 teams × 18 weeks is 216 rows" becomes
   ~108. More substantively, the legibility arguments soften: five lines on a
