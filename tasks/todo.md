@@ -70,8 +70,10 @@ invariants across a whole season.
       `PlayerMapRefresher`, a singleton holding the projected map. The
       `[TimerTrigger]` that calls it and the `Player` table it should persist to
       both belong to M3.
-- [ ] **T15** Season assembly — 2.5 h
-      Matchups to per-team weekly actual and ideal.
+- [x] **T15** Season assembly — 2.5 h
+      Matchups to per-team weekly actual and ideal. 19 tests. Both invariants
+      compare against Sleeper's scored points rather than a commissioner
+      override — see **A9**.
 - [ ] **T16** Console harness and live verification — 3 h `±`
       Prints the real table, then asserts `starters==points` and `ideal>=actual` across every week.
 

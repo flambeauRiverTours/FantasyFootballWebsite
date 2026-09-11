@@ -22,6 +22,7 @@
     /// </summary>
     /// <param name="RosterId">The roster this week belongs to.</param>
     /// <param name="Actual">What the roster actually scored, taking a commissioner override into account.</param>
+    /// <param name="Points">Sleeper's own scored total, before any override. What the starters-sum invariant compares against.</param>
     /// <param name="Players">Every rostered player that week, ready for the solver.</param>
     /// <param name="Starters">The lineup that was started, in slot order, with empty slots removed.</param>
     /// <param name="StartersPoints">Points for the started lineup, for the <c>sum(starters_points) == points</c> invariant.</param>
@@ -40,6 +41,7 @@
     public sealed record RosterWeek(
         int RosterId,
         decimal Actual,
+        decimal Points,
         IReadOnlyList<FantasyLeague.Core.RosteredPlayer> Players,
         IReadOnlyList<FantasyLeague.Core.PlayerId> Starters,
         IReadOnlyList<decimal> StartersPoints,

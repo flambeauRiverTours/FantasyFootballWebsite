@@ -80,6 +80,7 @@ namespace FantasyLeague.Sleeper
 
             // singleton: the map it holds is shared state
             services.TryAddSingleton<PlayerMapRefresher>();
+            services.TryAddTransient<ISeasonService, SeasonService>();
 
             return builder;
         }

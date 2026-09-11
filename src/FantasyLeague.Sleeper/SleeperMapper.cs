@@ -141,6 +141,7 @@ namespace FantasyLeague.Sleeper
             return new RosterWeek(
                 matchup.RosterId,
                 matchup.CustomPoints ?? matchup.Points ?? 0m,
+                matchup.Points ?? 0m,
                 players,
                 starters,
                 matchup.StartersPoints ?? [],
