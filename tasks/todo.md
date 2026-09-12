@@ -83,9 +83,9 @@ invariants across a whole season.
 
 Deployed and reachable, still no database.
 
-- [ ] **T17** Functions host — 2 h
+- [x] **T17** Functions host — 2 h
       Isolated worker, DI, options binding, `local.settings.json`.
-- [ ] **T18** Season endpoints — 2 h
+- [x] **T18** Season endpoints — 2 h
       `GET /api/season` and `/api/seasons`, served from memory.
 - [ ] **T19** Caching semantics — 1.5 h
       ETag, 30 s live vs immutable historical, 404 listing available seasons.

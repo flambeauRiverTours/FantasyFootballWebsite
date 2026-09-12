@@ -23,5 +23,15 @@ namespace FantasyLeague.Sleeper
         /// </remarks>
         [Required(AllowEmptyStrings = false)]
         public string CurrentLeagueId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the owning user ids of rosters left out of every metric.
+        /// </summary>
+        /// <remarks>
+        /// A1. Matched on user id because team names change on a whim and roster
+        /// ids are reassigned between seasons. Empty for a league with no
+        /// placeholder team.
+        /// </remarks>
+        public IList<string> ExcludedOwnerIds { get; } = [];
     }
 }
