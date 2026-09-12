@@ -89,7 +89,7 @@ Deployed and reachable, still no database.
       `GET /api/season` and `/api/seasons`, served from memory.
 - [x] **T19** Caching semantics — 1.5 h
       ETag, 30 s live vs immutable historical, 404 listing available seasons.
-- [ ] **T20** Bicep template — 4 h `±`
+- [x] **T20** Bicep template — 4 h `±`
       SWA, Function App, storage, App Insights, resource group scope.
 - [ ] **T21** GitHub to Entra OIDC — 3 h `±`
       App registration, federated credential, RBAC. No secrets in the repo.
