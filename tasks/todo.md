@@ -87,7 +87,7 @@ Deployed and reachable, still no database.
       Isolated worker, DI, options binding, `local.settings.json`.
 - [x] **T18** Season endpoints — 2 h
       `GET /api/season` and `/api/seasons`, served from memory.
-- [ ] **T19** Caching semantics — 1.5 h
+- [x] **T19** Caching semantics — 1.5 h
       ETag, 30 s live vs immutable historical, 404 listing available seasons.
 - [ ] **T20** Bicep template — 4 h `±`
       SWA, Function App, storage, App Insights, resource group scope.

@@ -1,4 +1,9 @@
-﻿using FantasyLeague.Core;
+﻿using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using FantasyLeague.Core;
+using Microsoft.Extensions.Primitives;
+using Microsoft.Net.Http.Headers;
 
 namespace FantasyLeague.Sleeper
 {
@@ -94,6 +99,63 @@ namespace FantasyLeague.Sleeper
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.Actual, w.Ideal, w.IsFinal))]);
+        }
+
+        /// <summary>
+        /// Builds a validator for one snapshot.
+        /// </summary>
+        /// <param name="snapshot">The assembled season.</param>
+        /// <returns>A weak entity tag.</returns>
+        /// <remarks>
+        /// Weak because the payload carries asOfUtc, which differs on every
+        /// response; a strong tag would promise byte-identical content it cannot
+        /// deliver. The hash covers every week's score, so it changes the moment
+        /// Sunday's numbers do.
+        /// </remarks>
+        public static string ComputeETag(SeasonSnapshot snapshot)
+        {
+            var builder = new StringBuilder()
+                .Append(snapshot.Season).Append('-')
+                .Append(snapshot.CurrentWeek).Append('-')
+                .Append(snapshot.FinalThroughWeek);
+
+            foreach (var team in snapshot.Teams.OrderBy(t => t.RosterId))
+            {
+                builder.Append('|').Append(team.RosterId);
+
+                foreach (var week in team.Weeks.OrderBy(w => w.Week))
+                {
+                    builder.Append(':').Append(week.Week)
+                        .Append(',').Append(week.Actual.ToString(CultureInfo.InvariantCulture))
+                        .Append(',').Append(week.Ideal.ToString(CultureInfo.InvariantCulture))
+                        .Append(',').Append(week.IsFinal ? '1' : '0');
+                }
+            }
+
+            // The hash is 32 bytes, but we only need 16 for a weak tag. The rest is ignored
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
+
+            return $"W/\"{snapshot.Season}-wk{snapshot.CurrentWeek}-{Convert.ToHexString(hash)[..16]}\"";
+        }
+
+        /// <summary>
+        /// Decides whether a conditional request already holds this version.
+        /// </summary>
+        /// <param name="ifNoneMatch">The request's If-None-Match header.</param>
+        /// <param name="etag">The tag from <see cref="ComputeETag"/>.</param>
+        /// <returns><c>true</c> when a 304 is the right answer.</returns>
+        /// <remarks>
+        /// The header is a comma separated list and a client may send the tag
+        /// without its W/ prefix, so neither a string comparison nor a Contains
+        /// call is enough.
+        /// </remarks>
+        public static bool MatchesETag(StringValues ifNoneMatch, string etag)
+        {
+            if (StringValues.IsNullOrEmpty(ifNoneMatch)) return false;
+            if (!EntityTagHeaderValue.TryParse(etag, out var current)) return false;
+            if (!EntityTagHeaderValue.TryParseList(ifNoneMatch!, out var candidates)) return false;
+
+            return candidates.Any(candidate => candidate.Compare(current, useStrongComparison: false));
         }
     }
 }

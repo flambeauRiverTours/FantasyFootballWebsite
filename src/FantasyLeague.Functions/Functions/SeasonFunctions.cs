@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Sleeper;
+﻿using Azure;
+using FantasyLeague.Sleeper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -47,11 +48,28 @@ namespace FantasyLeague.Functions.Functions
             LogViolations(snapshot);
             LogUnresolvedPlayerIds(snapshot);
 
+            var response = req.HttpContext.Response;
+
             // a year with no data is a well-formed request for something absent
-            if (requested is not null && requested != snapshot.Season)
+            if (requested != null && requested != snapshot.Season)
             {
+                response.Headers.CacheControl = "no-store";
+
                 return new NotFoundObjectResult(
                     SeasonPayloadMapper.ToSeasonsPayload(snapshot.Season));
+            }
+
+            var isCurrent = requested == null || requested == snapshot.Season;
+            var etag = SeasonPayloadMapper.ComputeETag(snapshot);
+
+            response.Headers.CacheControl = isCurrent
+                ? "public, max-age=5"
+                : "public, max-age=31536000, immutable";
+            response.Headers.ETag = etag;
+
+            if (SeasonPayloadMapper.MatchesETag(req.Headers.IfNoneMatch, etag))
+            {
+                return new StatusCodeResult(StatusCodes.Status304NotModified);
             }
 
             return new OkObjectResult(SeasonPayloadMapper.ToIndividualSeasonPayload(
@@ -70,6 +88,8 @@ namespace FantasyLeague.Functions.Functions
             CancellationToken ct)
         {
             var snapshot = await seasons.BuildAsync(league.Value.CurrentLeagueId, ct);
+
+            req.HttpContext.Response.Headers.CacheControl = "public, max-age=300";
 
             return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(snapshot.Season));
         }
