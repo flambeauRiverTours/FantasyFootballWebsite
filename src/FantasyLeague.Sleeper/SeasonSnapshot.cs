@@ -12,6 +12,7 @@ namespace FantasyLeague.Sleeper
     /// <param name="Teams">Every roster, including any the caller means to exclude.</param>
     /// <param name="UnresolvedPlayerIds">Rostered ids the player map could not explain.</param>
     /// <param name="Violations">Invariant breaches found while assembling.</param>
+    /// <param name="RosterOwnerIds">Roster id to owning user id. The only identifier stable across seasons, and what A1 matches on.</param>
     /// <remarks>Reports facts; the caller decides policy. T16 asserts, T18 serves and logs, T28 refuses to freeze.</remarks>
     public sealed record SeasonSnapshot(
         int Season,
@@ -20,7 +21,8 @@ namespace FantasyLeague.Sleeper
         IReadOnlyList<Slot> Slots,
         IReadOnlyList<TeamSeason> Teams,
         IReadOnlyList<string> UnresolvedPlayerIds,
-        IReadOnlyList<InvariantViolation> Violations);
+        IReadOnlyList<InvariantViolation> Violations,
+        IReadOnlyDictionary<int, string> RosterOwnerIds);
 
     /// <summary>
     /// A team-week where one of the two invariants did not hold.
