@@ -251,3 +251,15 @@ here), satisfy the shape with an obviously synthetic value. Gate it in CI by
 matching the configured secrets exactly, rather than by a pattern that a
 placeholder would also trip.
 
+## A harness that primes state hides a host that does not
+
+**What happened:** `SeasonService` required the player map to have been
+refreshed, and threw otherwise. The console harness refreshed it explicitly
+before building, so every local run passed. The Functions host never did, and
+the first deployed request — and every one after it — returned 500.
+
+**Rule:** When a service depends on state something else must prime, check every
+host that resolves it, not just the one being run. Better still, make the
+service acquire what it needs itself: a precondition that only one caller
+satisfies is a bug waiting for a second caller.
+
