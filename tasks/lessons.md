@@ -263,3 +263,23 @@ host that resolves it, not just the one being run. Better still, make the
 service acquire what it needs itself: a precondition that only one caller
 satisfies is a bug waiting for a second caller.
 
+## A shell construct in the wrong shell succeeds at the wrong thing
+
+**What happened:** `gh secret set NAME --body "$(az ... )"` was run in `cmd`,
+where `$( )` is literal text rather than command substitution. The secret was set
+to the 105-character command string instead of the API key. Nothing failed —
+`gh` reported success — and the mistake surfaced days later as a secret-scanning
+hit on the document that contained the same command.
+
+**Rule:** A command whose correctness depends on the shell must say so, and must
+carry a check that fails loudly in the wrong one. Capture into a variable, assert
+something about it (`[ "${#TOKEN}" -ge 100 ]`), and only then write it. The same
+applies to a trailing carriage return: `$( )` strips a trailing newline but not a
+``, so pipe through `tr -d '
+'` on Windows before storing anything.
+
+**Corollary:** this is the third failure in this project caused by a masked value
+making an error unactionable. Any gate that compares against a secret should
+report what it can safely say — length, line numbers, the variable's name — and
+never just "something matched".
+
