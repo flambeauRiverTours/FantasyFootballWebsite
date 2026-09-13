@@ -33,6 +33,7 @@ jobs:
       - run: dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln.txt
       - run: "! grep -q 'has the following vulnerable packages' vuln.txt"
   infra:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
