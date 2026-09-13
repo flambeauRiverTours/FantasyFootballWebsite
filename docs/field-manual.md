@@ -1,813 +1,376 @@
 # Ideal Points — Field Manual
 
-> Converted from the published artifact:
-> https://claude.ai/code/artifact/bae9d64b-1fe8-4f4a-a47c-c733adc901d7
-> Updated 2026-09-10 · step-by-step instructions for 50 required + 5 optional tasks, in build order.
-> Task IDs match `tasks/todo.md`.
+> **This is now the living document.** It began as a conversion of the published
+> artifact, but M0–M2 have been built and a dozen of its instructions have been
+> corrected against reality. A re-sync from the artifact would be destructive.
+> Edit this file directly; `docs/amendments.md` still holds the *reasoning*
+> behind every decision made after design v6.
+>
+> Updated 2026-09-13. Task IDs match [`tasks/todo.md`](../tasks/todo.md).
 
 ---
 
-Step-by-step instructions for every task in the build plan, in build order — fifty required and five optional. Task IDs match the tracker, so T21 here is T21 there.
+This manual assumes no prior familiarity with Azure, bicep, EF Core, D3 or
+GitHub Actions. Where a step needs background, the background is here rather
+than assumed. Where a command can fail in a way whose error message points
+somewhere unhelpful, that is called out.
 
-### Before you begin
+### Conventions
 
-Install .NET 9 SDK, Azure Functions Core Tools v4, Azure CLI, and Node 20 or newer. You will also need an Azure subscription and a GitHub repository.
+- Shell blocks are **bash**. On Windows use **Git Bash**, not `cmd` or
+  PowerShell — `find`, `grep` and `$VAR` all mean different things there.
+- `rg-fantsybosty` is the resource group. The design and the original artifact
+  say `rg-fantsybosty`; that name was never used. Resource *names* inside it
+  (`func-idealpoints`, `stapp-idealpoints`) do use the `idealpoints` prefix.
+- `±` marks a soft estimate that could run double.
+- Anything marked **Watch out** has already cost someone a day.
 
-**Find your league ID** by opening the league on the Sleeper web app — the URL is `sleeper.com/leagues/<league_id>/…` and the numeric segment is what every API call needs.
+### What you need installed
 
-Links below point at documentation roots and stable section paths rather than deep pages, because deep documentation links rot faster than the docs themselves. Where a link lands on a landing page, the thing you want is one search box away.
+| Tool | Why | Check it works |
+|---|---|---|
+| .NET SDK 10 | Builds everything. Projects target `net9.0`; SDK 10 builds that fine | `dotnet --list-sdks` |
+| .NET 9 runtime | `dotnet test` runs on it | `dotnet --list-runtimes` |
+| Azure CLI | Every `az` command | `az account show` |
+| GitHub CLI | Secrets and workflow runs | `gh auth status` |
+| Python 3 | `scripts/capture_fixtures.py`, and JSON on the command line since there is no `jq` | `python --version` |
+| Node 20+ | Not needed until T32 | `node --version` |
 
-- **Sleeper** — [Sleeper read API documentation](https://docs.sleeper.com/)
+You also need an Azure subscription and this GitHub repository.
+
+**Find your league ID** by opening the league on the Sleeper web app — the URL is
+`sleeper.com/leagues/<league_id>/…` and the numeric segment is what every API
+call needs. It is a **secret** (A2): it never goes in the repo.
+
+### Reference roots
+
+Links point at documentation roots rather than deep pages, because deep links
+rot faster than the docs.
+
+- **Sleeper** — [read API documentation](https://docs.sleeper.com/)
 - **.NET** — [.NET documentation](https://learn.microsoft.com/dotnet/)
 - **Azure** — [Azure Functions](https://learn.microsoft.com/azure/azure-functions/)
-- **Azure** — [Azure Static Web Apps](https://learn.microsoft.com/azure/static-web-apps/)
+- **Azure** — [Static Web Apps](https://learn.microsoft.com/azure/static-web-apps/)
 
-## M0 · Core domain · 13.0 h
+---
 
-One hour of curl, then pure functions over fixtures. No cloud account, no database. The recon goes first so that everything after it is written against the real league rather than an assumption about it — and this is where the bugs that matter live.
+# Built · M0–M2
 
-### T01 · Solution scaffold — 1.5 h
+These are done. The step-by-step that built them has been removed; what remains
+is where things live, the decisions that are easy to undo by accident, and the
+traps that still bite.
 
-Create the five projects and wire the shared build settings once, at the root, so every project inherits them.
+## The projects
 
-```bash
-dotnet new sln -n FantasyLeague
-dotnet new classlib -o src/FantasyLeague.Core
-dotnet new classlib -o src/FantasyLeague.Sleeper
-dotnet new classlib -o src/FantasyLeague.Data
-dotnet new xunit   -o tests/FantasyLeague.Core.Tests
-
-# Functions templates are a separate install
-dotnet new install Microsoft.Azure.Functions.Worker.ProjectTemplates
-dotnet new func -F net9.0 -o src/FantasyLeague.Functions
-
-find . -name "*.csproj" -exec dotnet sln add {} +
-```
-
-> **Which shell**
->
-> **Run every shell block in this manual under Git Bash.** They are POSIX
-> scripts: this one uses Unix `find`, and T02 uses `curl`, `jq`, `mkdir -p`,
-> `for w in 1 2 3` and `$L`. In `cmd`, `find` resolves to Windows' `find.exe`,
-> a text-search tool, and you get `File not found - -NAME`.
-
-If you would rather stay in your own shell, the last line only — the rest of the
-block is `dotnet` and runs anywhere:
-
-```powershell
-# PowerShell
-Get-ChildItem -Recurse -Filter *.csproj | ForEach-Object { dotnet sln add $_.FullName }
-```
-
-```text
-:: cmd, at the prompt
-for /r %f in (*.csproj) do dotnet sln add "%f"
-
-:: cmd, inside a .bat/.cmd file — the percent must be doubled
-for /r %%f in (*.csproj) do dotnet sln add "%%f"
-```
-
-`dotnet sln add **/*.csproj` does *not* work: the CLI does no globbing of its
-own, so the expansion has to come from the shell. In bash that also needs
-`shopt -s globstar`, which is why the `find` form is the one written above.
-
-> **`.slnx`, not `.sln`, on the .NET 10 SDK**
->
-> `dotnet new sln` now defaults to the XML solution format, so you get
-> `FantasyLeague.slnx`. Everything in this manual works with it. If you want the
-> classic format — for an older Visual Studio, or for a CI step that globs
-> `*.sln` — ask for it explicitly:
->
-> ```bash
-> dotnet new sln -n FantasyLeague -f sln
-> ```
-
-> **Watch out · two traps in the `func` line**
->
-> **`--worker-runtime dotnet-isolated` is not a `dotnet new` option.** It belongs
-> to `func init`, from Azure Functions Core Tools — a different tool. Passing it
-> here fails with `'--worker-runtime' is not a valid option`. It is also
-> unnecessary: the `func` template that ships in
-> `Microsoft.Azure.Functions.Worker.ProjectTemplates` *is* the isolated-worker
-> template. You can confirm it from the generated `.csproj` — it references
-> `Microsoft.Azure.Functions.Worker` and `Microsoft.Azure.Functions.Worker.Sdk`
-> and sets `<OutputType>Exe</OutputType>`, because an isolated worker is a
-> standalone process. The in-process model is a class library and a different
-> template package (`Microsoft.Azure.WebJobs.ProjectTemplates`).
->
-> **`-F net9.0` is load-bearing.** The template defaults to `net8.0` and writes
-> an explicit `<TargetFramework>` into the generated `.csproj`.
-> `Directory.Build.props` is imported *before* the project's own
-> `PropertyGroup`, so the project's line wins — the Functions project would
-> silently build as net8.0 while the other four are net9.0, and nothing would
-> warn you. If you leave the flag off, delete the `<TargetFramework>` line from
-> the generated `.csproj` so it inherits instead.
-
-Then a `Directory.Build.props` at the repository root:
-
-```xml
-<Project>
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-  </PropertyGroup>
-</Project>
-```
-
-`Nullable` plus `TreatWarningsAsErrors` is the pairing that matters. Sleeper's payload is full of fields that are legitimately absent, and the compiler complaining about every unguarded dereference is the cheapest defence you will get all project.
-
-#### Reference
-
-- **.NET** — [dotnet CLI reference](https://learn.microsoft.com/dotnet/core/tools/)
-- **.NET** — [Nullable reference types](https://learn.microsoft.com/dotnet/csharp/nullable-references)
-
-### T02 · Sleeper recon — 1.5 h
-
-An hour with `curl`, before a line of domain code. Everything else in M0 is otherwise written against assumptions about an API this project has never actually called — and those assumptions shape the eligibility map, the fixtures and the radar.
-
-Find the league ID first: open the league on the Sleeper web app and take the numeric segment from `sleeper.com/leagues/<league_id>/…`.
-
-```bash
-L=<your-league-id>
-
-# Q1 — the slot list that shapes T04 and every solver fixture
-curl -s "https://api.sleeper.app/v1/league/$L" | jq '.roster_positions'
-
-# Q2 — SUPER_FLEX or IDP present?
-curl -s "https://api.sleeper.app/v1/league/$L" | jq '.roster_positions | unique'
-
-# Q7 — how far back does the season chain reach?
-curl -s "https://api.sleeper.app/v1/league/$L" | jq '{season, previous_league_id}'
-
-# fixtures for T06 — capture real weeks while you are here
-mkdir -p tests/fixtures
-for w in 1 2 3; do
-  curl -s "https://api.sleeper.app/v1/league/$L/matchups/$w" > tests/fixtures/wk$w.json
-done
-
-# does starters[i] line up with the i-th startable slot?  (§11 depends on it)
-jq '.[0] | {starters, starters_points, points}' tests/fixtures/wk1.json
-```
-
-#### Write the answers down
-
-- **Q1** — the exact `roster_positions` array. Paste it into the repo; T04 is built from it.
-- **Q2** — whether `SUPER_FLEX` or IDP slots appear, which decides how much of the eligibility map is live code.
-- **Q3** — whether IR-slotted players show up in `players`, and whether the league wants them counted toward ideal.
-- **Q4** — what a playoff-week matchup looks like when only some teams play.
-- **Q7** — follow `previous_league_id` back and count the hops against how many seasons the league has run.
-- **The `starters` alignment** — confirm `starters[i]` is a player eligible for the *i*th startable slot. The entire positional radar rests on this and it is an observation, not a documented guarantee.
-- **The published rate-limit guidance.** The design assumes 100/min and runs at about 2.3, so a looser real figure changes nothing — but inherit the number knowingly.
-
-> **Watch out**
->
-> **This is recon, not verification.** You cannot assert `ideal >= actual` or `sum(starters_points) == points` here, because neither the solver nor the client exists yet. Those assertions land in T16, against working code and a whole season. What T02 buys is that everything between here and there is written against the real league instead of a guess.
->
-> Commit the captured weeks. Real payloads catch things invented ones never will, and they cost nothing to keep.
->
-
-#### Reference
-
-- **Sleeper** — [Read API documentation](https://docs.sleeper.com/)
-
-### T03 · Domain types — 1.0 h
-
-Records in `FantasyLeague.Core`, with no reference to HTTP, JSON, or EF. These are the shapes the solver and the consistency maths operate on — deliberately not the shapes Sleeper returns.
-
-```csharp
-public readonly record struct PlayerId(string Value);
-
-public sealed record RosteredPlayer(
-    PlayerId Id,
-    string Name,
-    IReadOnlyList<string> FantasyPositions,
-    decimal Points);
-
-public sealed record TeamWeek(
-    int RosterId, int Week,
-    decimal Actual, decimal Ideal,
-    IReadOnlyList<PlayerId> Starters,
-    IReadOnlyList<PlayerId> IdealLineup,
-    bool IsFinal);
-
-public sealed record TeamSeason(
-    int RosterId, string Name,
-    IReadOnlyList<TeamWeek> Weeks);
-```
-
-Keeping these separate from the wire DTOs (T09) means a Sleeper schema change touches one mapping function rather than the solver, the tests, and the API surface.
-
-#### Reference
-
-- **.NET** — [Records in C#](https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/record)
-
-### T04 · Slot parsing and eligibility — 1.5 h
-
-Turn `league.roster_positions` — a flat array like `["QB","RB","RB","WR","WR","TE","FLEX","K","DEF","BN","BN",…]` — into the list of startable slots, and encode which positions each accepts.
-
-```csharp
-public sealed record Slot(string Code)
-{
-    private static readonly Dictionary<string, string[]> Flex = new()
-    {
-        ["FLEX"]       = ["RB", "WR", "TE"],
-        ["SUPER_FLEX"] = ["QB", "RB", "WR", "TE"],
-        ["REC_FLEX"]   = ["WR", "TE"],
-        ["WRRB_FLEX"]  = ["RB", "WR"],
-        ["IDP_FLEX"]   = ["DL", "LB", "DB"],
-    };
-
-    private static readonly HashSet<string> NotStartable = ["BN", "IR", "TAXI"];
-
-    public static IReadOnlyList<Slot> Parse(IEnumerable<string> rosterPositions) =>
-        rosterPositions.Where(c => !NotStartable.Contains(c))
-                       .Select(c => new Slot(c))
-                       .ToList();
-
-    public bool Accepts(IReadOnlyList<string> positions) =>
-        Flex.TryGetValue(Code, out var allowed)
-            ? positions.Any(allowed.Contains)
-            : positions.Contains(Code);
-}
-```
-
-Note that `roster_positions` repeats a code once per slot — two `RB` entries means two RB slots — so the list is already the right length and needs no expansion.
-
-> **Watch out**
->
-> Match against `fantasy_positions`, not `position`. A player Sleeper lists at `position: "RB"` may carry `fantasy_positions: ["RB","WR"]`, and the second entry is what makes him legal in a `WRRB_FLEX`. Using the singular field silently undercounts ideal points for exactly the multi-eligible players who make flex slots interesting.
->
-
-### T05 · Bitmask DP solver — 2.0 h
-
-Exact maximum-weight assignment of players to slots. Each player is used at most once; each slot is filled at most once.
-
-```csharp
-public static (decimal Points, IReadOnlyList<PlayerId> Lineup) Solve(
-    IReadOnlyList<RosteredPlayer> players,
-    IReadOnlyList<Slot> slots)
-{
-    var n = slots.Count;
-    var dp   = new decimal[1 << n];
-    var from = new (int Mask, PlayerId Id)?[1 << n];
-    Array.Fill(dp, -1m);
-    dp[0] = 0m;
-
-    foreach (var p in players)
-    {
-        var next     = (decimal[])dp.Clone();
-        var nextFrom = ((int, PlayerId)?[])from.Clone();
-
-        for (var mask = 0; mask < dp.Length; mask++)
-        {
-            if (dp[mask] < 0) continue;
-            for (var s = 0; s < n; s++)
-            {
-                if ((mask & (1 << s)) != 0) continue;
-                if (!slots[s].Accepts(p.FantasyPositions)) continue;
-
-                var m2 = mask | (1 << s);
-                if (dp[mask] + p.Points > next[m2])
-                {
-                    next[m2]     = dp[mask] + p.Points;
-                    nextFrom[m2] = (mask, p.Id);
-                }
-            }
-        }
-        dp = next; from = nextFrom;
-    }
-
-    var best = Array.IndexOf(dp, dp.Max());
-    var lineup = new List<PlayerId>();
-    for (var m = best; from[m] is (var prev, var id); m = prev) lineup.Add(id);
-    return (dp[best], lineup);
-}
-```
-
-The `from` array is what lets you reconstruct which players made up the ideal lineup, which you will store and display. Take `dp.Max()` rather than `dp[(1 << n) - 1]`: on a bye-heavy week a roster may be unable to fill every slot, and the full mask is then unreachable.
-
-### T06 · Solver fixtures and tests — 3.0 h  ±
-
-Four tests carry the weight. The first is the one that justifies the DP existing at all.
-
-#### 1 · Greedy loses
-
-Slots `[WR, FLEX]`. Players: a 20-point WR and an 18-point RB. A greedy pass that sorts by points and takes the first eligible open slot puts the WR in `WR` or in `FLEX` depending on slot order — and if it lands in `FLEX`, the RB has nowhere to go and the total is 20. The correct answer is 38.
-
-```csharp
-[Fact]
-public void Flex_ordering_does_not_strand_a_player()
-{
-    var slots = Slot.Parse(["WR", "FLEX"]);
-    var players = new[]
-    {
-        new RosteredPlayer(new("wr1"), "WR One", ["WR"], 20m),
-        new RosteredPlayer(new("rb1"), "RB One", ["RB"], 18m),
-    };
-    Assert.Equal(38m, Solver.Solve(players, slots).Points);
-}
-```
-
-#### 2 · Bye-week hole
-
-Fewer eligible players than slots at some position. Assert the solver returns the best partial fill rather than throwing or returning zero.
-
-#### 3 · Ideal is never below actual
-
-Over a real week's fixture, for every roster: `ideal >= actual`. The started lineup is one of the assignments the solver considers, so any violation is a bug — almost always an eligibility rule.
-
-#### 4 · Multi-eligible player
-
-A player with `fantasy_positions: ["RB","WR"]` filling a `WRRB_FLEX`, proving T04’s warning is handled.
-
-Use the weeks captured in T02 as fixtures — that is what the recon bought you. Write the constructed cases above by hand, and pin the real payloads alongside them so the eligibility map is exercised against your league’s actual slot list rather than an assumed one.
-
-#### Reference
-
-- **Testing** — [xUnit getting started](https://xunit.net/docs/getting-started/v3/getting-started)
-
-### T07 · Consistency maths — 1.0 h
-
-Population standard deviation over finalized weeks, plus the summary figures the table's range mark needs.
-
-```csharp
-public sealed record Spread(
-    double Sigma, double Cv, decimal Mean, decimal Min, decimal Max, int Weeks);
-
-public static Spread? Compute(IReadOnlyList<decimal> finalWeeks, int minWeeks = 4)
-{
-    if (finalWeeks.Count < minWeeks) return null;
-
-    var mean     = finalWeeks.Average();
-    var meanD    = (double)mean;
-    var variance = finalWeeks.Sum(p => Math.Pow((double)p - meanD, 2)) / finalWeeks.Count;
-    var sigma    = Math.Sqrt(variance);
-
-    return new Spread(sigma, meanD == 0 ? 0 : sigma / meanD,
-                      mean, finalWeeks.Min(), finalWeeks.Max(), finalWeeks.Count);
-}
-```
-
-Divide by `Count`, not `Count - 1`: the weeks played are the complete population, not a sample. Return `null`, never a zero — a method that answers `0.0` for a two-week season produces a table where the least-known teams look the steadiest.
-
-### T08 · Sigma edge-case tests — 1.5 h
-
-Almost all of these are about absence. Each should return a defined result for a stated reason, and none should throw.
-
-| Input | Expected | Why it matters |
+| Project | Holds | Depends on |
 |---|---|---|
-| [] | null | Week zero, before any games |
-| [118.2] | null | σ of one point is undefined, not zero |
-| 3 weeks | null | The minimum-weeks boundary, from below |
-| 4 weeks | a number | The same boundary, from above |
-| [100,100,100,100] | 0.0 | A genuine zero — perfect consistency exists |
-| [0,120,110,115] | a number | A real 0.0 score is data, not a missing week |
-| 5 weeks, 1 not final | σ over 4 | The non-final week is excluded, not zeroed |
-
-That last row is the one that will actually break in production. Write it now.
-
-## M1 · Sleeper client · 16.0 h
-
-Ends with a console app printing the real standings and asserting both invariants across a whole season. This is the milestone where the project first does something.
-
-### T09 · DTOs and JSON configuration — 2.0 h
-
-Wire types in `FantasyLeague.Sleeper`, mapped to the domain records from T03 by an explicit function.
-
-```csharp
-internal sealed record MatchupDto(
-    int RosterId,
-    decimal? Points,
-    List<string>? Starters,
-    List<string>? Players,
-    Dictionary<string, decimal>? PlayersPoints,
-    int? MatchupId);
-
-internal static readonly JsonSerializerOptions Json = new()
-{
-    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-    PropertyNameCaseInsensitive = true,
-    NumberHandling = JsonNumberHandling.AllowReadingFromString,
-};
-```
-
-> **Three quirks worth knowing before you debug them**
->
-> **Empty starter slots are the string `"0"`.** A manager who left a slot empty produces a `"0"` in the `starters` array, not a null and not a missing entry. Filter it before looking anything up, or you will get a phantom player.
->
-> **Defence player IDs are team abbreviations.** Skill players have numeric string IDs; a defence is `"DEN"`. Any code assuming an integer-parsable ID breaks on the first DEF.
->
-> **Fields are absent, not null, for future weeks.** Request a week that has not happened and you get entries with no points at all. Make every numeric nullable in the DTO and decide the default at the mapping boundary.
->
-
-#### Reference
-
-- **.NET** — [System.Text.Json overview](https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/)
-- **Sleeper** — [Endpoint reference](https://docs.sleeper.com/)
-
-### T10 · Typed HttpClient — 2.0 h
-
-Register one typed client, with the handlers from T11 and T12 attached to it. Every Sleeper call in the system goes through this and only this.
-
-```csharp
-services.AddHttpClient<SleeperClient>(c =>
-       {
-           c.BaseAddress = new Uri("https://api.sleeper.app/v1/");
-           c.Timeout = TimeSpan.FromSeconds(20);
-           c.DefaultRequestHeaders.UserAgent.ParseAdd("ideal-points/1.0");
-       })
-       .AddHttpMessageHandler<RateLimitHandler>()
-       .AddStandardResilienceHandler();
-```
-
-Six methods: `GetStateAsync`, `GetLeagueAsync`, `GetUsersAsync`, `GetRostersAsync`, `GetMatchupsAsync(week)`, `GetPlayersAsync`. Keep them thin — deserialize and return, no business logic.
-
-#### Reference
-
-- **.NET** — [IHttpClientFactory and typed clients](https://learn.microsoft.com/dotnet/core/extensions/httpclient-factory)
-
-### T11 · Token-bucket handler — 2.0 h
-
-The structural guarantee that nothing can exceed the rate limit, because nothing can reach Sleeper except through here. Add the `System.Threading.RateLimiting` package.
-
-```csharp
-public sealed class RateLimitHandler(RateLimiter limiter) : DelegatingHandler
-{
-    protected override async Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request, CancellationToken ct)
-    {
-        using var lease = await limiter.AcquireAsync(1, ct);
-        if (!lease.IsAcquired)
-            throw new HttpRequestException("Local Sleeper rate limit exceeded");
-        return await base.SendAsync(request, ct);
-    }
-}
-
-// Registered as a singleton — one bucket for the whole process
-services.AddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
-    new TokenBucketRateLimiterOptions
-    {
-        TokenLimit           = 50,
-        TokensPerPeriod      = 50,
-        ReplenishmentPeriod  = TimeSpan.FromMinutes(1),
-        QueueLimit           = 20,
-        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-        AutoReplenishment    = true,
-    }));
-services.AddTransient<RateLimitHandler>();
-```
-
-Singleton is not optional. A per-request limiter is not a limiter.
-
-#### Reference
-
-- **.NET** — [System.Threading.RateLimiting](https://learn.microsoft.com/dotnet/api/system.threading.ratelimiting)
-
-### T12 · Resilience policies — 1.0 h
-
-`AddStandardResilienceHandler()` from `Microsoft.Extensions.Http.Resilience` gives you retry with exponential backoff and jitter, a circuit breaker, and a total timeout in one line, and it is built on Polly. Configure it rather than hand-rolling:
-
-```
-.AddStandardResilienceHandler(o =>
-{
-    o.Retry.MaxRetryAttempts = 3;
-    o.Retry.UseJitter        = true;
-    o.Retry.ShouldHandle     = args => ValueTask.FromResult(
-        args.Outcome.Result?.StatusCode is HttpStatusCode.TooManyRequests
-            or HttpStatusCode.ServiceUnavailable
-        || args.Outcome.Exception is HttpRequestException);
-});
-```
-
-Bound it. An unbounded retry against a rate limit is how you turn a slow afternoon into a ban.
-
-#### Reference
-
-- **.NET** — [HTTP resilience](https://learn.microsoft.com/dotnet/core/resilience/http-resilience)
-- **Polly** — [Polly documentation](https://www.pollydocs.org/)
-
-### T13 · Single-flight cache — 2.0 h
-
-`HybridCache` does stampede protection for you — concurrent callers for the same key await one underlying fetch, which is precisely the property you need.
-
-```csharp
-services.AddHybridCache();
-
-var matchups = await cache.GetOrCreateAsync(
-    $"matchups:{leagueId}:{week}",
-    async ct => await sleeper.GetMatchupsAsync(leagueId, week, ct),
-    new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(30) });
-```
-
-Per-key TTLs from the design: 30 s for the current week's matchups, 5 min for state, 1 h for users and rosters, 24 h for league and players.
-
-> **Watch out**
->
-> Without stampede protection this design fails exactly when it matters. At the moment a 30-second entry expires under Sunday load, every concurrent request misses simultaneously and each issues its own fetch — a 2-per-minute design becomes a 200-per-minute one for the length of one round trip. If you hand-roll instead of using `HybridCache`, the mechanism you need is a per-key `SemaphoreSlim` with a double-check after acquiring.
->
-
-#### Reference
-
-- **.NET** — [HybridCache](https://learn.microsoft.com/aspnet/core/performance/caching/hybrid)
-
-### T14 · Player dump job — 1.5 h
-
-`GET /v1/players/nfl` returns roughly 5 MB covering every player in the league. Fetch it at most once a day and immediately throw most of it away.
-
-```csharp
-var raw = await sleeper.GetPlayersAsync(ct);      // ~5 MB
-var slim = raw
-    .Where(kv => kv.Value.FantasyPositions is { Count: > 0 })
-    .ToDictionary(
-        kv => kv.Key,
-        kv => new PlayerRef(kv.Value.FullName ?? kv.Key,
-                            kv.Value.Team,
-                            kv.Value.FantasyPositions!));
-```
-
-Stream the response rather than buffering the whole string: `JsonSerializer.DeserializeAsync` over the response stream, not `GetStringAsync` followed by a parse. On a Consumption plan the memory ceiling is real.
-
-> **Watch out**
->
-> This call must never sit on a request path. A cold Function serving its first request should read the slim map from storage, not go and fetch five megabytes while a viewer waits.
->
-
-### T15 · Season assembly — 2.5 h
-
-The glue: for each week, fetch matchups, join to the player map, run the solver, produce `TeamWeek` records.
-
-1. Resolve team names — `users[].metadata.team_name`, falling back to `display_name`, joined to rosters via `owner_id`.
-2. For each week, for each matchup entry: build `RosteredPlayer` list from `players` × `players_points` × the slim player map.
-3. Actual is `matchup.points` directly. Ideal is `Solver.Solve(...)`.
-4. Assert both invariants as you go: `sum(starters_points) == points` and `ideal >= actual`.
-
-A player in `players` with no entry in `players_points` scored zero — treat missing as `0m`, not as an error, or a bye week throws.
-
-> **Watch out**
->
-> Use `matchup.players` for the roster, never the current `/rosters` response. The matchup payload carries the roster *as it stood that week*; the rosters endpoint carries it as it stands today. Get this wrong and every waiver claim silently rewrites your league's history.
->
-
-### T16 · Console harness and live verification — 3.0 h  ±
-
-A `dotnet new console` project that takes a league ID, runs T15 across every week to date, and prints the table sorted by points.
-
-```
-wk 1-7   season 2026   final through wk 6
-
-TEAM                    POINTS      s    IDEAL   EFF
---------------------------------------------------
-Bijan Mustard            812.7   24.7    941.2   86%
-Hurts Donut              798.2   31.4    905.6   88%
-Waddle I Do              771.0   18.9    889.3   87%
-...
---------------------------------------------------
-invariants: starters==points OK   ideal>=actual OK
-```
-
-This is worth more than it looks. It is the first artefact that answers the actual question, it runs in a second with no cloud account, and it stays useful for the rest of the project as the fastest way to check whether a change broke the numbers.
-
-#### Now assert the invariants over a real season
-
-T02 confirmed the shapes; this is where they meet working code. Run both checks from §03 across every roster of every week and fail loudly on either:
-
-- `sum(starters_points) == points`, within a cent. Catches a misaligned `starters` array and confirms you are reading the payload the way Sleeper writes it.
-- `ideal >= actual`, always, with no exceptions. The started lineup is one of the assignments the solver considers, so a violation is a solver bug — almost always an eligibility rule from T04.
-
-> **Watch out**
->
-> The `ideal >= actual` invariant catches **restrictive** eligibility errors — a `FLEX` that accepts too little makes ideal fall below actual and the assertion fires. It does **not** catch permissive ones: a `FLEX` that wrongly accepts QB inflates ideal, the invariant still holds, and the number is quietly wrong forever. Read your slot map against the Q1 answer by eye as well; the assertion only covers one direction.
->
-> Soft-estimated because this is where every assumption from T02 meets code that actually runs. Whatever the API does that nobody documented, it surfaces here.
->
-
-## M2 · API and cloud foundation · 18.5 h
-
-Deployed, reachable, still no database. Two of these tasks — the bicep template and the OIDC setup — are where a first-timer loses a weekend, so they are worth reading through before starting either.
-
-### T17 · Functions host — 2.0 h
-
-.NET isolated worker. `Program.cs` is where every service from M1 gets registered.
-
-```csharp
-var builder = FunctionsApplication.CreateBuilder(args);
-builder.ConfigureFunctionsWebApplication();
-
-builder.Services.AddApplicationInsightsTelemetryWorkerService();
-builder.Services.ConfigureFunctionsApplicationInsights();
-
-builder.Services.Configure<LeagueOptions>(
-    builder.Configuration.GetSection("League"));
-builder.Services.AddHybridCache();
-builder.Services.AddSingleton<RateLimiter>(/* T11 */);
-builder.Services.AddHttpClient<SleeperClient>(/* T10 */);
-builder.Services.AddScoped<SeasonService>();
-
-builder.Build().Run();
-```
-
-Configuration in `local.settings.json` for local runs, App Settings in Azure. The league ID binds as `League:CurrentLeagueId` — in Azure App Settings that is written `League__CurrentLeagueId` with a double underscore.
-
-#### Reference
-
-- **Azure** — [Isolated worker guide](https://learn.microsoft.com/azure/azure-functions/dotnet-isolated-process-guide)
-
-### T18 · Season endpoints — 2.0 h
-
-Two HTTP triggers, anonymous, GET only.
-
-```csharp
-[Function("GetSeason")]
-public async Task<HttpResponseData> GetSeason(
-    [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "season")]
-    HttpRequestData req,
-    CancellationToken ct)
-{
-    var q = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
-    var season = int.TryParse(q["season"], out var s) ? s : (int?)null;
-    // …
-}
-```
-
-Serve from memory for now — T27 adds the database behind the same shape. The response is the payload from §09 of the design: per-team weekly arrays plus a server-computed `totals` object.
-
-### T19 · Caching semantics — 1.5 h
-
-Three behaviours, and the difference between the first two is the whole point of the season parameter.
-
-```csharp
-// live season
-res.Headers.Add("Cache-Control", "public, max-age=30");
-// completed season — never changes again
-res.Headers.Add("Cache-Control", "public, max-age=31536000, immutable");
-
-var etag = $"\"{season}-wk{currentWeek}-{asOf:s}\"";
-res.Headers.Add("ETag", etag);
-if (req.Headers.TryGetValues("If-None-Match", out var inm) && inm.Contains(etag))
-    return req.CreateResponse(HttpStatusCode.NotModified);
-```
-
-An unknown or un-backfilled season returns **404 with the available list** in the body — never an empty payload, and never a synchronous backfill.
-
-#### Reference
-
-- **MDN** — [HTTP caching](https://developer.mozilla.org/docs/Web/HTTP/Caching)
-
-### T20 · Bicep template — 4.0 h  ±
-
-One `infra/main.bicep` at resource-group scope covering the storage account, Function App with a Flex Consumption or Consumption plan, Static Web App on Free, Log Analytics workspace, and Application Insights.
+| `FantasyLeague.Core` | `Slot`, `IdealLineupSolver`, `SpreadCalculator`. Pure functions, no framework types | nothing |
+| `FantasyLeague.Sleeper` | DTOs, HTTP client, cache, player map, season assembly, payload mapping | Core |
+| `FantasyLeague.Functions` | The two HTTP endpoints and the player-map timer | Sleeper |
+| `FantasyLeague.Console` | Live harness that prints standings and asserts invariants | Sleeper |
+| `FantasyLeague.Data` | Empty. M3 fills it | — |
+| `FantasyLeague.Core.Tests` | All 268 tests | everything |
+
+`Directory.Build.props` sets `net9.0`, `LangVersion=latest`, nullable enabled,
+`TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` for every project at once.
+
+## The three gates
+
+Run these before pushing. CI runs the same ones.
 
 ```bash
-az group create -n rg-idealpoints -l eastus
-
-az deployment group create \
-  -g rg-idealpoints \
-  -f infra/main.bicep \
-  -p leagueId=<your-league-id> \
-  --what-if          # inspect before committing
-
-az deployment group create -g rg-idealpoints -f infra/main.bicep -p leagueId=…
+dotnet build -warnaserror
 ```
-
-Give the Function App a **system-assigned managed identity** in the template from the start — T26 needs it, and adding it later means a second deployment and a second SQL grant.
-
-> **Why this estimate is soft**
->
-> Bicep resource schemas are version-specific and the errors are unhelpful — a wrong `apiVersion` or a missing nested property produces a validation failure that names a path rather than a fix. Budget the time, use `--what-if` constantly, and start from the Azure Quickstart Templates rather than a blank file.
->
-
-#### Reference
-
-- **Azure** — [Bicep documentation](https://learn.microsoft.com/azure/azure-resource-manager/bicep/)
-- **Azure** — [Deployment what-if](https://learn.microsoft.com/azure/azure-resource-manager/bicep/deploy-what-if)
-- **Azure** — [Quickstart templates](https://github.com/Azure/azure-quickstart-templates)
-
-### T21 · GitHub to Entra OIDC — 3.0 h  ±
-
-Federated credentials let GitHub Actions authenticate to Azure with a short-lived token instead of a stored secret. Do this before writing any deploy workflow — retrofitting means rotating whatever you used first.
 
 ```bash
-APP_ID=$(az ad app create --display-name "ideal-points-deploy" --query appId -o tsv)
-OBJ_ID=$(az ad app show --id "$APP_ID" --query id -o tsv)
-az ad sp create --id "$APP_ID"
-
-SUB=$(az account show --query id -o tsv)
-az role assignment create \
-  --assignee "$APP_ID" --role Contributor \
-  --scope "/subscriptions/$SUB/resourceGroups/rg-idealpoints"
-
-az ad app federated-credential create --id "$OBJ_ID" --parameters '{
-  "name": "gh-main",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:OWNER/REPO:ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
+dotnet test
 ```
-
-Then in every workflow that touches Azure:
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-
-steps:
-  - uses: azure/login@v2
-    with:
-      client-id:       ${{ vars.AZURE_CLIENT_ID }}
-      tenant-id:       ${{ vars.AZURE_TENANT_ID }}
-      subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-```
-
-> **The failure you will hit**
->
-> **The `subject` must match the workflow's trigger exactly.** A push to main is `repo:OWNER/REPO:ref:refs/heads/main`; a pull request is `repo:OWNER/REPO:pull_request`; a job using a GitHub environment is `repo:OWNER/REPO:environment:NAME`. These are different subjects and each needs its own federated credential. A mismatch produces an `AADSTS70021` "no matching federated identity record found" error that says nothing about which of the three you got wrong.
->
-> Also easy to miss: without `id-token: write` in the workflow's `permissions`, no token is minted at all and the login fails for an entirely different reason.
->
-
-#### Reference
-
-- **GitHub** — [Configuring OIDC in Azure](https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure)
-- **Entra** — [Workload identity federation](https://learn.microsoft.com/entra/workload-id/workload-identity-federation)
-- **Action** — [azure/login](https://github.com/Azure/login)
-
-### T22 · ci.yml — 1.5 h
-
-Runs on every pull request. No Azure credentials needed — this workflow never touches the cloud.
-
-```yaml
-name: ci
-on: [pull_request]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with: { dotnet-version: '9.0.x' }
-      - run: dotnet restore
-      - run: dotnet build --no-restore -warnaserror
-      - run: dotnet test --no-build --verbosity normal
-      - run: dotnet format --verify-no-changes
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: web/package-lock.json }
-      - run: npm ci --prefix web
-      - run: npm run build --prefix web
-```
-
-#### Reference
-
-- **GitHub** — [GitHub Actions documentation](https://docs.github.com/actions)
-
-### T23 · deploy.yml — 2.5 h
-
-Runs on push to main. Infrastructure first, then code.
-
-1. `azure/login@v2` with OIDC (T21).
-2. `az deployment group create --what-if` on pull requests, real deploy on main.
-3. `dotnet publish` the Functions project, then `Azure/functions-action@v1` with `app-name` and `package`.
-4. `npm run build --prefix web`, then `Azure/static-web-apps-deploy@v1` with the deployment token from the SWA resource.
-
-The Static Web Apps deploy token is a real secret and lives in GitHub Actions secrets; everything else uses OIDC. Azure creates the workflow for you when you link a repository in the portal — take that generated file as a starting point and fold it into yours.
-
-#### Reference
-
-- **Action** — [Azure/functions-action](https://github.com/Azure/functions-action)
-- **Azure** — [SWA build configuration](https://learn.microsoft.com/azure/static-web-apps/build-configuration)
-
-### T24 · CORS and first deploy shakeout — 2.0 h  ±
-
-The SPA is served from the SWA domain and calls the Function App on a different origin, so the Function App must allow it explicitly.
 
 ```bash
-az functionapp cors add \
-  -g rg-idealpoints -n func-idealpoints \
-  --allowed-origins https://<your-swa>.azurestaticapps.net
+dotnet format --verify-no-changes
 ```
 
-Set this in bicep too, or the next infrastructure deployment removes it.
+**Watch out — `dotnet format` and line endings.** `.editorconfig` requires CRLF.
+The repo stores LF and `core.autocrlf` converts on checkout, so Windows always
+passed while Linux always failed. `.gitattributes` now pins `* text=auto
+eol=crlf` with `.github/** text eol=lf`, which makes the checkout identical
+everywhere. If you ever see a wall of `ENDOFLINE` errors in CI and none locally,
+that file is what to look at.
 
-> **Watch out**
->
-> Allowed origins must not have a trailing slash, and the SWA preview environments used by pull requests each get their own hostname. Either add a wildcard origin for previews or accept that the API only works from the production origin — which is fine, and arguably better, but decide rather than discover.
->
-> This estimate is soft because "works locally, fails deployed" is its own category of problem: app settings that were in `local.settings.json` and never made it to Azure, a managed identity with no role assignment, a Functions runtime version mismatch. Budget the time for a first deployment; subsequent ones are minutes.
->
+## The domain (M0)
 
-## M3 · Persistence · 17.0 h
+**`Slot.Parse`** turns `roster_positions` into startable slots. It drops `BN`,
+`IR` and `TAXI`, and **preserves order and duplicates** — two `QB` entries mean
+two QB slots, and the order is the radar's axis order (R2), so it is never
+sorted. `Slot.Accepts` matches against a player's `fantasy_positions`.
 
-Finalized weeks become permanent, and prior seasons become reachable. Two tasks here — the managed-identity connection and the migration step — are fiddlier than their hours suggest.
+This league is `QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF` plus eight
+`BN` — eleven startable slots, eight distinct codes.
 
-### T25 · EF Core model — 3.0 h
+**Watch out — A3 is not finished.** An unrecognised slot code is currently
+accepted silently. The test `Parse_rejects_an_unrecognised_slot_code` exists and
+is skipped, ready to enable once the guard is written.
 
-Four entities in `FantasyLeague.Data`, matching §08 of the design.
+**`IdealLineupSolver`** finds the best possible lineup by bitmask dynamic
+programming over `2^11` slot states. Think of it as: for every possible *set of
+filled slots*, remember the best total achievable. Add one player at a time; each
+player can go into any slot that accepts them and is not yet filled.
+
+Two things are load-bearing and were both wrong once:
+
+- The answer is `dp.Max()`, **not** `dp[full]`. A roster short at a position
+  cannot fill every slot, and `dp[full]` would be zero for it.
+- Reconstructing *which players* were chosen needs a chosen-set bitmask carried
+  alongside the score. The original used parent pointers into a rolling array;
+  they went stale, so the total was right and the lineup was wrong in about 23%
+  of cases. A 20,000-case fuzz against exhaustive search found it.
+
+**`SpreadCalculator`** returns **population** sigma (divide by `n`, not `n-1`) —
+these are all the weeks played, not a sample of them — and returns `null` below
+four finalized weeks (D1). Null is a value the caller handles, never a zero.
+
+## The Sleeper client (M1)
+
+`AddSleeperClient()` registers everything as one unit so the client cannot exist
+without its rate limit. The pipeline order matters:
 
 ```
+HttpClient → resilience (retries) → rate limiter → network
+```
+
+Resilience is **outermost** so every retry spends its own token. Inside-out, a
+retry storm would bypass the limiter entirely.
+
+**Watch out — `AddStandardResilienceHandler` forces `HttpClient.Timeout` to
+infinite** and overrides any value you configure. That is deliberate: the real
+budget is the pipeline's `TotalRequestTimeout` (30 s) with a 10 s
+`AttemptTimeout` inside it. Setting `HttpClient.Timeout` yourself would cut the
+pipeline off mid-retry and surface as a bare `TaskCanceledException` naming no
+cause.
+
+**Watch out — `AllowReadingFromString` is required, not defensive.** Sleeper
+returns `season` as the string `"2026"`. Binding that to an `int` throws without
+it. All six DTOs share one `SleeperJson.Options` so they cannot drift.
+
+**`SleeperReaderCache`** holds per-endpoint TTLs and gives single-flight
+behaviour: ten concurrent callers for the same key produce one upstream fetch.
+The TTLs currently differ from §07 of the design — see **F4**.
+
+**`SeasonService.BuildAsync`** assembles a whole season and checks two invariants
+per team-week, both against Sleeper's own `points` rather than a commissioner
+override (A9):
+
+- `sum(starters_points) == points`, within a cent
+- `ideal >= points`
+
+Violations are *collected and reported*, never thrown. Same for players the map
+cannot explain (A8) — dropping one silently would lower that team's ideal, and
+`ideal >= actual` cannot see undercounting.
+
+## The player map (T14, extended by A12)
+
+The dump at `/v1/players/nfl` is **14.65 MB across 12,227 players**. The design
+and this manual both used to say 5 MB; that was wrong by 3×.
+
+The projection keeps every player with a non-empty `fantasy_positions` — 11,902
+of them — and throws away every field except name, team and positions. That is a
+17× saving in bytes from dropping *fields*, not rows. Keeping the map general
+rather than pruning it to this season's slots is A3.
+
+Because Flex Consumption scales to zero and out to forty, and the map is
+per-instance memory, the map is persisted to blob storage:
+
+- `EnsureCurrentAsync` is safe on a request path. It adopts the stored map if it
+  is under 24 h old, and only fetches the dump if the store is empty or stale.
+- `RefreshAsync` always refetches. Only the daily timer calls it.
+- A `SemaphoreSlim` collapses a cold-start stampede into one fetch.
+- Store failures are logged and ignored — an unreachable store makes a request
+  slower, never failed.
+
+**Watch out — this is what took the first deploy down.** `SeasonService` used to
+throw if the map had never been refreshed, and only the console harness ever
+called the refresher. Every deployed request returned 500. A precondition that
+one caller satisfies is a bug waiting for a second caller.
+
+## The API and cloud (M2)
+
+Two endpoints, both anonymous and read-only: `GET /api/season` (optional
+`?season=`) and `GET /api/seasons`. The league ID comes from configuration and
+**never** from the query string — that would make the site an open relay against
+Sleeper's rate limit.
+
+`SeasonPayloadMapper` produces the §09 body, applies A1's exclusion at the read
+boundary, and computes a **weak ETag over every week's scores**. Hashing only
+the season and week number would freeze the page mid-Sunday.
+
+Infrastructure is one `infra/main.bicep`: Flex Consumption (FC1) Function App,
+Static Web App on Free, storage with a `deployments` container, Log Analytics
+capped at 0.16 GB/day, App Insights, and a conditional budget.
+
+**Watch out — the design describes a Consumption (Y1) plan that cannot be
+provisioned**; the subscription quota for it is zero. FC1 is what exists.
+
+**Watch out — bicep only infers dependencies from symbolic references.** The
+Function App referenced the storage *account*, so ARM was free to create the app
+before the `deployments` *container* existed. An explicit `dependsOn:
+[storage::blob::deployments]` fixes it.
+
+Three workflows: `ci.yml` (build, test, format, vulnerable packages, bicep
+what-if), `security.yml` (dependency, secret and Trivy scans, weekly and on every
+PR), `deploy.yml` (infra, functions with SBOM and scan, smoke test).
+
+---
+
+# In progress · T24 · First deploy shakeout
+
+CORS is already solved in bicep — `allowedOrigins` is the SWA hostname, with a
+`devOrigins` array (empty by default) for local front-end work later. **Do not
+run `az functionapp cors add`**: the next infrastructure deploy would wipe it.
+Preview environments are deliberately not allowed.
+
+What remains is verification. Run this after a green deploy.
+
+### Set the two hostnames once
+
+```bash
+API=$(az functionapp show -n func-idealpoints -g rg-fantsybosty --query defaultHostName -o tsv) && SWA=$(az staticwebapp show -n stapp-idealpoints -g rg-fantsybosty --query defaultHostname -o tsv) && echo "$API / $SWA"
+```
+
+### 1 · The API answers
+
+```bash
+curl -fsS "https://$API/api/season" | python -c "import sys,json;d=json.load(sys.stdin);print('season',d['season'],'week',d['currentWeek'],'teams',len(d['teams']))"
+```
+
+### 2 · A1 holds end to end
+
+```bash
+curl -fsS "https://$API/api/season" | python -c "import sys,json;n=[t['name'] for t in json.load(sys.stdin)['teams']];print(n);print('POON SQUAD excluded:', 'POON SQUAD' not in n)"
+```
+
+### 3 · Cache headers
+
+```bash
+curl -sS -D - -o /dev/null "https://$API/api/season" | grep -iE '^(etag|cache-control)'
+```
+
+Expect `Cache-Control: public, max-age=5` and a `W/"…"` ETag.
+
+### 4 · A conditional request returns 304
+
+```bash
+ETAG=$(curl -sS -D - -o /dev/null "https://$API/api/season" | tr -d '\r' | awk -F': ' 'tolower($1)=="etag"{print $2}') && curl -sS -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $ETAG" "https://$API/api/season"
+```
+
+Run it as one line. Mid-game the ETag legitimately changes between two calls, and
+a `200` then means scoring moved, not that ETags are broken.
+
+### 5 · CORS allows the SWA and refuses everything else
+
+```bash
+curl -sS -D - -o /dev/null -X OPTIONS -H "Origin: https://$SWA" -H "Access-Control-Request-Method: GET" "https://$API/api/season" | grep -i access-control-allow-origin
+```
+
+```bash
+curl -sS -D - -o /dev/null -X OPTIONS -H "Origin: https://not-your-site.example" -H "Access-Control-Request-Method: GET" "https://$API/api/season" | grep -i access-control-allow-origin || echo "correctly refused"
+```
+
+### 6 · The player map was stored
+
+```bash
+KEY=$(az storage account keys list -g rg-fantsybosty -n st4sb4lv7kcxgs4 --query "[0].value" -o tsv) && az storage blob show --account-name st4sb4lv7kcxgs4 --account-key "$KEY" --container-name player-map --name players.json --query "{bytes:properties.contentLength, modified:properties.lastModified}" -o json
+```
+
+Expect roughly 840 KB. Megabytes would mean the projection is not trimming.
+
+### 7 · The store is actually used on a cold start
+
+This is the only evidence A12 solved the problem. Force a cold start:
+
+```bash
+az functionapp restart -g rg-fantsybosty -n func-idealpoints
+```
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} in %{time_total}s\n' "https://$API/api/season"
+```
+
+Then read the log. There is no App Insights CLI extension installed, so query the
+Log Analytics REST API directly:
+
+```bash
+TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/0419d293-271d-4a79-9184-9d8d4de0da40/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppTraces | where TimeGenerated > ago(20m) | where Message has \"player map\" | project TimeGenerated, Message | order by TimeGenerated desc | take 10"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];[print(r[0][:19], r[1][:120]) for r in t['rows']]"
+```
+
+**"Adopted the stored player map"** is success. "Refreshing player map from
+Sleeper API" on a *second* cold start means the store is not being read.
+
+If you would rather not paste bearer tokens, `az extension add --name
+log-analytics` once gives you `az monitor log-analytics query` instead.
+
+### 8 · Nothing is throwing
+
+```bash
+TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/0419d293-271d-4a79-9184-9d8d4de0da40/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppExceptions | where TimeGenerated > ago(1h) | summarize n=count() by ExceptionType"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];print('exceptions:', t['rows'] or 'none')"
+```
+
+### 9 · The Static Web Apps deploy token
+
+Needed only once T32 gives the `web` job something to deploy. One command, so the
+token never reaches your screen or shell history:
+
+```bash
+gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --body "$(az staticwebapp secrets list -n stapp-idealpoints -g rg-fantsybosty --query 'properties.apiKey' -o tsv)"
+```
+
+### 10 · Cost
+
+Check Cost Analysis on `rg-fantsybosty` in the portal after 24 h rather than by
+CLI — usage records lag and the CLI view is fiddlier than it is worth. Expect
+zero. `BUDGET_ALERT_EMAIL` is set, so the budget resource deploys and will tell
+you first.
+
+---
+
+# M3 · Persistence · 17.0 h
+
+Until now every request rebuilds the whole season from Sleeper. That works
+because the league is six teams and one season. It stops working when you want
+seasons Sleeper no longer serves cheaply, and it wastes calls re-deriving weeks
+that can never change again.
+
+M3 adds a database holding **finalized weeks only**. The current, still-playing
+week continues to come from Sleeper on every request. Two tasks here — the
+password-less database connection and the migration step — are fiddlier than
+their hours suggest, and both fail with error messages that point elsewhere.
+
+## T25 · EF Core model — 3.0 h
+
+**What EF Core is, briefly.** An object-relational mapper: you describe C#
+classes, it generates the SQL and the schema. A *migration* is a generated C#
+file describing one schema change, so a database can be brought to the current
+shape by replaying them in order.
+
+### 1 · Add the packages
+
+`FantasyLeague.Data` is currently empty.
+
+```bash
+dotnet add src/FantasyLeague.Data package Microsoft.EntityFrameworkCore.SqlServer
+```
+
+```bash
+dotnet add src/FantasyLeague.Data package Microsoft.EntityFrameworkCore.Design
+```
+
+`Design` is what the `dotnet ef` tool needs at build time; it is not used at
+runtime.
+
+### 2 · The entities
+
+Four, matching §08 of the design. The one that matters is `WeekScore`:
+
+```csharp
 modelBuilder.Entity<WeekScore>(e =>
 {
     e.HasKey(x => new { x.LeagueId, x.Season, x.Week, x.RosterId });
@@ -823,74 +386,102 @@ modelBuilder.Entity<League>(e =>
 });
 ```
 
-Use `HasPrecision` on every decimal. EF's default for `decimal` on SQL Server is `decimal(18,2)`, which is fine here, but being explicit stops a later provider change from silently rounding fantasy points.
+The composite key is what makes the backfill in T30 idempotent — re-running it
+after a solver fix upserts rather than duplicates.
+
+**Use `HasPrecision` on every decimal.** EF's default for `decimal` on SQL Server
+is `decimal(18,2)`, which is fine here, but being explicit stops a later provider
+change from silently rounding fantasy points.
+
+### 3 · Install the tool and create the first migration
 
 ```bash
 dotnet tool install --global dotnet-ef
-dotnet ef migrations add Initial --project src/FantasyLeague.Data \
-                                 --startup-project src/FantasyLeague.Functions
 ```
-
-#### Reference
-
-- **.NET** — [EF Core documentation](https://learn.microsoft.com/ef/core/)
-- **.NET** — [Migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/)
-
-### T26 · Azure SQL and managed identity — 3.0 h  ±
-
-Provision the database on the free serverless offer, then connect to it without a password.
-
-#### 1 · The database
-
-Add the server and database to `main.bicep` with `useFreeLimit: true` and `freeLimitExhaustionBehavior: 'AutoPause'`. Auto-pause delay is required on the free offer; the design accepts the cold resume rather than working around it.
-
-#### 2 · An Entra admin on the server
-
-You cannot create the contained user until the server has an Entra administrator, and that administrator has to be you.
 
 ```bash
-az sql server ad-admin create \
-  -g rg-idealpoints -s sql-idealpoints \
-  --display-name "$(az account show --query user.name -o tsv)" \
-  --object-id "$(az ad signed-in-user show --query id -o tsv)"
+dotnet ef migrations add Initial --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Functions
 ```
 
-#### 3 · Grant the Function App's identity
+`--project` is where migration files are written; `--startup-project` is where EF
+looks for configuration and the DI container. They are different projects here,
+and omitting either gives an error about not finding a `DbContext` that says
+nothing about which flag was missing.
 
-Connect to the database as that admin and run, using the Function App's *resource name* as the principal:
+Commit the generated `Migrations/` folder. It is source, not build output.
 
+**Reference** — [EF Core](https://learn.microsoft.com/ef/core/) ·
+[Migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/)
+
+## T26 · Azure SQL and managed identity — 3.0 h  ±
+
+The goal is a database the Function App reaches **with no password anywhere** —
+no connection secret in configuration, nothing to rotate, nothing to leak.
+
+**What a managed identity is.** Azure gives the Function App its own identity in
+Entra (`identity: { type: 'SystemAssigned' }`, already in the bicep, and already
+surfaced as the `functionAppPrincipalId` output). Azure SQL can be told to trust
+that identity directly, so the app authenticates as itself rather than presenting
+a credential.
+
+### 1 · The database, in bicep
+
+Add the server and database to `infra/main.bicep` with `useFreeLimit: true` and
+`freeLimitExhaustionBehavior: 'AutoPause'`. An auto-pause delay is **required**
+on the free offer. The design accepts the resulting cold resume — the first
+request after a pause waits — rather than paying to avoid it.
+
+Deploy the template before continuing; the next steps need the server to exist.
+
+### 2 · Make yourself the server's Entra administrator
+
+You cannot create the app's database user until the server has an Entra admin,
+and that admin has to be you.
+
+```bash
+az sql server ad-admin create -g rg-fantsybosty -s sql-idealpoints --display-name "$(az account show --query user.name -o tsv)" --object-id "$(az ad signed-in-user show --query id -o tsv)"
 ```
+
+### 3 · Grant the Function App's identity
+
+Connect to the database **as that admin** — Azure Data Studio, SSMS, or the
+portal query editor — and run the following. The principal name is the Function
+App's *resource name*, not its identity GUID:
+
+```sql
 CREATE USER [func-idealpoints] FROM EXTERNAL PROVIDER;
 ALTER ROLE db_datareader ADD MEMBER [func-idealpoints];
 ALTER ROLE db_datawriter ADD MEMBER [func-idealpoints];
-ALTER ROLE db_ddladmin   ADD MEMBER [func-idealpoints];  — only if the app runs migrations
 ```
 
-#### 4 · The connection string
+**Watch out — do not grant `db_ddladmin`.** Migrations run from the pipeline
+(T31), so the *deploy* identity needs schema rights and the running app should
+not have them. Handing the app schema-modification rights is a permanent
+capability bought for a once-per-deploy need.
+
+### 4 · The connection string
 
 ```
-Server=tcp:sql-idealpoints.database.windows.net,1433;
-Database=idealpoints;
-Authentication=Active Directory Default;
-Encrypt=True;
+Server=tcp:sql-idealpoints.database.windows.net,1433;Database=idealpoints;Authentication=Active Directory Default;Encrypt=True;
 ```
 
-No password, no secret in configuration. `Microsoft.Data.SqlClient` plus `Azure.Identity` resolves the managed identity in Azure and your `az login` session locally.
+No password, no secret. `Microsoft.Data.SqlClient` plus `Azure.Identity` resolves
+the managed identity in Azure and your `az login` session locally — the same
+string works in both places.
 
-> **Watch out**
->
-> Grant `db_ddladmin` only if migrations run as the application. The design runs them from the pipeline instead (T31), in which case the *deploy identity* needs schema rights and the app itself should stay on reader and writer. Handing the runtime app schema-modification rights is a permanent capability bought for a once-per-deploy need.
->
+**Watch out — the failure modes look identical.** A firewall block and a missing
+database user both surface as "cannot connect". Check in that order: is your IP
+allowed on the server, does the contained user exist, does it have the role.
 
-#### Reference
+**Reference** — [free offer](https://learn.microsoft.com/azure/azure-sql/database/free-offer) ·
+[serverless and auto-pause](https://learn.microsoft.com/azure/azure-sql/database/serverless-tier-overview) ·
+[Entra authentication](https://learn.microsoft.com/azure/azure-sql/database/authentication-aad-overview)
 
-- **Azure** — [Azure SQL free offer](https://learn.microsoft.com/azure/azure-sql/database/free-offer)
-- **Azure** — [Serverless tier and auto-pause](https://learn.microsoft.com/azure/azure-sql/database/serverless-tier-overview)
-- **Azure** — [Entra authentication for Azure SQL](https://learn.microsoft.com/azure/azure-sql/database/authentication-aad-overview)
+## T27 · Read path — 2.0 h
 
-### T27 · Read path — 2.0 h
-
-Keep SQL off the hot path. On cold start, load every finalized week for the requested season into memory once; serve subsequent requests from there, merging the live current week from the T13 cache.
+Keep SQL off the hot path. On cold start, load every finalized week for the
+requested season once; serve later requests from memory, merging the live current
+week from the T13 cache.
 
 ```csharp
 // once per cold start, per season
@@ -900,13 +491,24 @@ var finalized = await db.WeekScores
     .ToListAsync(ct);
 ```
 
-`AsNoTracking` matters: nothing here is ever written back through the context, and the change tracker is pure overhead on a read-only path.
+`AsNoTracking` matters: nothing here is written back through the context, and
+EF's change tracker is pure overhead on a read-only path.
 
-The whole season is a few hundred kilobytes, so this is a small dictionary held in a singleton, invalidated when the finalize timer runs.
+A whole season is a few hundred kilobytes, so this is a small dictionary in a
+singleton, invalidated when the finalize timer runs.
 
-### T28 · Finalize timer — 2.0 h
+**Watch out — this is A12's shape again.** A singleton cache is per-instance, and
+under Flex Consumption every new instance starts empty. That is fine here,
+because the source of truth is SQL rather than a 14 MB download. But the
+invalidation in T28 only clears *the instance that ran the timer* — other
+instances keep stale data until their own restart. Decide deliberately: give the
+cache a short TTL, or accept staleness until the next cold start.
 
-Tuesday morning, after Monday night football has settled: write the completed week to SQL with `IsFinal = true`, then drop the in-memory season so the next request rehydrates.
+## T28 · Finalize timer — 2.0 h
+
+Tuesday morning, after Monday night football has settled: write the completed
+week to SQL with `IsFinal = true`, recompute sigma, then drop the in-memory
+season so the next request rehydrates.
 
 ```csharp
 [Function("FinalizeWeek")]
@@ -916,20 +518,25 @@ public async Task Run([TimerTrigger("0 0 9 * * 2")] TimerInfo timer, Cancellatio
 }
 ```
 
-> **Watch out**
->
-> **Azure Functions NCRONTAB has six fields, not five.** The first is seconds. A five-field expression copied from a Linux crontab is interpreted with your minutes in the seconds position, and the job runs once a minute instead of once a week. This is the single most common Functions timer bug.
->
-> Timers run in UTC unless `WEBSITE_TIME_ZONE` is set. Leave it unset and think in UTC — the NFL schedule shifts across daylight-saving boundaries anyway, so a fixed UTC time with an hour of slack beats an exact local one.
->
+**Watch out — Azure Functions NCRONTAB has six fields, not five.** The first is
+**seconds**. A five-field expression copied from a Linux crontab is read with
+your minutes in the seconds position, and the job runs once a minute instead of
+once a week. This is the single most common Functions timer bug.
 
-#### Reference
+Timers run in UTC unless `WEBSITE_TIME_ZONE` is set. Leave it unset and think in
+UTC — the NFL schedule crosses daylight-saving boundaries anyway, so a fixed UTC
+time with an hour of slack beats an exact local one.
 
-- **Azure** — [Timer trigger](https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer)
+`RefreshPlayerMap` (`0 30 9 * * *`, added by A12) is the working example to copy
+from, including why it is deliberately **not** `RunOnStartup`.
 
-### T29 · Season chain walk — 2.0 h
+**Reference** — [Timer trigger](https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer)
 
-On the daily timer, start at the configured league ID and follow `previous_league_id` backwards, upserting a `League` row for each hop.
+## T29 · Season chain walk — 2.0 h
+
+Sleeper links each season's league to the one before it. Start at the configured
+league ID and follow `previous_league_id` backwards, upserting a `League` row per
+hop.
 
 ```csharp
 var id = options.CurrentLeagueId;
@@ -943,102 +550,194 @@ while (!string.IsNullOrEmpty(id) && id != "0" && seen.Add(id))
 }
 ```
 
-The `seen` set is not paranoia — a malformed chain that points at itself would otherwise loop forever against a rate-limited API. Sleeper also uses the string `"0"` as well as null to mean "no previous league", so test both.
+The `seen` set is not paranoia — a malformed chain pointing at itself would loop
+forever against a rate-limited API. Sleeper uses the string `"0"` as well as null
+to mean "no previous league", so test both.
 
-Merge `League:SeasonOverrides` from configuration after the walk, for seasons the chain cannot reach.
+Merge `League:SeasonOverrides` from configuration after the walk, for seasons the
+chain cannot reach.
 
-### T30 · Historical backfill job — 2.5 h
+**Watch out — this is unexercisable today.** 2026 is the first season (A4), so
+`previous_league_id` is null and the loop runs once. Write it, test it against
+fixtures, and expect its first real run at the August 2027 rollover.
 
-An explicitly-triggered function — not a timer, not a request path — that takes a season, walks weeks 1 through 18, and writes every `WeekScore` with `IsFinal = true`.
+## T30 · Historical backfill job — 2.5 h
 
-Roughly 21 calls per season. It goes through the T11 token bucket like everything else, so it self-throttles and takes about half a minute. Make it idempotent: upsert on the composite key so re-running after a solver fix is safe and expected.
+An explicitly triggered function — not a timer, not a request path — that takes a
+season, walks weeks 1 to 18, and writes every `WeekScore` with `IsFinal = true`.
 
-> **Watch out**
->
-> Do not wire this to run automatically when someone requests a missing season. A visitor would wait twenty seconds for a page, and a crawler hitting `?season=1998` repeatedly would generate bursts against Sleeper for seasons that do not exist. The API returns 404 with the available list; backfill is something you run deliberately.
->
+Roughly 21 calls per season. It goes through the T11 token bucket like everything
+else, so it self-throttles and takes about half a minute. Make it idempotent:
+upsert on the composite key, so re-running after a solver fix is safe and
+expected.
 
-### T31 · Migrations in the pipeline — 2.5 h  ±
+**Watch out — do not wire this to a missing-season request.** A visitor would
+wait twenty seconds for a page, and a crawler hitting `?season=1998` repeatedly
+would generate bursts against Sleeper for seasons that never existed. The API
+already returns 404 with the available list; backfill is something you run
+deliberately.
 
-The GitHub runner has a different IP on every run, so the SQL firewall has to be opened for it and closed again afterwards — including when the migration fails.
+## T31 · Migrations in the pipeline — 2.5 h  ±
 
-```bash
+The GitHub runner has a different IP on every run, so the SQL firewall must be
+opened for it and closed again — including when the migration fails.
+
+```yaml
 - name: Open firewall for runner
   run: |
     IP=$(curl -s https://api.ipify.org)
-    echo "RUNNER_IP=$IP" >> $GITHUB_ENV
-    az sql server firewall-rule create \
-      -g rg-idealpoints -s sql-idealpoints -n gh-runner \
-      --start-ip-address "$IP" --end-ip-address "$IP"
+    az sql server firewall-rule create -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
 
 - name: Apply migrations
-  run: |
-    dotnet ef database update \
-      --project src/FantasyLeague.Data \
-      --startup-project src/FantasyLeague.Functions
+  run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Functions
 
 - name: Close firewall
   if: always()
-  run: az sql server firewall-rule delete -g rg-idealpoints -s sql-idealpoints -n gh-runner
+  run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}"
 ```
 
-> **Watch out**
->
-> `if: always()` on the close step is the whole point. Without it, a failed migration leaves the database open to a public IP that will shortly belong to someone else's CI run.
->
-> This is soft-estimated because the identity running `dotnet ef` needs both the firewall grant and schema rights on the database, and the failure modes look identical from the log — a connection timeout and a permission denial both surface as "cannot connect".
->
+**Watch out — `if: always()` on the close step is the whole point.** Without it,
+a failed migration leaves the database open to a public IP that will shortly
+belong to someone else's CI run.
 
-## M4 · The page · 24.0 h
+Name the rule after the run ID rather than a fixed `gh-runner`: two concurrent
+deploys would otherwise collide on one rule name, and the second one's close step
+would delete the first one's access mid-migration.
 
-The first milestone anyone else in the league can look at, and the first that will generate opinions. The table is the primary object; the chart is the thing people will play with.
+Soft-estimated because the deploy identity needs both the firewall grant and
+schema rights, and a connection timeout and a permission denial look identical in
+the log.
 
-### T32 · Frontend scaffold — 2.0 h
+Remember `RESOURCE_GROUP` must be set as **job-level** `env:` from
+`secrets.AZ_RESOURCE_GROUP_NAME` — the `secrets` context is not available in
+workflow-level `env:`, and an unquoted empty value makes `-g` swallow the next
+flag rather than failing cleanly.
+
+---
+
+# M4 · The page · 24.0 h
+
+The first milestone anyone else in the league can look at, and the first that
+will generate opinions. The table is the primary object; the chart is the thing
+people will play with.
+
+**Before starting, know what you are building against.** The API is live and its
+shape is fixed (§09). Fetch it once and read the JSON before writing any
+TypeScript — every field name below comes from a real response, not a plan.
 
 ```bash
-npm create vite@latest web — --template react-ts
-cd web && npm i
+curl -fsS https://func-idealpoints.azurewebsites.net/api/season | python -m json.tool | head -40
+```
+
+## T32 · Frontend scaffold — 2.0 h
+
+This task also **unblocks three things that are currently stubbed**: the `web`
+job in `deploy.yml`, the node steps that were removed from `ci.yml`, and the
+`AZURE_STATIC_WEB_APPS_API_TOKEN` secret.
+
+### 1 · Create the app
+
+```bash
+npm create vite@latest web -- --template react-ts
+```
+
+```bash
+cd web && npm install
+```
+
+### 2 · Install only the D3 pieces you need
+
+```bash
 npm i d3-scale d3-shape d3-array
+```
+
+```bash
 npm i -D @types/d3-scale @types/d3-shape @types/d3-array
 ```
 
-Install the D3 sub-packages, not the `d3` meta-package. You need scales, path generators and `extent`; you do not need selections, transitions, geo projections or force simulations, and pulling the whole bundle drags in the DOM layer you have decided not to use.
+Install the sub-packages, **not** the `d3` meta-package. You need scales, path
+generators and `extent`. You do not need selections, transitions, geo projections
+or force simulations, and pulling the whole bundle drags in the DOM layer you
+have deliberately decided not to use.
 
-Add `staticwebapp.config.json` with a SPA fallback so client-side routes survive a refresh:
+### 3 · SPA fallback
 
-```jsonc
+Add `web/staticwebapp.config.json` so client-side routes survive a refresh:
+
+```json
 { "navigationFallback": { "rewrite": "/index.html" } }
 ```
 
-#### Reference
+Without it, loading `/2025` directly returns 404 from the static host — it looks
+for a file at that path. Works locally under the dev server, fails once deployed;
+the classic SPA-on-static-hosting trap.
 
-- **Vite** — [Vite guide](https://vite.dev/guide/)
-- **Azure** — [SWA configuration](https://learn.microsoft.com/azure/static-web-apps/configuration)
+### 4 · A typed fetch layer
 
-### T33 · Design system — 3.0 h
+Write the response types by hand from §09 rather than generating them. There are
+five records and they are stable.
 
-CSS custom properties for the whole palette on `:root`, redefined under `@media (prefers-color-scheme: dark)`. Every colour used anywhere comes from a token.
+Point the dev server at the deployed API, and remember it is a **different
+origin** — CORS allows only the SWA hostname today. For local development add
+your Vite origin to the bicep `devOrigins` parameter, or proxy through Vite so
+the browser sees a same-origin request.
 
-Design the dark theme rather than inverting the light one — a naive inversion produces a muddy accent and unreadable mid-tones. Check contrast on both grounds, particularly for the chart's twelve team colours, which is the hardest part of the palette to get right in two themes.
+### 5 · Turn the stubs back on
 
-Set `font-variant-numeric: tabular-nums` on every cell containing a figure. Points totals that do not line up column-wise are the difference between a table you can scan and one you have to read.
+Once `web/package-lock.json` exists, restore the node steps in `ci.yml` and
+replace the `web` job's echo in `deploy.yml` with
+`Azure/static-web-apps-deploy@v1`. Fetch the deploy token first — step 9 of the
+T24 runbook.
 
-### T34 · Standings table — 3.0 h
+**Reference** — [Vite guide](https://vite.dev/guide/) ·
+[SWA configuration](https://learn.microsoft.com/azure/static-web-apps/configuration)
 
-Four columns: team, points, σ, ideal. Sorted descending on points, because that is what decides the league.
+## T33 · Design system — 3.0 h
 
-- Mark the sort column visually — it is not obvious that points decides this league rather than a win-loss record.
-- Show the gap to first place. A standings table whose story requires arithmetic is not finished.
-- σ renders as an em dash below four final weeks, and its column header carries the week range: **"σ · through wk 6"** while the points column already includes week 7.
-- Do not give σ the same bar or heat encoding as the two point columns — lower is better there and the shared encoding would read backwards.
+CSS custom properties for the whole palette on `:root`, redefined under
+`@media (prefers-color-scheme: dark)`. Every colour used anywhere comes from a
+token — no literal hex outside the token block.
 
-Use a real `<table>` with `<th scope="col">`, inside a container with `overflow-x: auto`. Screen readers and narrow phones both benefit, and neither is served by a grid of divs.
+Design the dark theme rather than inverting the light one. A naive inversion
+produces a muddy accent and unreadable mid-tones. Check contrast on both grounds,
+particularly for the team colours, which are the hardest part of the palette to
+get right in two themes.
 
-### T35 · Inline range mark — 2.5 h
+Set `font-variant-numeric: tabular-nums` on every cell containing a figure.
+Points totals that do not line up column-wise are the difference between a table
+you can scan and one you have to read.
 
-A small SVG in the σ cell giving the number a shape: a rule from the team's minimum to maximum weekly score, a shaded band at ±σ around the mean, and a tick at the mean itself.
+**This league has five scoring teams, not twelve.** The design's colour-scale
+worries were written for twelve. Five distinguishable colours is a much easier
+problem — do not over-engineer it.
 
-```
+## T34 · Standings table — 3.0 h
+
+Four columns: team, points, sigma, ideal. Sorted descending on points, because
+that is what decides the league.
+
+- Mark the sort column visually — it is not obvious that points decide this
+  league rather than a win-loss record.
+- Show the gap to first place. A standings table whose story requires arithmetic
+  is not finished.
+- Sigma renders as an em dash below four final weeks, and its column header
+  carries the week range: **"σ · through wk 6"** while the points column already
+  includes week 7. The API gives you both numbers; use them rather than
+  inferring.
+- Do not give sigma the same bar or heat encoding as the two point columns —
+  lower is better there, and a shared encoding reads backwards.
+
+Use a real `<table>` with `<th scope="col">`, inside a container with
+`overflow-x: auto`. Screen readers and narrow phones both benefit, and neither is
+served by a grid of divs.
+
+## T35 · Inline range mark — 2.5 h
+
+A small SVG in the sigma cell giving the number a shape: a rule from the team's
+minimum to maximum weekly score, a shaded band at one sigma either side of the
+mean, and a tick at the mean.
+
+```jsx
 <svg viewBox="0 0 140 16" width="140" height="16" role="img"
      aria-label={`${min} to ${max}, mean ${mean}, sigma ${sigma}`}>
   <line x1={s(min)} x2={s(max)} y1="8" y2="8" stroke="currentColor" opacity=".35" />
@@ -1048,13 +747,24 @@ A small SVG in the σ cell giving the number a shape: a rule from the team's min
 </svg>
 ```
 
-The scale `s` must be shared across every row — computed from the league-wide minimum and maximum, not per team — or the marks are not comparable, which is their only purpose.
+**The scale `s` must be shared across every row** — computed from the
+league-wide minimum and maximum, not per team. Per-team scales make every row
+look identical, which defeats the only purpose the mark has.
 
-### T36 · D3 line chart — 4.0 h  ±
+`min`, `max`, `mean` and `sigma` all come straight from `totals` in the payload,
+and are all `null` together below four final weeks. Render nothing rather than a
+degenerate mark.
 
-D3 computes; React renders. No `select`, no `append`, no `enter`.
+## T36 · D3 line chart — 4.0 h  ±
 
-```
+**The mental model.** D3 is usually taught as a library that manipulates the DOM
+for you — `select`, `append`, `enter`, `exit`. Do not use any of that here. Use
+D3 only as a **maths library**: it turns data into numbers and path strings, and
+React renders the elements. Everything after this task — hover, filtering, mode
+switching — then becomes ordinary React state rather than a second rendering
+system fighting the first.
+
+```jsx
 import { scaleLinear } from "d3-scale";
 import { line } from "d3-shape";
 
@@ -1076,40 +786,57 @@ return (
 );
 ```
 
-Axes are the one place the split gets awkward, because `axisBottom` wants a DOM node. Do not reach for a ref — call `x.ticks()` and map the values to your own `<line>` and `<text>` elements. It is a dozen lines and keeps every node under React's control.
+A scale is a function from data space to pixel space. `y`'s range is inverted
+(`height - m.bottom` first) because SVG's y axis points down and charts point up.
 
-> **Watch out**
->
-> Leave room in the `viewBox` for the outermost tick labels. An axis label at the left edge of the drawing area is clipped by the SVG boundary, which is why the margin object exists — the scale's range starts at `m.left`, not at zero.
->
-> Soft-estimated because D3-inside-React is a genuine mental shift if you have only seen D3's own idiom. The payoff is that everything afterwards — hover, filtering, mode switching — is ordinary React state.
->
+Axes are the one awkward part, because D3's `axisBottom` wants a DOM node. **Do
+not reach for a ref.** Call `x.ticks()`, get back an array of values, and map them
+to your own `<line>` and `<text>` elements. It is a dozen lines and keeps every
+node under React's control.
 
-#### Reference
+**Watch out — leave room in the `viewBox` for the outermost tick labels.** A
+label at the left edge of the drawing area is clipped by the SVG boundary. That
+is what the margin object is for: the scale's range starts at `m.left`, not at
+zero.
 
-- **D3** — [d3-scale](https://d3js.org/d3-scale)
-- **D3** — [d3-shape](https://d3js.org/d3-shape)
+Soft-estimated because D3-inside-React is a genuine mental shift if you have only
+seen D3's own idiom.
 
-### T37 · Chart controls — 3.0 h
+**Reference** — [d3-scale](https://d3js.org/d3-scale) · [d3-shape](https://d3js.org/d3-shape)
 
-- **Season** — populated from `/api/seasons`, never a hardcoded list, so a new year appears the day the chain walk finds it.
+## T37 · Chart controls — 3.0 h
+
+- **Season** — populated from `/api/seasons`, never a hardcoded list, so a new
+  year appears the day the chain walk finds it. Today that endpoint returns only
+  2026; the control should still be built against the list.
 - **Teams** — multi-select, all on by default, colour-coded to match the lines.
-- **Metric** — single-select: cumulative points, cumulative ideal, or expanding σ. Single rather than multi because σ (≈25) and cumulative points (≈800) cannot share a y-axis without σ flattening into a line along the bottom. Switching metric switches the axis.
-- **Display mode** — cumulative, per-week, or vs. league median, for the two point metrics.
+- **Metric** — single-select: cumulative points, cumulative ideal, or expanding
+  sigma. Single rather than multi because sigma (roughly 25) and cumulative
+  points (roughly 800) cannot share a y-axis without sigma flattening into a line
+  along the bottom. Switching metric switches the axis.
+- **Display mode** — cumulative, per-week, or vs league median, for the two point
+  metrics.
 
-Keep control state in the URL query string. It costs almost nothing and makes "look at what happened to me in week 9" a link someone can paste into the league chat, which is the whole social point of the site.
+Keep control state in the URL query string. It costs almost nothing and makes
+"look at what happened to me in week 9" a link someone can paste into the league
+chat, which is the whole social point of the site.
 
-### T38 · Hover interaction — 2.0 h
+## T38 · Hover interaction — 2.0 h
 
-Hovering a team — in the chart or in the legend or in the table — raises that line and mutes the rest. Twelve colours is not a legend; asking a reader to trace one out of twelve is not a design.
+Hovering a team — in the chart, the legend, or the table — raises that line and
+mutes the rest.
 
-Implement as a single `hoveredRosterId` state driving opacity and stroke width. Raise the hovered path to the end of the SVG's child list so it draws on top; in React that means sorting the series array with the hovered one last, not manipulating the DOM.
+Implement as a single `hoveredRosterId` state driving opacity and stroke width.
+To raise the hovered path so it draws on top, **sort the series array with the
+hovered one last** rather than manipulating the DOM: SVG has no z-index, and
+paint order is document order.
 
-Provide a keyboard equivalent — arrow keys through the legend with the same highlight on focus — or the interaction only exists for mouse users.
+Provide a keyboard equivalent — arrow keys through the legend with the same
+highlight on focus — or the interaction only exists for mouse users.
 
-### T39 · Polling — 2.0 h
+## T39 · Polling — 2.0 h
 
-```
+```jsx
 useEffect(() => {
   if (!isCurrentSeason) return;              // a finished season never changes
 
@@ -1125,27 +852,39 @@ useEffect(() => {
 }, [isCurrentSeason]);
 ```
 
-Firing `tick` on `visibilitychange` as well as on the interval means returning to the tab refreshes immediately rather than waiting up to thirty seconds — the difference between a page that feels live and one that feels stale.
+Firing `tick` on `visibilitychange` as well as on the interval means returning to
+the tab refreshes immediately rather than waiting up to thirty seconds — the
+difference between a page that feels live and one that feels stale.
 
-Send `If-None-Match` with the stored ETag; a 304 costs almost nothing on either side.
+Send `If-None-Match` with the stored ETag. The server returns **304** with no
+body when nothing has moved, which costs almost nothing on either side. The
+`isCurrent` flag in the payload is what tells you whether to poll at all.
 
-### T40 · Responsive and accessibility — 2.5 h
+**Watch out — the API's `Cache-Control` is `max-age=5`, not 30.** The browser may
+serve its own cached copy for five seconds; your 30-second interval is the real
+polling rate. Do not also add a cache-busting query parameter — it would defeat
+the ETag.
 
-- The table scrolls horizontally in its own container; the page body never scrolls sideways.
-- Every interactive control has a visible `:focus-visible` state and is reachable by keyboard.
-- The chart carries a `role="img"` and an `aria-label` summarising what it shows, because an SVG of twelve paths is otherwise silent to a screen reader.
+## T40 · Responsive and accessibility — 2.5 h
+
+- The table scrolls horizontally in its own container; the page body never
+  scrolls sideways.
+- Every interactive control has a visible `:focus-visible` state and is reachable
+  by keyboard.
+- The chart carries `role="img"` and an `aria-label` summarising what it shows —
+  an SVG of five paths is otherwise silent to a screen reader.
 - Respect `prefers-reduced-motion` for any line transitions.
-- Check contrast for the team palette in both themes — this is where a twelve-colour scale usually fails.
+- Check contrast for the team palette in both themes.
 
-#### Reference
+**Reference** — [ARIA authoring practices](https://www.w3.org/WAI/ARIA/apg/)
 
-- **W3C** — [ARIA authoring practices](https://www.w3.org/WAI/ARIA/apg/)
+---
 
-## M5 · Modes, ops and docs · 9.5 h
+# M5 · Modes, ops and docs · 9.5 h
 
 Deliberately last. These are cheap, taste-driven, and much easier to judge against a season of real data than against three weeks of it.
 
-### T41 · Display modes — 2.0 h
+## T41 · Display modes — 2.0 h
 
 Three transforms over the same weekly arrays:
 
@@ -1155,9 +894,9 @@ perWeek:     the weekly values themselves
 vsMedian:    running sum of (team[w] - median of all teams in week w)
 ```
 
-The median mode changes no ranking — the median sum is an identical constant for every team — but it removes the league-wide trend that dominates the raw chart. Twelve near-parallel ascending lines are unreadable; the same twelve diverging from a zero baseline are legible at a glance. Draw a zero rule when this mode is active.
+The median mode changes no ranking — the median sum is an identical constant for every team — but it removes the league-wide trend that dominates the raw chart. Five near-parallel ascending lines are hard to read; the same five diverging from a zero baseline are legible at a glance. Draw a zero rule when this mode is active.
 
-### T42 · Sigma variants — 2.0 h
+## T42 · Sigma variants — 2.0 h
 
 **Expanding** (default): σ over weeks 1…w, converging as the season settles. **Rolling**: σ over the last four weeks, showing whether a team is becoming steadier or wilder — more interesting late, close to meaningless before week eight.
 
@@ -1165,7 +904,7 @@ The median mode changes no ranking — the median sum is an identical constant f
 
 Both variants render as an em dash until enough final weeks exist — four for expanding, four for rolling.
 
-### T43 · Loading and error states — 2.0 h
+## T43 · Loading and error states — 2.0 h
 
 | State | What the reader sees |
 |---|---|
@@ -1176,7 +915,7 @@ Both variants render as an em dash until enough final weeks exist — four for e
 
 That last row is the design paying off: because finalized weeks never depend on Sleeper, an outage degrades the site rather than breaking it. Make that visible instead of failing whole.
 
-### T44 · Cost guardrails — 2.0 h
+## T44 · Cost guardrails — 2.0 h
 
 Three settings that are the difference between a free hobby project and an unpleasant invoice. Configure them; do not assume them.
 
@@ -1184,16 +923,16 @@ Three settings that are the difference between a free hobby project and an unple
 2. **Azure SQL free-limit behaviour.** Confirm it is set to auto-pause on exhaustion, not to continue and bill. One runaway job should cost you a paused database.
 3. **A budget alert** on the resource group at a threshold you would want to hear about — a few dollars is enough to be informative when the expected bill is zero.
 
-#### Reference
+### Reference
 
 - **Azure** — [Daily cap on log ingestion](https://learn.microsoft.com/azure/azure-monitor/logs/daily-cap)
 - **Azure** — [Create a budget alert](https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets)
 
-### T45 · README and runbook — 1.5 h
+## T45 · README and runbook — 1.5 h
 
 Short, and mostly one procedure. Write it now, while you remember why things are the way they are.
 
-#### The August rollover
+### The August rollover
 
 1. Create the new season in Sleeper using the roll-over flow, so `previous_league_id` is set.
 2. Update `League__CurrentLeagueId` in the Function App's settings to the new league ID.
@@ -1204,11 +943,11 @@ That is the entire annual maintenance burden, which is the point of D8.
 
 Also record: how to run the backfill job for a season, how to re-run it after a solver fix, and the three cost settings from T44 with a note to re-check them after any infrastructure change — a `main.bicep` deployment can quietly reset a portal-set value.
 
-## M6 · Positional radar · 10.0 h
+# M6 · Positional radar · 10.0 h
 
 One team’s average output per starting slot against the league average at the same slot, on axes taken from the league’s own rules. Last because it rests on a property of Sleeper’s payload that T02 has to confirm first.
 
-### T46 · Slot attribution — 2.5 h
+## T46 · Slot attribution — 2.5 h
 
 `starters[i]` plays in the *i*th startable slot, so attribution is an index join and needs no position inference at all.
 
@@ -1245,7 +984,7 @@ Dividing by the slot count is what makes a two-RB league comparable across axes.
 > A started-nobody slot is `"0"` and is worth a real zero. Do not filter it out: leaving a slot empty is a managerial decision and should drag the average exactly as much as it drags the score.
 >
 
-### T47 · League reference and ratios — 1.5 h
+## T47 · League reference and ratios — 1.5 h
 
 1. For each team and slot, average the weekly per-slot values over regular-season weeks that produced an attribution.
 2. For each slot, average those season values across all teams — that is the reference circle.
@@ -1258,7 +997,7 @@ Dividing by the slot count is what makes a two-RB league comparable across axes.
 > Guard the degenerate denominator anyway: if a league season value is zero — every team started nobody at that slot all year — the ratio is undefined. Return null for that axis and draw it at the reference circle with a marker, rather than dividing by zero or quietly plotting 1.0 as though it were measured.
 >
 
-### T48 · Slot block in the API — 1.0 h
+## T48 · Slot block in the API — 1.0 h
 
 Three additions to the existing `/api/season` payload — no new endpoint, for the same reason the table and chart already share one.
 
@@ -1279,7 +1018,7 @@ LINQ’s `Distinct()` preserves first-occurrence order over in-memory sequences,
 
 Send raw averages rather than pre-computed ratios. The client can divide, and shipping both numbers means a tooltip can say “21.2 against a league average of 18.4” instead of only “1.15×”.
 
-### T49 · Radar chart — 3.5 h  ±
+## T49 · Radar chart — 3.5 h  ±
 
 Polar geometry, computed rather than eyeballed. One team, one reference circle, axis order fixed.
 
@@ -1308,7 +1047,7 @@ Label anchoring follows the label’s side of the circle — `start` to the righ
 
 A single series needs no legend box — the title names the team. If you allow a second team for a head-to-head, a legend becomes mandatory, and two is the hard cap: three overlapping polygons is spaghetti.
 
-### T50 · Diverging bar alternative — 1.5 h
+## T50 · Diverging bar alternative — 1.5 h
 
 The same numbers on a linear axis, as a toggle beside the radar. Horizontal bars from a zero centre, one row per slot, in `slotOrder`.
 
@@ -1316,11 +1055,11 @@ This is the form the data actually asks for — a signed deviation from a baseli
 
 It exists so the radar does not have to be accurate about magnitude. Keep the radar as the default anyway: this is a page for a fantasy league, and “what shape is my team” is a question people genuinely want answered. Two views, one data set, and no argument about which one is correct.
 
-## M7 · Motion and polish — optional · 7.5 h
+# M7 · Motion and polish — optional · 7.5 h
 
 Optional throughout. Cut the whole milestone and the site still does its job — which is the test every task here should pass before you spend an hour on it.
 
-### T51 · Motion setup — 1.0 h
+## T51 · Motion setup — 1.0 h
 
 `npm i motion` — the package formerly published as `framer-motion`, imported from `motion/react`. It is the right choice here because it is declarative, which means D9 still holds: React owns every node and Motion animates props.
 
@@ -1339,11 +1078,11 @@ The `m` component with `LazyMotion` cuts the bundle to roughly a fifth of a plai
 > `useReducedMotion()` is not optional; T40 already commits you to honouring it. Read it once near the root and pass a duration of zero rather than scattering conditionals — a motion system with one opt-out is maintainable, a hundred is not.
 >
 
-#### Reference
+### Reference
 
 - **Motion** — [Motion for React](https://motion.dev/docs/react)
 
-### T52 · Table layout animation — 1.0 h
+## T52 · Table layout animation — 1.0 h
 
 The single most valuable animation on this site, and it is one prop.
 
@@ -1363,7 +1102,7 @@ When the standings re-sort mid-afternoon, rows physically slide past one another
 > `initial={hasLoadedOnce ? false : { opacity: 0, y: 8 }}` — `false` tells Motion to jump straight to the target. `layout` is inherently safe, because it animates changes rather than mounts.
 >
 
-### T53 · Chart reveal and transitions — 2.0 h  ±
+## T53 · Chart reveal and transitions — 2.0 h  ±
 
 Draw-on for the line chart is a one-liner:
 
@@ -1381,7 +1120,7 @@ Draw-on for the line chart is a one-liner:
 
 For the radar, animate the polygon in by scaling from the centre rather than morphing points — same reasoning, and the reference circle should not animate at all. It is the fixed thing the shape is read against.
 
-### T54 · Section transitions — 1.0 h
+## T54 · Section transitions — 1.0 h
 
 The View Transitions API costs nothing and degrades to an instant swap:
 
@@ -1396,15 +1135,15 @@ Supported in Chromium and Safari; check current Firefox support before leaning o
 
 Motion’s `AnimatePresence` does the same job with more control and more code. Start with the native API and reach for `AnimatePresence` only if you need exit animations it cannot express.
 
-#### Reference
+### Reference
 
 - **MDN** — [View Transition API](https://developer.mozilla.org/docs/Web/API/View_Transition_API)
 
-### T55 · Football loader — 2.5 h
+## T55 · Football loader — 2.5 h
 
 A football arcing back and forth while the site loads. Charming for four seconds, maddening for forty — so the whole design is about which wait it is bound to.
 
-#### Three timing bands
+### Three timing bands
 
 | Wait | What shows | Why |
 |---|---|---|
@@ -1412,7 +1151,7 @@ A football arcing back and forth while the site loads. Charming for four seconds
 | 0.4 – 4 s | The football | The band where a mascot is genuinely delightful. |
 | 4 s + | Ball settles, copy appears | The cold-start case from D7. Past ten seconds people want an explanation, not a loop. |
 
-#### It goes in index.html, not in React
+### It goes in index.html, not in React
 
 The loader has to paint before the bundle has loaded, so it cannot be a component — a React loader can only appear once React is mounted, which is precisely the part you are waiting for. Inline the markup and CSS in `index.html`; the app removes `#boot` on its first real render.
 
@@ -1456,7 +1195,7 @@ The loader has to paint before the bundle has loaded, so it cannot be a componen
 
 The two `scaleX` flips are what make the return trip work. `offset-rotate: auto` orients the ball to the path tangent, and that orientation does not reverse when the animation plays back toward 0% — so without the flip the ball flies tail-first on the way home. Flipping at the apex, where the ball is briefly side-on, hides the switch.
 
-#### Spin without rotating: the comic-book trick
+### Spin without rotating: the comic-book trick
 
 A real spiral is rotation about the long axis, which barely alters the silhouette — so a CSS `rotate` spins the ball end over end and reads as a fumble. Cartoonists solve this with drawn arcs rather than rotation, and so should you. The two kinds say different things:
 
@@ -1513,7 +1252,7 @@ The `scaleX(-1)` flip from the outbound-return keyframes handles both arc types 
 
 One sizing note: at 34 px none of this detail reads. Take the loader ball to about 64 px — it is the only thing on screen, so it can afford to be the hero, and below roughly 48 px the arcs turn to mush and you may as well drop them.
 
-#### Narrow screens: throw it straight up
+### Narrow screens: throw it straight up
 
 A 220 px horizontal arc is cramped on a 375 px phone, and it spends the one dimension a phone does not have. Throw the ball straight up instead — it suits the form factor, and it is the simpler animation of the two.
 
@@ -1557,7 +1296,7 @@ Using the individual `translate` and `rotate` properties rather than a combined 
 
 `offset-path: path()` is supported across current Chromium, Safari and Firefox. Where it is not, the ball simply sits still at the start of the path and the fade still runs — an acceptable degradation for a loading state, and one more reason to keep the explanatory copy doing the real work.
 
-#### Reference
+### Reference
 
 - **MDN** — [offset-path](https://developer.mozilla.org/docs/Web/CSS/offset-path)
 - **MDN** — [prefers-reduced-motion](https://developer.mozilla.org/docs/Web/CSS/@media/prefers-reduced-motion)

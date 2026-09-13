@@ -53,19 +53,24 @@ requests per minute regardless of viewer count.
 
 | Path | What |
 |---|---|
-| [`docs/design.md`](docs/design.md) | Design v6 — sections 01–15, decisions D1–D11, risks R1–R2, open questions Q1–Q8 |
-| [`docs/field-manual.md`](docs/field-manual.md) | Step-by-step instructions for T01–T55, in build order |
+| [`docs/design.md`](docs/design.md) | Design v6 — sections 01–15, decisions D1–D11, risks R1–R2, open questions Q1–Q8. Corrected in place; **Corrected** marks where it differs from the artifact |
+| [`docs/field-manual.md`](docs/field-manual.md) | A **Built** reference for M0–M2, then step-by-step instructions for T24 onward |
 | [`tasks/todo.md`](tasks/todo.md) | The task list. Tick tasks here as they land. |
-| [`docs/amendments.md`](docs/amendments.md) | **Decisions made after v6, and the answers to Q1–Q8.** Read this alongside the design — where they disagree, this wins. |
+| [`docs/amendments.md`](docs/amendments.md) | **A1–A12: the reasoning behind every decision made after v6, and why each correction to the other two documents is right.** |
 | [`tasks/lessons.md`](tasks/lessons.md) | Rules written after a correction |
 
 Task IDs are stable across all three files and the published tracker: T21 in the
 manual is T21 in the todo is T21 in the artifact.
 
-**`design.md` and `field-manual.md` are converted from published artifacts and a
-re-sync overwrites them wholesale.** Never record a decision only in those two —
-it belongs in `amendments.md`, which survives. After any sync, re-apply the
-manual corrections listed at the bottom of that file.
+**All three documents are now living and edited directly.** `design.md` and
+`field-manual.md` began as conversions of published artifacts, but both have been
+corrected against what was built — **re-syncing either would reinstate errors
+that took real debugging to find**, and would undo the M0–M2 compaction.
+
+Where to put a new decision: the conclusion goes in whichever document states the
+thing, and the **reasoning** goes in `amendments.md` as the next `A` number. A
+correction to the design or the manual is applied in place *and* recorded there,
+so the record of what was wrong survives even though the text no longer is.
 
 ## Things that are settled — don't relitigate them
 
