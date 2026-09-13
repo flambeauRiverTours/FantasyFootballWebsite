@@ -52,7 +52,7 @@ jobs:
       RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             9.0.x
