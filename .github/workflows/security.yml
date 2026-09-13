@@ -66,15 +66,30 @@ jobs:
           SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
         run: |
           found=0
-          for id in "$LEAGUE_ID" "$SWA_TOKEN" ${EXCLUDED_OWNER_IDS//,/ }; do
-            [ -z "$id" ] && continue
-            if git grep -nF -e "$id" -- . > /dev/null 2>&1; then
-              echo "::error::a configured secret value appears in a tracked file (A2)"
-              git grep -lF -e "$id" -- .
+          check() {
+            name="$1"; value="$2"
+            [ -z "$value" ] && return 0
+            # a short value substring-matches ordinary prose; it is a
+            # misconfigured secret, not a leak, and saying so beats a false alarm
+            if [ "${#value}" -lt 12 ]; then
+              echo "::warning::$name is shorter than 12 characters and was not searched for"
+              return 0
+            fi
+            if git grep -nF -e "$value" -- . > /dev/null 2>&1; then
+              # length and line numbers, never the value: GitHub masks the value,
+              # which is what made the first failure of this gate unactionable
+              echo "::error::$name (${#value} chars) appears in a tracked file (A2)"
+              git grep -nF -e "$value" -- . | cut -d: -f1,2
               found=1
             fi
+          }
+          check LEAGUE_ID "$LEAGUE_ID"
+          check AZURE_STATIC_WEB_APPS_API_TOKEN "$SWA_TOKEN"
+          for owner in ${EXCLUDED_OWNER_IDS//,/ }; do
+            check EXCLUDED_OWNER_IDS "$owner"
           done
           exit $found
+
       - name: Sleeper-shaped ids elsewhere
         continue-on-error: true #possibly false positives, so advisory only
         run: '! git grep -nE "[0-9]{18,20}" -- . ":!*lock.json"'
