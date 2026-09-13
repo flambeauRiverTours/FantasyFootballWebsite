@@ -230,6 +230,11 @@ Preview environments are deliberately not allowed.
 
 What remains is verification. Run this after a green deploy.
 
+No resource identifier is written out below — every command derives what it
+needs from `az`. This repository is intended to go public, and a workspace ID
+plus a token is enough to read your telemetry. A2's spirit is not just "no
+credentials" but "no identifiers tying a public repo to your infrastructure".
+
 ### Set the two hostnames once
 
 ```bash
@@ -278,7 +283,7 @@ curl -sS -D - -o /dev/null -X OPTIONS -H "Origin: https://not-your-site.example"
 ### 6 · The player map was stored
 
 ```bash
-KEY=$(az storage account keys list -g rg-fantsybosty -n st4sb4lv7kcxgs4 --query "[0].value" -o tsv) && az storage blob show --account-name st4sb4lv7kcxgs4 --account-key "$KEY" --container-name player-map --name players.json --query "{bytes:properties.contentLength, modified:properties.lastModified}" -o json
+ST=$(az storage account list -g rg-fantsybosty --query "[0].name" -o tsv) && KEY=$(az storage account keys list -g rg-fantsybosty -n "$ST" --query "[0].value" -o tsv) && az storage blob show --account-name "$ST" --account-key "$KEY" --container-name player-map --name players.json --query "{bytes:properties.contentLength, modified:properties.lastModified}" -o json
 ```
 
 Expect roughly 840 KB. Megabytes would mean the projection is not trimming.
@@ -299,7 +304,7 @@ Then read the log. There is no App Insights CLI extension installed, so query th
 Log Analytics REST API directly:
 
 ```bash
-TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/0419d293-271d-4a79-9184-9d8d4de0da40/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppTraces | where TimeGenerated > ago(20m) | where Message has \"player map\" | project TimeGenerated, Message | order by TimeGenerated desc | take 10"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];[print(r[0][:19], r[1][:120]) for r in t['rows']]"
+WS=$(az monitor log-analytics workspace show -g rg-fantsybosty -n log-idealpoints --query customerId -o tsv) && TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/$WS/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppTraces | where TimeGenerated > ago(20m) | where Message has \"player map\" | project TimeGenerated, Message | order by TimeGenerated desc | take 10"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];[print(r[0][:19], r[1][:120]) for r in t['rows']]"
 ```
 
 **"Adopted the stored player map"** is success. "Refreshing player map from
@@ -311,7 +316,7 @@ log-analytics` once gives you `az monitor log-analytics query` instead.
 ### 8 · Nothing is throwing
 
 ```bash
-TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/0419d293-271d-4a79-9184-9d8d4de0da40/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppExceptions | where TimeGenerated > ago(1h) | summarize n=count() by ExceptionType"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];print('exceptions:', t['rows'] or 'none')"
+WS=$(az monitor log-analytics workspace show -g rg-fantsybosty -n log-idealpoints --query customerId -o tsv) && TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/$WS/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppExceptions | where TimeGenerated > ago(1h) | summarize n=count() by ExceptionType"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];print('exceptions:', t['rows'] or 'none')"
 ```
 
 ### 9 · The Static Web Apps deploy token
@@ -626,7 +631,7 @@ shape is fixed (§09). Fetch it once and read the JSON before writing any
 TypeScript — every field name below comes from a real response, not a plan.
 
 ```bash
-curl -fsS https://func-idealpoints.azurewebsites.net/api/season | python -m json.tool | head -40
+curl -fsS "https://$(az functionapp show -n func-idealpoints -g rg-fantsybosty --query defaultHostName -o tsv)/api/season" | python -m json.tool | head -40
 ```
 
 ## T32 · Frontend scaffold — 2.0 h

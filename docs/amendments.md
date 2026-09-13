@@ -170,6 +170,27 @@ A capture of `/league/{id}/users` is different — it carries `user_id`,
 `display_name` and avatar IDs for every manager. Do not commit that one, or
 scrub the IDs first. And do not name any fixture file after the league ID.
 
+### Resource identifiers are not credentials, and still do not belong in the repo
+
+2026-09-13. The A2 gate failed on `field-manual.md` after the documentation pass.
+The manual had acquired three literals written for convenience: the Log Analytics
+workspace ID, the storage account name, and the Function App hostname. Every
+command in that runbook now derives what it needs from `az` instead.
+
+None of the three is a credential. A workspace ID alone reads nothing. But the
+repository is intended to go public, and A2's purpose was never only "no
+passwords" — it is **not publishing identifiers that tie a public repository to
+personal infrastructure**. A workspace ID plus any leaked token is enough to
+query telemetry; a storage account name is a target to try keys against.
+
+**The gate also had to change.** It reported only *that* a secret appeared, not
+*which*, and GitHub masks the values — so the error named a file and nothing
+else. It now checks each secret by name and says which one matched, and skips
+any value under twelve characters with a warning, because a short secret
+substring-matches ordinary prose and produces a false alarm rather than a
+finding. This is the same masked-value debugging problem that T21's OIDC failure
+ran into: a gate that cannot say what it found costs more than it saves.
+
 ### The league id leaked into a test, and was expunged
 
 Recorded 2026-09-13, while preparing to make the repository public.
