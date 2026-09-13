@@ -26,7 +26,7 @@ if (string.IsNullOrWhiteSpace(leagueId))
     return 1;
 }
 
-await host.Services.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
+await host.Services.GetRequiredService<IPlayerMapRefresher>().EnsureCurrentAsync(default);
 var snapshot = await host.Services.GetRequiredService<ISeasonService>().BuildAsync(leagueId.Trim(), default);
 
 StandingsRenderer.Render(snapshot, System.Console.Out, DateTimeOffset.UtcNow);

@@ -134,11 +134,28 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public async Task An_unrefreshed_player_map_is_refused()
+        public async Task The_player_map_is_loaded_without_an_explicit_refresh()
         {
+            // the deployed endpoint had nothing calling the refresher, and every request 500'd
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddSleeperClient().ConfigurePrimaryHttpMessageHandler(() => new LeagueSocket());
+            services.AddSleeperClient().ConfigurePrimaryHttpMessageHandler(TwoTeamsTwoWeeks);
+            using var provider = services.BuildServiceProvider();
+
+            var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync("L1", default);
+
+            snapshot.Teams.Should().NotBeEmpty();
+            provider.GetRequiredService<IPlayerMapRefresher>().LastRefreshedUtc.Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task A_dump_that_cannot_be_read_is_still_refused()
+        {
+            // A8: an empty map would report every player unresolved instead of failing
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSleeperClient()
+                .ConfigurePrimaryHttpMessageHandler(() => new LeagueSocket { Players = "null" });
             using var provider = services.BuildServiceProvider();
 
             await FluentActions.Awaiting(() => provider.GetRequiredService<ISeasonService>().BuildAsync("L1", default))

@@ -4,6 +4,7 @@ using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Core.Tests
 {
@@ -33,16 +34,46 @@ namespace FantasyLeague.Core.Tests
         public static (HttpStatusCode, string) Status(HttpStatusCode status) => (status, "{}");
     }
 
+    /// <summary>
+    /// Records what was written and hands back whatever it was primed with.
+    /// </summary>
+    internal sealed class FakePlayerMapStore(StoredPlayerMap? stored = null) : IPlayerMapStore
+    {
+        public StoredPlayerMap? Written { get; private set; }
+
+        public int Reads { get; private set; }
+
+        public Task<StoredPlayerMap?> ReadAsync(CancellationToken cancellationToken)
+        {
+            Reads++;
+            return Task.FromResult(stored);
+        }
+
+        public Task WriteAsync(StoredPlayerMap map, CancellationToken cancellationToken)
+        {
+            Written = map;
+            return Task.CompletedTask;
+        }
+    }
+
     public class PlayerMapRefresherTests
     {
-        private static PlayerMapRefresher Build(ScriptedSocket socket)
+        private static PlayerMapRefresher Build(
+            ScriptedSocket socket,
+            IPlayerMapStore? store = null,
+            TimeSpan? maxAge = null)
         {
             var services = new ServiceCollection();
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
 
             var client = services.BuildServiceProvider().GetRequiredService<SleeperClient>();
-            return new PlayerMapRefresher(client, NullLogger<PlayerMapRefresher>.Instance);
+
+            return new PlayerMapRefresher(
+                client,
+                store ?? new NullPlayerMapStore(),
+                Options.Create(new PlayerMapOptions { MaxAge = maxAge ?? TimeSpan.FromHours(24) }),
+                NullLogger<PlayerMapRefresher>.Instance);
         }
 
         private const string Dump = """
@@ -210,5 +241,106 @@ namespace FantasyLeague.Core.Tests
             provider.GetRequiredService<IPlayerMapRefresher>()
                 .Should().BeSameAs(provider.GetRequiredService<IPlayerMapRefresher>());
         }
+
+        [Fact]
+        public async Task A_fresh_stored_map_is_adopted_without_calling_Sleeper()
+        {
+            // T14: the dump must never sit on a request path
+            var stored = new StoredPlayerMap(
+                DateTimeOffset.UtcNow.AddHours(-1),
+                new Dictionary<string, PlayerRef> { ["4046"] = new("Patrick Mahomes", "KC", ["QB"]) });
+
+            var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
+            var refresher = Build(socket, new FakePlayerMapStore(stored));
+
+            await refresher.EnsureCurrentAsync(default);
+
+            socket.Attempts.Should().Be(0, "the store answered");
+            refresher.PlayerMap.Should().ContainKey("4046");
+            refresher.LastRefreshedUtc.Should().Be(stored.RefreshedUtc);
+        }
+
+        [Fact]
+        public async Task A_stale_stored_map_is_refetched()
+        {
+            var stored = new StoredPlayerMap(
+                DateTimeOffset.UtcNow.AddHours(-30),
+                new Dictionary<string, PlayerRef> { ["old"] = new("Retired", null, ["QB"]) });
+
+            var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
+            var refresher = Build(socket, new FakePlayerMapStore(stored));
+
+            await refresher.EnsureCurrentAsync(default);
+
+            socket.Attempts.Should().Be(1);
+            refresher.PlayerMap.Should().NotContainKey("old");
+        }
+
+        [Fact]
+        public async Task An_empty_store_falls_back_to_Sleeper()
+        {
+            var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
+            var refresher = Build(socket, new FakePlayerMapStore());
+
+            await refresher.EnsureCurrentAsync(default);
+
+            socket.Attempts.Should().Be(1);
+            refresher.PlayerMap.Should().ContainKey("4046");
+        }
+
+        [Fact]
+        public async Task A_fetched_map_is_written_back_to_the_store()
+        {
+            // without this the next cold instance refetches, which is the whole point
+            var store = new FakePlayerMapStore();
+            var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)), store);
+
+            await refresher.EnsureCurrentAsync(default);
+
+            store.Written.Should().NotBeNull();
+            store.Written!.Players.Should().ContainKey("4046");
+            store.Written.RefreshedUtc.Should().Be(refresher.LastRefreshedUtc);
+        }
+
+        [Fact]
+        public async Task A_loaded_map_is_not_reloaded()
+        {
+            var store = new FakePlayerMapStore();
+            var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)), store);
+
+            await refresher.EnsureCurrentAsync(default);
+            await refresher.EnsureCurrentAsync(default);
+
+            store.Reads.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task Concurrent_cold_callers_fetch_once()
+        {
+            var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
+            var refresher = Build(socket, new FakePlayerMapStore());
+
+            await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => refresher.EnsureCurrentAsync(default)));
+
+            socket.Attempts.Should().Be(1, "the gate collapses a cold-start stampede");
+        }
+
+        [Fact]
+        public async Task An_explicit_refresh_ignores_a_fresh_stored_map()
+        {
+            // what the timer calls: the point is to go and get a new one
+            var stored = new StoredPlayerMap(
+                DateTimeOffset.UtcNow,
+                new Dictionary<string, PlayerRef> { ["old"] = new("Retired", null, ["QB"]) });
+
+            var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
+            var refresher = Build(socket, new FakePlayerMapStore(stored));
+
+            await refresher.RefreshAsync(default);
+
+            socket.Attempts.Should().Be(1);
+            refresher.PlayerMap.Should().ContainKey("4046");
+        }
+
     }
 }
