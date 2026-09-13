@@ -21,7 +21,7 @@ jobs:
       functionAppUrl: ${{ steps.deploy.outputs.functionAppUrl }}
       staticWebAppName: ${{ steps.deploy.outputs.staticWebAppName }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: az bicep build --file infra/main.bicep --stdout > /dev/null
       - uses: azure/login@v2
         with:
@@ -51,7 +51,7 @@ jobs:
     env:
       RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
