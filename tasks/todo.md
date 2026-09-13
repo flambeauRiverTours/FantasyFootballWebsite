@@ -95,7 +95,7 @@ Deployed and reachable, still no database.
       App registration, federated credential, RBAC. No secrets in the repo.
 - [x] **T22** `ci.yml` — 1.5 h
       Restore, build, test, `dotnet format` check, vite build.
-- [ ] **T23** `deploy.yml` — 2.5 h
+- [x] **T23** `deploy.yml` — 2.5 h
       Bicep what-if then deploy, functions deploy, SWA deploy.
 - [ ] **T24** CORS and first deploy shakeout — 2 h `±`
       The gap between what works locally and what works deployed.

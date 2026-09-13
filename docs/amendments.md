@@ -164,6 +164,29 @@ A capture of `/league/{id}/users` is different — it carries `user_id`,
 `display_name` and avatar IDs for every manager. Do not commit that one, or
 scrub the IDs first. And do not name any fixture file after the league ID.
 
+### The league id leaked into a test, and was expunged
+
+Recorded 2026-09-13, while preparing to make the repository public.
+`HostRegistrationTests.cs` used the **live** league id as its fixture value,
+introduced in the T17 commit and carried forward by five more. The A2 gate in
+`security.yml` caught it.
+
+- **It never reached the remote.** The commits lived only on the local
+  `feat/M2-azure-setup` branch; no origin ref contained the id, so no
+  force-push and no GitHub-side cleanup were needed.
+- Six commits were rewritten with `git filter-branch`, `refs/original` deleted,
+  the reflog expired and `git gc --prune=now` run. A scan of every object in the
+  database then found zero blobs containing it.
+- The placeholder is `1234567890123456789`.
+  `A_nineteen_digit_id_survives_as_a_string` asserts `HaveLength(19)`, so any
+  replacement has to stay nineteen digits.
+
+**A real id in a test does not look like a leak.** It looks like the value the
+code will actually see, which is exactly why it survived review. Fixture values
+are placeholders even when a real one is at hand.
+
+---
+
 ---
 
 ## A3 · Keep the eligibility map general, not pruned to 2026

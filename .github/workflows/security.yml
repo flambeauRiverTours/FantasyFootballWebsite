@@ -57,16 +57,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: No configured ids in tracked files
+      # The OIDC identifiers are deliberately absent: federated credentials make
+      # them public. Unknown credential shapes are Trivy's job, below.
+      - name: No configured secrets in tracked files
         env:
           LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
           EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
         run: |
           found=0
-          for id in "$LEAGUE_ID" ${EXCLUDED_OWNER_IDS//,/ }; do
+          for id in "$LEAGUE_ID" "$SWA_TOKEN" ${EXCLUDED_OWNER_IDS//,/ }; do
             [ -z "$id" ] && continue
             if git grep -nF -e "$id" -- . > /dev/null 2>&1; then
-              echo "::error::a configured Sleeper id appears in a tracked file (A2)"
+              echo "::error::a configured secret value appears in a tracked file (A2)"
               git grep -lF -e "$id" -- .
               found=1
             fi

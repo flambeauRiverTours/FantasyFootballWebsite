@@ -46,8 +46,9 @@ jobs:
         env:
           LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
           EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
+          RESOURCE_GROUP:  ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
         run: |
           az deployment group what-if \
-            --resource-group rg-fantsybosty \
+            --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS"
