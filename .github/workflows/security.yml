@@ -43,7 +43,7 @@ jobs:
           dotnet tool install --global nuget-license
           nuget-license -i FantasyLeague.slnx -t -a 'MIT;Apache-2.0;BSD-3-Clause' -mapping .github/license-url-mappings.json -o JsonPretty > licenses.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-report
