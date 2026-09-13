@@ -76,8 +76,10 @@ jobs:
               return 0
             fi
             if git grep -nF -e "$value" -- . > /dev/null 2>&1; then
-              echo "::error::$name appears in a tracked file (A2)"
-              git grep -lF -e "$value" -- .
+              # length and line numbers, never the value: GitHub masks the value,
+              # which is what made the first failure of this gate unactionable
+              echo "::error::$name (${#value} chars) appears in a tracked file (A2)"
+              git grep -nF -e "$value" -- . | cut -d: -f1,2
               found=1
             fi
           }
