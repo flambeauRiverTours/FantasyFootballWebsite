@@ -61,6 +61,9 @@ namespace FantasyLeague.Sleeper
             var users = await reader.GetUsersAsync(leagueId, cancellationToken);
             var rosters = await reader.GetRostersAsync(leagueId, cancellationToken);
             var names = SleeperMapper.ToTeamNames(users!, rosters!);
+            var owners = rosters!
+                .Where(r => r!.OwnerId is not null)
+                .ToDictionary(r => r!.RosterId, r => r!.OwnerId!);
             var violations = new List<InvariantViolation>();
             var weeks = new List<TeamWeek>();
             var unresolved = new List<string>();
@@ -91,7 +94,8 @@ namespace FantasyLeague.Sleeper
                 slots,
                 teams,
                 unresolved.Distinct().ToList(),
-                violations);
+                violations,
+                owners);
         }
 
         /// <summary>

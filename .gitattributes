@@ -1,0 +1,7 @@
+# The repo stores LF, but .editorconfig requires CRLF and dotnet format enforces
+# it. Without this the Linux runner checks out LF and every C# file fails
+# ENDOFLINE, while Windows passes because core.autocrlf hides the difference.
+* text=auto eol=crlf
+
+# Workflows and their helpers only ever run on Linux runners.
+.github/** text eol=lf

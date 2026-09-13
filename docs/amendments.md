@@ -164,6 +164,29 @@ A capture of `/league/{id}/users` is different — it carries `user_id`,
 `display_name` and avatar IDs for every manager. Do not commit that one, or
 scrub the IDs first. And do not name any fixture file after the league ID.
 
+### The league id leaked into a test, and was expunged
+
+Recorded 2026-09-13, while preparing to make the repository public.
+`HostRegistrationTests.cs` used the **live** league id as its fixture value,
+introduced in the T17 commit and carried forward by five more. The A2 gate in
+`security.yml` caught it.
+
+- **It never reached the remote.** The commits lived only on the local
+  `feat/M2-azure-setup` branch; no origin ref contained the id, so no
+  force-push and no GitHub-side cleanup were needed.
+- Six commits were rewritten with `git filter-branch`, `refs/original` deleted,
+  the reflog expired and `git gc --prune=now` run. A scan of every object in the
+  database then found zero blobs containing it.
+- The placeholder is `1234567890123456789`.
+  `A_nineteen_digit_id_survives_as_a_string` asserts `HaveLength(19)`, so any
+  replacement has to stay nineteen digits.
+
+**A real id in a test does not look like a leak.** It looks like the value the
+code will actually see, which is exactly why it survived review. Fixture values
+are placeholders even when a real one is at hand.
+
+---
+
 ---
 
 ## A3 · Keep the eligibility map general, not pruned to 2026
@@ -281,6 +304,93 @@ the invariants test.
 **The visible consequence:** after a generous override the page can show an ideal
 below the actual. That is correct, not a bug — the manager really did score more
 than their roster could have produced, because someone decided so.
+
+---
+
+## A10 · Excluded owners are a list, carried as one comma-separated secret
+
+A1 excludes owners by user id, and `LeagueOptions.ExcludedOwnerIds` has always
+been an `IList<string>`. The deployment path did not match: `main.bicep` took a
+single `@secure() string` and wrote it straight to
+`League__ExcludedOwnerIds__0`, so a second excluded owner was unreachable
+without editing the template, and an empty value still wrote index 0 as an
+empty string.
+
+**The secret is a comma-separated list.** `EXCLUDED_OWNER_IDS` holds
+`id` or `id,id,id`; whitespace around each entry is trimmed and empty entries
+are dropped, so `a, b,` and `a,b` are the same input. The template expands it:
+
+```bicep
+var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
+
+var excludedOwnerSettings = [
+  for (ownerId, index) in excludedOwnerIdList: {
+    name: 'League__ExcludedOwnerIds__${index}'
+    value: ownerId
+  }
+]
+```
+
+**Why a delimited string rather than an array parameter.** Bicep does support
+`param excludedOwnerIds array`, but `@secure()` applies to `secureString` and
+`secureObject` only — there is no secure array. A GitHub secret is also a
+single opaque string, so an array parameter would mean encoding JSON into the
+secret and `json()`-parsing it in the template, which buys nothing and fails
+noisily on a stray quote.
+
+**Why indexed App Settings rather than one delimited setting.** `League__ExcludedOwnerIds__0`,
+`__1`, `__2` is how .NET's configuration binder reads a collection from
+environment variables; the double underscore becomes `:`. Binding an
+`IList<string>` from a single comma-separated value would need a custom
+converter. The generated form needs no application code at all, which is why
+`LeagueOptions` is unchanged by this amendment.
+
+**The empty case now writes nothing.** A league with no placeholder team
+produces an empty array and no `League__ExcludedOwnerIds__*` settings, rather
+than one setting holding an empty string.
+
+**A typo is reported.** An owner id matching no roster used to be ignored in
+silence, which a longer list makes likelier — the excluded team would simply
+stay in the standings with nothing to explain why.
+`SeasonFunctions.ExcludedRosterIds` now logs a warning naming each unmatched
+id. Two caveats worth knowing: the warning carries a Sleeper user id into
+Application Insights, which A2 treats as a secret — acceptable because that
+telemetry is private to the subscription, and useless without the id in it; and
+it fires on **every request** while the misconfiguration stands, like the
+existing violation and unresolved-player warnings, which matters against the
+0.16 GB/day ingest cap.
+
+---
+
+## A11 · The storage firewall stays open, with an expiry on the exception
+
+Trivy's `AZU-0012` fails the storage account for leaving
+`networkAcls.defaultAction` unset, which means `Allow`. The finding is correct;
+acting on it is not free.
+
+That account is the Function App's runtime store **and** its Flex Consumption
+deployment container. Setting `Deny` cuts the app off from both. On Flex
+Consumption without a virtual network there is no cheap way back in:
+`bypass: AzureServices` does not cover the Functions runtime's own access, so
+the supported route is VNet integration plus service or private endpoints.
+Service endpoints are free; **private endpoints are around $7 a month each**,
+and more than one would be wanted — several times the entire budget in §13, for
+an account holding a deployment zip and some queue state.
+
+**What the account already has:** `allowBlobPublicAccess: false`,
+`minimumTlsVersion: TLS1_2`, `supportsHttpsTrafficOnly: true`, no public
+containers. The residual exposure is an account reachable over the network but
+requiring a key.
+
+**The exception is dated, not permanent.** `.trivyignore.yaml` carries
+`expired_at: 2027-03-01`; after that the finding returns and has to be argued
+again. The alternative — dropping `misconfig` from the scanner list, or setting
+`exit-code: 0` — would also discard the seven checks that currently pass and
+every future one that catches something real. A permanently red gate gets
+ignored, which is worse than no gate.
+
+**Revisit when** the app gains a VNet for any other reason, or if D-level
+decisions ever put anything but runtime state in that account.
 
 ---
 
