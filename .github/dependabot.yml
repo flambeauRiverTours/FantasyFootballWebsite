@@ -1,0 +1,38 @@
+
+version: 2
+
+updates:
+  # Restore runs from nuget.org only; there is no NuGet.config in the repo.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      microsoft-extensions:
+        patterns:
+          - Microsoft.Extensions.*
+      azure-functions:
+        patterns:
+          - Microsoft.Azure.Functions.*
+      opentelemetry:
+        patterns:
+          - OpenTelemetry.*
+          - Azure.Monitor.OpenTelemetry.*
+      xunit:
+        patterns:
+          - xunit*
+    ignore:
+      # 8.x moved to the Xceed Community Licence, which is non-commercial only.
+      # Pinned deliberately; see the licence gate in security.yml.
+      - dependency-name: FluentAssertions
+        versions:
+          - '>=8.0.0'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
