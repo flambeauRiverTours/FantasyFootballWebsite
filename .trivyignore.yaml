@@ -1,0 +1,13 @@
+# Exceptions carry an expiry so they resurface rather than disappear.
+# Rationale lives in docs/amendments.md (A11).
+misconfigurations:
+  - id: AZU-0012
+    paths:
+      - "arm/main.json"
+    statement: >
+      Storage firewall stays open. Locking it requires VNet integration on Flex
+      Consumption; bypass AzureServices does not cover the Functions runtime's
+      own access, and private endpoints cost more per month than the whole
+      design budgets. The account already denies public blob access and
+      requires TLS 1.2. Revisit if the app ever moves onto a VNet.
+    expired_at: 2027-03-01

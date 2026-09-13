@@ -362,6 +362,38 @@ existing violation and unresolved-player warnings, which matters against the
 
 ---
 
+## A11 · The storage firewall stays open, with an expiry on the exception
+
+Trivy's `AZU-0012` fails the storage account for leaving
+`networkAcls.defaultAction` unset, which means `Allow`. The finding is correct;
+acting on it is not free.
+
+That account is the Function App's runtime store **and** its Flex Consumption
+deployment container. Setting `Deny` cuts the app off from both. On Flex
+Consumption without a virtual network there is no cheap way back in:
+`bypass: AzureServices` does not cover the Functions runtime's own access, so
+the supported route is VNet integration plus service or private endpoints.
+Service endpoints are free; **private endpoints are around $7 a month each**,
+and more than one would be wanted — several times the entire budget in §13, for
+an account holding a deployment zip and some queue state.
+
+**What the account already has:** `allowBlobPublicAccess: false`,
+`minimumTlsVersion: TLS1_2`, `supportsHttpsTrafficOnly: true`, no public
+containers. The residual exposure is an account reachable over the network but
+requiring a key.
+
+**The exception is dated, not permanent.** `.trivyignore.yaml` carries
+`expired_at: 2027-03-01`; after that the finding returns and has to be argued
+again. The alternative — dropping `misconfig` from the scanner list, or setting
+`exit-code: 0` — would also discard the seven checks that currently pass and
+every future one that catches something real. A permanently red gate gets
+ignored, which is worse than no gate.
+
+**Revisit when** the app gains a VNet for any other reason, or if D-level
+decisions ever put anything but runtime state in that account.
+
+---
+
 ## Where the design is now out of date
 
 - **§03 is wrong about team names** — see A6.
