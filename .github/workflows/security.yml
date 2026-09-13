@@ -1,0 +1,98 @@
+name: security
+on:
+  schedule:
+    - cron: '17 6 * * 1' #runs on Monday at 06:17 UTC, which is 01:17 EST/EDT, when the weekly dependabot PRs are open
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - run: dotnet restore the
+      - name: Vulnerable packages
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          ! grep -q 'has the following vulnerable packages' vulnerable.txt
+
+      # Advisory only: xunit 2.x is already flagged Legacy in favour of xunit.v3,
+      # which is a migration rather than a security fix.
+      - name: Deprecated packages
+        continue-on-error: true
+        run: |
+          dotnet list package --deprecated 2>&1 | tee deprecated.txt
+          ! grep -q 'has the following deprecated packages' deprecated.txt
+
+      - name: Licences
+        run: |
+          dotnet tool install --global nuget-license
+          nuget-license -i FantasyLeague.slnx -t -a 'MIT;Apache-2.0;BSD-3-Clause' -mapping .github/license-url-mappings.json -o JsonPretty > licenses.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-report
+          path: |
+            vulnerable.txt
+            deprecated.txt
+            licenses.json
+          if-no-files-found: warn
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No configured ids in tracked files
+        env:
+          LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
+          EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
+        run: |
+          found=0
+          for id in "$LEAGUE_ID" ${EXCLUDED_OWNER_IDS//,/ }; do
+            [ -z "$id" ] && continue
+            if git grep -nF -e "$id" -- . > /dev/null 2>&1; then
+              echo "::error::a configured Sleeper id appears in a tracked file (A2)"
+              git grep -lF -e "$id" -- .
+              found=1
+            fi
+          done
+          exit $found
+      - name: Sleeper-shaped ids elsewhere
+        continue-on-error: true #possibly false positives, so advisory only
+        run: '! git grep -nE "[0-9]{18,20}" -- . ":!*lock.json"'
+
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trivy reads ARM JSON, not bicep, so compile first.
+      - name: Compile bicep
+        run: |
+          mkdir -p arm
+          az bicep build --file infra/main.bicep --outfile arm/main.json
+
+      - name: Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,misconfig
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: table

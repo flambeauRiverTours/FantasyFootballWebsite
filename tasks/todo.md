@@ -93,7 +93,7 @@ Deployed and reachable, still no database.
       SWA, Function App, storage, App Insights, resource group scope.
 - [x] **T21** GitHub to Entra OIDC — 3 h `±`
       App registration, federated credential, RBAC. No secrets in the repo.
-- [ ] **T22** `ci.yml` — 1.5 h
+- [x] **T22** `ci.yml` — 1.5 h
       Restore, build, test, `dotnet format` check, vite build.
 - [ ] **T23** `deploy.yml` — 2.5 h
       Bicep what-if then deploy, functions deploy, SWA deploy.

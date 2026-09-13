@@ -1,0 +1,2 @@
+# Workflows and their helpers only ever run on Linux runners.
+.github/** text eol=lf
