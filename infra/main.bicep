@@ -26,6 +26,9 @@ param leagueId string
 @secure()
 param excludedOwnerIds string = ''
 
+@description('Extra origins allowed to call the API, for front-end development against the deployed API. Empty in production; preview environments are deliberately not allowed.')
+param devOrigins array = []
+
 @description('Daily telemetry ingestion cap in GB, as a string so a fraction is possible. 0.16/day keeps a month inside the 5 GB free allocation.')
 param dailyIngestCapGb string = '0.16'
 
@@ -145,6 +148,11 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
   identity: {
     type: 'SystemAssigned'
   }
+  // Flex Consumption deploys into this container, and only the storage
+  // account is an inferred dependency.
+  dependsOn: [
+    storage::blob::deployments
+  ]
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
@@ -174,9 +182,12 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
       ftpsState: 'Disabled'
       http20Enabled: true
       cors: {
-        allowedOrigins: [
-          'https://${site.properties.defaultHostname}'
-        ]
+        allowedOrigins: concat(
+          [
+            'https://${site.properties.defaultHostname}'
+          ],
+          devOrigins
+        )
       }
       appSettings: concat(
         [
