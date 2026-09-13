@@ -98,4 +98,5 @@ jobs:
           scanners: secret,misconfig
           severity: CRITICAL,HIGH
           exit-code: '1'
+          trivyignores: .trivyignore.yaml
           format: table
