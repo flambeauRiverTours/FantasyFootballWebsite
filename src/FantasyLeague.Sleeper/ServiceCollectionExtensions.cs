@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Sleeper
 {
@@ -41,6 +42,11 @@ namespace FantasyLeague.Sleeper
             this IServiceCollection services,
             Action<HttpStandardResilienceOptions>? configureResilience = null)
         {
+
+            services.AddOptions<LeagueOptions>()
+                .BindConfiguration("League")
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
 
             services.TryAddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
                 new TokenBucketRateLimiterOptions

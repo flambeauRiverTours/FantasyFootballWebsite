@@ -1,0 +1,54 @@
+name: ci
+# push is limited to main: with an unfiltered push trigger, every commit on a
+# branch with an open PR fires both events and runs the whole workflow twice.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+# github.ref differs between the two events for the same branch, so keying on it
+# alone would put the PR run and the push run in different groups. Runs on main
+# are never cancelled: a cancelled one leaves main unverified.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: 
+            dotnet-version: |
+                9.0.x
+                10.0.x
+      - run: dotnet restore
+      - run: dotnet build --no-restore -warnaserror
+      - run: dotnet test --no-build --verbosity normal
+      - run: dotnet format --verify-no-changes
+      - run: dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln.txt
+      - run: "! grep -q 'has the following vulnerable packages' vuln.txt"
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: az bicep build --file infra/main.bicep --stdout > /dev/null
+      - uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: what-if
+        env:
+          LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
+          EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
+          RESOURCE_GROUP:  ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+        run: |
+          az deployment group what-if \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS"

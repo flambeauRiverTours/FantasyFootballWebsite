@@ -1,0 +1,93 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# never cancel a deploy mid-flight
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    outputs:
+      functionAppName: ${{ steps.deploy.outputs.functionAppName }}
+      functionAppUrl: ${{ steps.deploy.outputs.functionAppUrl }}
+      staticWebAppName: ${{ steps.deploy.outputs.staticWebAppName }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: az bicep build --file infra/main.bicep --stdout > /dev/null
+      - uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - id: deploy
+        env:
+          LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
+          EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
+          BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
+          RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+        run: |
+          az deployment group create \
+            --name deploy-${{ github.run_number }} \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" budgetAlertEmail="$BUDGET_ALERT_EMAIL" \
+            -o json > out.json
+          for k in functionAppName functionAppUrl staticWebAppName; do
+            echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
+          done
+
+  functions:
+    runs-on: ubuntu-latest
+    needs: infra
+    env:
+      RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+      - run: dotnet publish -c Release -o publish src/FantasyLeague.Functions/FantasyLeague.Functions.csproj
+      - uses: anchore/sbom-action@v0
+        with:
+          path: publish
+          artifact-name: sbom-functions.spdx.json
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: publish
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ needs.infra.outputs.functionAppName }}
+          package: publish
+      - name: Excluded owner settings expanded
+        run: |
+          az functionapp config appsettings list -n '${{ needs.infra.outputs.functionAppName }}' -g "$RESOURCE_GROUP" --query "[?starts_with(name,'League__ExcludedOwnerIds')].name" -o tsv | grep -q .
+      # retries cover the cold start on a first deploy
+      - name: Smoke
+        run: |
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 10 '${{ needs.infra.outputs.functionAppUrl }}/api/season' | jq -e '.teams | length > 0'
+
+  web:
+    runs-on: ubuntu-latest
+    needs: infra
+    steps:
+      - run: echo "web deploy pending T32"

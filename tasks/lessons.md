@@ -237,3 +237,17 @@ been read.
 
 **Rule:** Script test responses as data — status plus body — and construct the
 `HttpResponseMessage` inside `SendAsync`.
+
+## A fixture value is a placeholder, even when the real one is to hand
+
+**What happened:** `HostRegistrationTests.cs` bound the live Sleeper league id as
+its test value. It read as perfectly ordinary — it is the value the code will
+actually see — and survived into six commits before a grep for the configured
+ids caught it.
+
+**Rule:** Never put a real id, key or endpoint into a test, even one whose
+exposure seems harmless. If the test constrains the shape (nineteen digits
+here), satisfy the shape with an obviously synthetic value. Gate it in CI by
+matching the configured secrets exactly, rather than by a pattern that a
+placeholder would also trip.
+
