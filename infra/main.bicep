@@ -22,7 +22,7 @@ param staticWebAppLocation string = 'eastus2'
 @secure()
 param leagueId string
 
-@description('Owning user ids excluded from every metric. Empty for a league with no placeholder team.')
+@description('Owning user ids excluded from every metric, comma separated. Empty for a league with no placeholder team.')
 @secure()
 param excludedOwnerIds string = ''
 
@@ -49,6 +49,15 @@ param budgetAlertEmail string = ''
 
 @description('First day of the month the budget starts. Defaults to this month.')
 param budgetStartDate string = utcNow('yyyy-MM-01')
+
+var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
+
+var excludedOwnerSettings = [
+  for (ownerId, index) in excludedOwnerIdList: {
+    name: 'League__ExcludedOwnerIds__${index}'
+    value: ownerId
+  }
+]
 
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}'
 
@@ -169,28 +178,27 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
           'https://${site.properties.defaultHostname}'
         ]
       }
-      appSettings: [
-        {
-          name: 'AzureWebJobsStorage'
-          value: storageConnectionString
-        }
-        {
-          name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
-          value: storageConnectionString
-        }
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: insights.properties.ConnectionString
-        }
-        {
-          name: 'League__CurrentLeagueId'
-          value: leagueId
-        }
-        {
-          name: 'League__ExcludedOwnerIds__0'
-          value: excludedOwnerIds
-        }
-      ]
+      appSettings: concat(
+        [
+          {
+            name: 'AzureWebJobsStorage'
+            value: storageConnectionString
+          }
+          {
+            name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
+            value: storageConnectionString
+          }
+          {
+            name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+            value: insights.properties.ConnectionString
+          }
+          {
+            name: 'League__CurrentLeagueId'
+            value: leagueId
+          }
+        ],
+        excludedOwnerSettings
+      )
     }
   }
 }

@@ -284,6 +284,61 @@ than their roster could have produced, because someone decided so.
 
 ---
 
+## A10 · Excluded owners are a list, carried as one comma-separated secret
+
+A1 excludes owners by user id, and `LeagueOptions.ExcludedOwnerIds` has always
+been an `IList<string>`. The deployment path did not match: `main.bicep` took a
+single `@secure() string` and wrote it straight to
+`League__ExcludedOwnerIds__0`, so a second excluded owner was unreachable
+without editing the template, and an empty value still wrote index 0 as an
+empty string.
+
+**The secret is a comma-separated list.** `EXCLUDED_OWNER_IDS` holds
+`id` or `id,id,id`; whitespace around each entry is trimmed and empty entries
+are dropped, so `a, b,` and `a,b` are the same input. The template expands it:
+
+```bicep
+var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
+
+var excludedOwnerSettings = [
+  for (ownerId, index) in excludedOwnerIdList: {
+    name: 'League__ExcludedOwnerIds__${index}'
+    value: ownerId
+  }
+]
+```
+
+**Why a delimited string rather than an array parameter.** Bicep does support
+`param excludedOwnerIds array`, but `@secure()` applies to `secureString` and
+`secureObject` only — there is no secure array. A GitHub secret is also a
+single opaque string, so an array parameter would mean encoding JSON into the
+secret and `json()`-parsing it in the template, which buys nothing and fails
+noisily on a stray quote.
+
+**Why indexed App Settings rather than one delimited setting.** `League__ExcludedOwnerIds__0`,
+`__1`, `__2` is how .NET's configuration binder reads a collection from
+environment variables; the double underscore becomes `:`. Binding an
+`IList<string>` from a single comma-separated value would need a custom
+converter. The generated form needs no application code at all, which is why
+`LeagueOptions` is unchanged by this amendment.
+
+**The empty case now writes nothing.** A league with no placeholder team
+produces an empty array and no `League__ExcludedOwnerIds__*` settings, rather
+than one setting holding an empty string.
+
+**A typo is reported.** An owner id matching no roster used to be ignored in
+silence, which a longer list makes likelier — the excluded team would simply
+stay in the standings with nothing to explain why.
+`SeasonFunctions.ExcludedRosterIds` now logs a warning naming each unmatched
+id. Two caveats worth knowing: the warning carries a Sleeper user id into
+Application Insights, which A2 treats as a secret — acceptable because that
+telemetry is private to the subscription, and useless without the id in it; and
+it fires on **every request** while the misconfiguration stands, like the
+existing violation and unresolved-player warnings, which matters against the
+0.16 GB/day ingest cap.
+
+---
+
 ## Where the design is now out of date
 
 - **§03 is wrong about team names** — see A6.

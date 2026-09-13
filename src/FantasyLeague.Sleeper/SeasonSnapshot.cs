@@ -40,6 +40,15 @@ namespace FantasyLeague.Sleeper
         decimal Actual);
 
     /// <summary>
+    /// The outcome of resolving configured owner ids against one season.
+    /// </summary>
+    /// <param name="RosterIds">Rosters to leave out of every metric (A1).</param>
+    /// <param name="UnmatchedOwnerIds">Configured ids this season has no roster for.</param>
+    public sealed record ExcludedRosters(
+        IReadOnlySet<int> RosterIds,
+        IReadOnlyList<string> UnmatchedOwnerIds);
+
+    /// <summary>
     /// The two checks the payload is self-verifying against.
     /// </summary>
     public enum InvariantKind

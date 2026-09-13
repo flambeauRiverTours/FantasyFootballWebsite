@@ -99,23 +99,16 @@ namespace FantasyLeague.Functions.Functions
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
         /// <returns>Roster ids to leave out of every metric.</returns>
-        /// <remarks>
-        /// A1 matches on user id, not team name: a rename would otherwise put the
-        /// placeholder team back into the standings and every league-wide average.
-        /// Roster id is only used within this one season, never persisted as identity.
-        /// </remarks>
         private IReadOnlySet<int> ExcludedRosterIds(SeasonSnapshot snapshot)
         {
-            var owners = league.Value.ExcludedOwnerIds;
-            if (owners.Count == 0)
+            var excluded = SeasonPayloadMapper.ResolveExcludedRosters(snapshot, league.Value.ExcludedOwnerIds);
+
+            foreach (var ownerId in excluded.UnmatchedOwnerIds)
             {
-                return new HashSet<int>();
+                logger.LogWarning("Excluded owner {OwnerId} matches no roster in season {Season}; that team is still counted in every metric.", ownerId, snapshot.Season);
             }
 
-            return snapshot.RosterOwnerIds
-                .Where(pair => owners.Contains(pair.Value, StringComparer.Ordinal))
-                .Select(pair => pair.Key)
-                .ToHashSet();
+            return excluded.RosterIds;
         }
 
         /// <summary>

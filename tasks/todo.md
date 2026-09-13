@@ -91,7 +91,7 @@ Deployed and reachable, still no database.
       ETag, 30 s live vs immutable historical, 404 listing available seasons.
 - [x] **T20** Bicep template — 4 h `±`
       SWA, Function App, storage, App Insights, resource group scope.
-- [ ] **T21** GitHub to Entra OIDC — 3 h `±`
+- [x] **T21** GitHub to Entra OIDC — 3 h `±`
       App registration, federated credential, RBAC. No secrets in the repo.
 - [ ] **T22** `ci.yml` — 1.5 h
       Restore, build, test, `dotnet format` check, vite build.

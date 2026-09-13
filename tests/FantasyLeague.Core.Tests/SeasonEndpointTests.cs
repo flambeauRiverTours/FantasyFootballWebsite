@@ -62,16 +62,11 @@ namespace FantasyLeague.Core.Tests
                 [], [],
                 rosters.ToDictionary(r => r.RosterId, r => r.OwnerId));
 
-        /// <summary>
-        /// The endpoint's resolution: configured owner ids to this season's roster ids.
-        /// </summary>
         private static IReadOnlySet<int> Resolve(SeasonSnapshot snapshot, params string[] excludedOwnerIds) =>
-            excludedOwnerIds.Length == 0
-                ? new HashSet<int>()
-                : snapshot.RosterOwnerIds
-                    .Where(pair => excludedOwnerIds.Contains(pair.Value, StringComparer.Ordinal))
-                    .Select(pair => pair.Key)
-                    .ToHashSet();
+            SeasonPayloadMapper.ResolveExcludedRosters(snapshot, excludedOwnerIds).RosterIds;
+
+        private static IReadOnlyList<string> Unmatched(SeasonSnapshot snapshot, params string[] excludedOwnerIds) =>
+            SeasonPayloadMapper.ResolveExcludedRosters(snapshot, excludedOwnerIds).UnmatchedOwnerIds;
 
         [Fact]
         public void An_owner_id_resolves_to_this_seasons_roster()
@@ -140,6 +135,45 @@ namespace FantasyLeague.Core.Tests
                 new Dictionary<int, string>());
 
             Resolve(snapshot, "u9").Should().BeEmpty();
+        }
+
+        [Fact]
+        public void An_owner_id_that_matches_no_roster_is_reported()
+        {
+            // a typo would otherwise leave the team in every metric, silently
+            var snapshot = Snapshot((1, "Real Team", "u1"));
+
+            Unmatched(snapshot, "u9").Should().Equal("u9");
+        }
+
+        [Fact]
+        public void A_matched_owner_id_is_not_reported()
+        {
+            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+
+            Unmatched(snapshot, "u9").Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Only_the_unmatched_id_is_reported_from_a_mixed_list()
+        {
+            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+
+            Unmatched(snapshot, "u9", "u-typo").Should().Equal("u-typo");
+        }
+
+        [Fact]
+        public void A_wrongly_cased_id_is_reported_rather_than_quietly_matched()
+        {
+            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+
+            Unmatched(snapshot, "U9").Should().Equal("U9");
+        }
+
+        [Fact]
+        public void Nothing_is_reported_when_nothing_is_configured()
+        {
+            Unmatched(Snapshot((1, "Real Team", "u1"))).Should().BeEmpty();
         }
 
         [Fact]
