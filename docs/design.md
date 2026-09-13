@@ -1,8 +1,14 @@
 # Ideal Points — Design Document (v6)
 
-> Converted from the published artifact:
+> Originally converted from the published artifact:
 > https://claude.ai/code/artifact/6191a761-1035-4684-947a-1f2fb063c645
-> Updated 2026-09-10 · 11 decisions · 1 risk · 8 open questions
+>
+> **Corrected in place on 2026-09-13 against what was actually built.** This file
+> is now edited directly rather than re-synced; a re-sync would reinstate the
+> errors marked **Corrected** below. The reasoning behind each change is in
+> [`amendments.md`](amendments.md), keyed A1–A12.
+>
+> 11 decisions · 1 risk · 8 open questions, 5 of them now answered.
 
 ---
 
@@ -11,8 +17,9 @@ A live standings board for one Sleeper fantasy league, scoring the season on tot
 - Data source · Sleeper API
 - Stack · .NET 9 · Azure
 - Steady-state cost · $0.00 / mo
-- Sleeper budget · ≤ 2.3 req/min
-- Status · Pre-build
+- Sleeper budget · ≈ 12.2 req/min as built, against a 50/min bucket — see §07
+- Status · **M0–M2 built and deployed.** M3 (persistence) is next
+- League · **six rosters, five of them scoring** — one is excluded (A1)
 
 ## 01 · Scope
 
@@ -75,20 +82,24 @@ Sleeper's read API is unauthenticated and free. Every field this design needs is
 | /v1/league/{id}/users | `metadata.team_name`, `display_name` | 1 h |
 | /v1/league/{id}/rosters | `roster_id` → `owner_id` | 1 h |
 | /v1/league/{id}/matchups/{wk} | `points`, `starters`, `players`, `players_points` | 30 s |
-| /v1/players/nfl | ≈5 MB dump — `fantasy_positions` for the solver | 24 h |
+| /v1/players/nfl | **14.65 MB** dump — `fantasy_positions` for the solver | 24 h |
 
-Team name resolves as `users[].metadata.team_name` falling back to `display_name`; a manager who never set a team name has an empty string, not a missing key.
+Team name resolves as `users[].metadata.team_name` falling back to `display_name`. **Corrected (A6): an unset team name is an absent key, not an empty string** — `metadata` itself may be absent, and treating absence as `""` produced blank rows rather than the fallback.
 
 `scoring_settings` is no longer read. It was needed only to convert raw stat lines into fantasy points, and with projections gone, every point value this site displays comes from Sleeper already scored.
 
-`players/nfl` is still required, and it is the one heavy call — roughly 5 MB. Fetch it once a day on a timer, project it down to `{ playerId → { name, team, fantasyPositions } }`, and cache that. It must never be on a request path.
+`players/nfl` is still required, and it is the one heavy call. **Corrected: it is 14.65 MB across 12,227 players, not ≈5 MB** — measured 2026-09-13. Fetch it once a day on a timer, project it down to `{ playerId → { name, team, fantasyPositions } }`, and cache that. It must never be on a request path.
+
+The projection keeps 11,902 of those players — everything with a non-empty `fantasy_positions` — and discards every other field, giving a 17× saving in bytes by dropping *fields*, not rows. **Corrected: "cache that" was not sufficient.** The map is per-instance memory, and Flex Consumption scales to zero and out to forty, so it is persisted to blob storage and adopted by each cold instance (A12). An in-memory cache alone meant every deployed request returned 500.
 
 #### Two free invariants
 
 With no scoring engine there is nothing to unit-test against ground truth, but the payload is self-checking in two ways worth asserting in production, not just in tests:
 
 - `sum(starters_points) == points` for every roster, within a cent. Catches a misaligned `starters` array and confirms you are reading the payload the way Sleeper writes it.
-- `ideal >= actual` for every team-week, always, with no exceptions. The started lineup is by definition one of the candidate assignments the solver considers, so a violation is a solver bug — most likely a slot eligibility rule. This single assertion catches nearly every way the DP can be wrong.
+- `ideal >= actual` for every team-week. **Corrected (A7, A9): not "always, with no exceptions".** `actual` is `custom_points ?? points`, and a commissioner override can be any value at all, so both invariants compare against Sleeper's own scored `points` instead. Against a scored total the reasoning holds: the started lineup is by definition one of the candidate assignments the solver considers, so a violation is a solver bug — most likely a slot eligibility rule. The visible consequence is that after a generous override the page can show an ideal below the actual, which is correct rather than a bug.
+
+Both invariants are collected and reported, never thrown — as are players the map cannot explain (A8). Dropping an unknown player silently would lower that team's ideal, and `ideal >= actual` cannot see undercounting.
 
 ## 04 · Consistency
 
@@ -128,7 +139,7 @@ It is also less intuitive. "I swing about twenty-five points a week" is a senten
 
 ### Showing σ in a table cell
 
-A bare standard deviation is hard to interpret at a glance even for readers who know what it is. Pair the figure with a small inline range mark — a horizontal rule spanning the team's minimum to maximum weekly score, with a tick at the mean and a shaded band at ±σ, drawn on a scale shared by every row. The number stays for precision; the mark makes twelve rows comparable without reading any of them.
+A bare standard deviation is hard to interpret at a glance even for readers who know what it is. Pair the figure with a small inline range mark — a horizontal rule spanning the team's minimum to maximum weekly score, with a tick at the mean and a shaded band at ±σ, drawn on a scale shared by every row. The number stays for precision; the mark makes every row comparable without reading any of them.
 
 It costs nothing extra: minimum, maximum and mean come from the same weekly array σ is computed over.
 
@@ -194,12 +205,19 @@ Test it with pinned JSON fixtures from two or three real weeks — offline, no n
 
 Chosen: SWA Free for the SPA, Functions Consumption (.NET 9 isolated) for the API and scheduled jobs.
 
+> **Corrected · the plan is Flex Consumption (FC1), not Consumption (Y1).**
+> Y1 could not be provisioned at all — `SubscriptionIsOverQuotaForSku`, current
+> limit for Y1 VMs is zero. FC1 scales to zero the same way, has its own free
+> monthly grant, and the deployed app uses `instanceMemoryMB: 512` with
+> `maximumInstanceCount: 40`, which is the platform minimum. Everything the
+> decision argues for still holds; the SKU name in it does not.
+
 Scheduling still decides it, though less emphatically than in v1. Weeks must be finalized after Monday night and the player dump refreshed daily — Timer triggers, which Functions gives for free and a Container App does not. Consumption also scales to zero without configuration, and SWA Free includes a custom domain with managed TLS, which App Service Free does not.
 
 Cost of the split: CORS configuration and two deploy targets. A linked backend removes the CORS step but needs SWA Standard at $9/month — most of this project's budget for a config convenience.
 
 > **Diagram** (see the published artifact for the rendered SVG)
-> Viewer count never reaches Sleeper. Finalized weeks are served from SQL, and the current week sits behind a 30-second single-flight cache, so one viewer and a thousand viewers generate the same two requests per minute.
+> Viewer count never reaches Sleeper. Finalized weeks are served from SQL, and the current week sits behind a single-flight cache, so one viewer and a thousand viewers generate the same handful of requests per minute. (The cache TTL as built is 5 s, not 30 s — see §07.)
 
 ### D6 — Polling, not websockets
 
@@ -211,16 +229,26 @@ The data cannot change faster than the 30-second server cache, so a push channel
 
 Steady state during a Sunday afternoon with the site under load. The ceiling is not a real constraint once reads are funnelled through the server.
 
-| Call | Cache TTL | Req/min |
-|---|---|---|
-| matchups/{current week} | 30 s | 2.0 |
-| state/nfl | 5 min | 0.2 |
-| users + rosters | 1 h | 0.03 |
-| league/{id} | 24 h | <0.01 |
-| players/nfl (5 MB) | 24 h | <0.01 |
-| weeks 1…n−1 | SQL, permanent | 0 |
-| prior seasons | SQL, immutable | 0 |
-| Peak steady state | ≈ 2.3 |  |
+**Corrected: the TTLs as built differ from the ones designed here**, and the
+headline is 12.2 req/min rather than 2.3. Both columns are shown; the open
+question of which is right is **F4** in the task list.
+
+| Call | TTL designed | TTL built | Req/min built |
+|---|---|---|---|
+| matchups/{current week} | 30 s | **5 s** | 12.0 |
+| state/nfl | 5 min | **1 h** | 0.02 |
+| users + rosters | 1 h | **5 min** | 0.20 |
+| league/{id} | 24 h | 24 h | <0.01 |
+| players/nfl (14.65 MB) | 24 h | 24 h | <0.01 |
+| weeks 1…n−1 | SQL, permanent | not built yet (M3) | — |
+| prior seasons | SQL, immutable | not built yet (M3) | — |
+| Peak steady state | ≈ 2.3 | | **≈ 12.2** |
+
+Still far inside the 50/min bucket, so nothing breaks. Two of the three are worth
+revisiting: matchups at 5 s buys 25 seconds of worst-case staleness for six times
+the traffic when the *client* only polls every 30 s (D6), and state at 1 h saves
+0.18 req/min while making the one value that gates `isFinal` up to an hour stale
+across Tuesday's rollover.
 
 Two mechanisms hold it there, and the second is the one that matters:
 
@@ -249,7 +277,7 @@ WeekScore(LeagueId, Season, Week, RosterId,
 Player   (PlayerId PK, FullName, Team, PositionsJson, UpdatedUtc)
 ```
 
-Four tables, down from five. `PlayerWeek` is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersPointsJson` on the row that needs it. Roughly 12 teams × 18 weeks is 216 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes.
+Four tables, down from five. `PlayerWeek` is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersPointsJson` on the row that needs it. **Corrected: this league has six rosters, five of them scoring (A1)** — so roughly 6 × 18 is 108 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes either way.
 
 **σ is never stored.** It is a function of every finalized week at once, so it changes for every team each time a week finalizes. Storing it would create a second source of truth that goes stale silently — precisely the failure mode that separate table and chart endpoints would have caused in §09. It is computed on read from the weekly array.
 
@@ -348,6 +376,13 @@ Serve `304` on a matching `ETag`. Between the cache and conditional requests, th
 
 ## 10 · Frontend
 
+> **Corrected · this league has five scoring teams, not twelve.** Several
+> legibility arguments in this section and in §11 were written for a twelve-team
+> league. The decisions they reach are still right — hover-to-isolate, one radar
+> at a time, the median mode — but they are less forced than the original text
+> implies. Five distinguishable colours is a far easier palette problem than
+> twelve (A1, and the note under §08).
+
 Vite, TypeScript, React and D3 — with a firm boundary between the last two.
 
 ### D9 — React owns the DOM; D3 is used as a maths library
@@ -368,11 +403,11 @@ D3's scales, path generators and tick logic are the reason to use it and are gen
 
 #### The median mode is worth building
 
-Plotting cumulative points minus the cumulative weekly median changes no ranking — the median sum is an identical constant for every team — but it removes the league-wide trend that dominates the raw chart. Twelve near-parallel ascending lines are unreadable; the same twelve diverging from a zero baseline are legible at a glance. Same data, better chart, about four lines of code.
+Plotting cumulative points minus the cumulative weekly median changes no ranking — the median sum is an identical constant for every team — but it removes the league-wide trend that dominates the raw chart. Five near-parallel ascending lines are hard to read; the same five diverging from a zero baseline are legible at a glance. Same data, better chart, about four lines of code.
 
 #### The table is the primary object
 
-It should be fully readable without interaction: tabular figures, the sort column visually marked, the gap to first place shown, and the inline range mark from §04 giving σ a shape rather than only a value. Hovering a team in the chart should raise it and mute the rest — asking a reader to trace one colour out of twelve is not a design.
+It should be fully readable without interaction: tabular figures, the sort column visually marked, the gap to first place shown, and the inline range mark from §04 giving σ a shape rather than only a value. Hovering a team in the chart should raise it and mute the rest — asking a reader to trace one colour out of a crowd is not a design.
 
 #### Motion, if any
 
@@ -431,7 +466,7 @@ The ratio removes the positional baseline and leaves only the part that varies b
 
 Chosen: the radar shows a single team against the reference circle; a toggle switches the same data to a horizontal diverging bar chart.
 
-Twelve overlaid polygons is unreadable, and even three is difficult — the radar's strength is that a single team has a memorable silhouette, and that strength disappears the moment a second shape crosses it. Allow a second team for a head-to-head, cap it there.
+A dozen overlaid polygons would be unreadable, and even three is difficult — the radar's strength is that a single team has a memorable silhouette, and that strength disappears the moment a second shape crosses it. Allow a second team for a head-to-head, cap it there.
 
 The bar chart is the concession to accuracy. What this data actually is — a signed deviation from a baseline across seven categories — has a canonical form, and it is a diverging bar chart centred on zero, not a radar. Bars are read against a common linear axis, so values are directly comparable and nothing is distorted by area or ordering.
 
@@ -492,13 +527,25 @@ The σ tests are mostly about absence: zero weeks, one week, three weeks, four w
 
 ## 13 · Cost
 
+**Corrected: the Functions row, the ingest cap, and a missing resource.**
+
 | Resource | Tier | Headroom | Monthly |
 |---|---|---|---|
 | Static Web Apps | Free | 100 GB bandwidth, custom domain + TLS | $0.00 |
-| Functions | Consumption | 1M executions, 400k GB-s | $0.00 |
-| Azure SQL | Serverless, free offer | 100k vCore-s, 32 GB | $0.00 |
-| App Insights | Pay-as-you-go | 5 GB/mo free — cap ingest at 1 GB/day | $0.00 |
-| Steady state | $0.00 |  |  |
+| Functions | **Flex Consumption (FC1)** | Free grant; this app uses ~14% of the execution allowance and ~4% of the GB-s | $0.00 |
+| Storage account | Standard_LRS | Required by Functions for runtime state and the deployment container; also holds the 840 KB player map (A12) | $0.00 |
+| Azure SQL | Serverless, free offer | 100k vCore-s, 32 GB — **not provisioned yet (M3)** | $0.00 |
+| Log Analytics + App Insights | Pay-as-you-go | 5 GB/mo free — **cap ingest at 0.16 GB/day, not 1 GB/day** | $0.00 |
+| Steady state | | | $0.00 |
+
+**The 1 GB/day figure in the original was wrong by 6×.** A 5 GB monthly free
+allocation divided across 31 days is 0.16 GB/day; a 1 GB/day cap would permit
+31 GB a month and bill for 26 of them. The deployed workspace is capped at
+`0.16` with 30-day retention.
+
+A budget alert is also deployed, firing on any actual spend at all as well as on
+a forecast breach. It is conditional on `budgetAlertEmail` being supplied — with
+that parameter empty, no budget resource is created and nothing warns you.
 
 Dropping the blob layer takes the bill to a genuine zero. A custom domain adds roughly $12 a year if you want one; the TLS certificate is included.
 
@@ -506,7 +553,18 @@ Two things to actually configure rather than assume: the App Insights daily inge
 
 ## 14 · Open questions
 
-None block starting on `Core`. Q1 and Q2 are answered by one look at the league settings.
+**Five of the eight were settled on 2026-09-10 against the live league** — Q1,
+Q2, Q3, Q7 and Q8. Their answers and consequences are in
+[`amendments.md`](amendments.md); the three still open are Q4, Q5 and Q6, tracked
+in [`tasks/todo.md`](../tasks/todo.md).
+
+- **Q1 answered** — six rosters; eleven startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus eight `BN`. The league ID is a secret (A2).
+- **Q2 answered** — SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3).
+- **Q3 answered** — moot; the league has no `IR` or `TAXI` slots. The default below stands if one appears.
+- **Q7 answered** — 2026 is the first season. A null `previous_league_id` is legitimate, and no `SeasonOverrides` are needed (A4).
+- **Q8 answered** — eight distinct slots, comfortably readable as a radar. No axis merging needed.
+
+The original text of all eight follows, for the reasoning behind the ones still open.
 
 - Q1 · **League ID and `roster_positions`.** Needed to pin solver fixtures. Everything in §05 is shaped by the slot list.
 - Q2 · **Does the league use SUPER_FLEX or IDP slots?** Determines how much of the eligibility map is live code versus dead branches — and IDP means the solver's slot count rises, though nowhere near enough to threaten the DP.
@@ -520,6 +578,11 @@ None block starting on `Core`. Q1 and Q2 are answered by one look at the league 
 ## 15 · Build order
 
 Ordered so the highest-risk, lowest-cost work happens first. The solver is the only place a real bug can hide, and it needs no Azure account to prove.
+
+**Status at 2026-09-13: M0, M1 and M2 are built and deployed.** The ordering held
+— the one genuine bug found in the whole build was in the solver, exactly where
+this section predicts, and it was caught by fuzzing against exhaustive search
+before any cloud account existed. M3 is next.
 
 - M0 · Core, offline — An hour of curl against the real league first — settling Q1 to Q4 and Q7 and capturing fixtures — then the ideal-lineup solver and the σ function. Ship when the solver beats greedy on a constructed flex case, handles a bye-week hole, and σ returns null for every count below four.
 - M1 · Sleeper client — Typed client, token-bucket handler, single-flight cache. Prove it with a console app that prints the real league's standings and asserts both §03 invariants across a whole season — where the assumptions M0 confirmed by eye meet code that runs.

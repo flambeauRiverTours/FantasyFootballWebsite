@@ -3,14 +3,20 @@
 Decisions and answers settled **after** design v6, plus the answers to the open
 questions.
 
-This file exists because [`design.md`](design.md) and
-[`field-manual.md`](field-manual.md) are converted wholesale from published
-artifacts — a re-sync **overwrites them**. Anything recorded only there is lost.
-Anything that must survive goes here.
+**As of 2026-09-13, both [`design.md`](design.md) and
+[`field-manual.md`](field-manual.md) are living documents**, corrected in place
+against what was actually built. Neither is re-synced from its published
+artifact any more, and a re-sync of either would reinstate errors that took real
+debugging to find.
+
+That changes what this file is for. It was the place things went to *survive* a
+sync; it is now the place that holds the **reasoning** — what was decided after
+design v6, what the design got wrong, and why each correction is the right one.
+The corrected documents state the conclusion; this one says how it was reached
+and what it cost to learn.
 
 Amendments are numbered `A`*n* so they never collide with the artifact's own
-`D`/`R`/`Q` numbering. Where an amendment changes a decision in the design, it
-says so and the design's own text is now out of date.
+`D`/`R`/`Q` numbering.
 
 ---
 
@@ -446,24 +452,63 @@ cancellation.
 
 ---
 
-## Where the design is now out of date
+## Corrections applied to the design
 
-- **§03 is wrong about team names** — see A6.
-- **§03's "ideal >= actual, always" no longer holds** once A7's override exists — see A9.
-- **§08, §10, D11 assume twelve teams.** The league has **six rosters, five of
-  them scoring** (A1). §08's "roughly 12 teams × 18 weeks is 216 rows" becomes
-  ~108. More substantively, the legibility arguments soften: five lines on a
-  chart are readable without the hover-to-isolate interaction (§10), and D11's
-  cap of two teams on the radar is more conservative than five teams needs. The
-  decisions are still fine; the reasoning behind them is weaker than written.
+**All of these are already applied** to `design.md`, each marked **Corrected**
+where it appears. Kept here for the reasoning, and because several are mistakes
+that are easy to make again.
+
+- **§03 and §13 understated the player dump by about 3×.** Both quoted ≈5 MB.
+  Measured against the live endpoint on 2026-09-13: **14,654,498 bytes across
+  12,227 players** — which is what `SleeperPlayerDto` and `PlayerRef` had said in
+  their own doc comments all along. The cost conclusion survives (14 MB once a
+  day is still under a penny); the figure matters for **memory and timeout
+  sizing**, which is where a 3× error actually bites.
+- **§03 said "cache that", and caching alone was not enough.** The map is
+  per-instance memory under a plan that scales to zero. See **A12** — this is the
+  one design gap that reached production.
+- **§03 was wrong about team names** — an unset name is an absent key, not an
+  empty string. See **A6**.
+- **§03's "ideal >= actual, always, with no exceptions" does not hold** once a
+  commissioner override exists. Both invariants now compare against Sleeper's
+  scored `points`. See **A7** and **A9**.
+- **§06's D5 chose a Consumption (Y1) plan that cannot be provisioned** — the
+  subscription quota for Y1 VMs is zero. Flex Consumption (FC1) is what exists.
+  Every argument D5 makes still holds; only the SKU name was wrong.
+- **§07's TTLs and its "≤ 2.3 req/min" headline do not match what was built.**
+  Both columns are now shown in the design, and which set is right is still open
+  as **F4** in the task list. This is the one correction that is a genuine open
+  question rather than a settled fact.
+- **§13's cost table was wrong in three ways**: the Functions row named the wrong
+  plan, the storage account was missing entirely, and the App Insights ingest cap
+  of "1 GB/day" permits **6× the free monthly allocation** — 31 GB against 5.
+  The deployed cap is 0.16 GB/day.
+- **§08, §10 and D11 assumed twelve teams.** The league has **six rosters, five
+  of them scoring** (A1). §08's "roughly 12 teams × 18 weeks is 216 rows" becomes
+  ~108. More substantively the legibility arguments soften: five lines are
+  readable without hover-to-isolate, and D11's cap of two teams on the radar is
+  more conservative than five teams needs. The decisions are still right; the
+  reasoning behind them was stronger than the facts warranted.
+- **§14's open questions were five-eighths answered** on 2026-09-10, and **§15's
+  build order is now partly history** — M0–M2 are built. Both sections say so.
 
 ---
 
-## Corrections applied to the converted manual
+## Corrections applied to the manual
 
-These live in `field-manual.md`, which a re-sync overwrites. **Re-apply them
-after any sync**, or fix them upstream in the artifact.
+Kept as a record of what was wrong in the published artifact and why. **All of
+these are already applied** to `field-manual.md`, which is now edited directly —
+there is nothing to re-apply. Several cover M0–M2 tasks whose step-by-step has
+since been compacted away; the reasoning is retained here because the same
+mistakes are easy to repeat.
 
+- **T14** — "returns roughly 5 MB" and the `// ~5 MB` comment are both wrong.
+  The dump measured 14.65 MB over 12,227 players on 2026-09-13. The watch-out
+  beneath it is right, and its "five megabytes" should read fourteen.
+- **T14** — the projection drops fields, not players: 11,902 of 12,227 entries
+  carry `fantasy_positions` and are kept (A3 keeps the map general rather than
+  pruned to one season). "Immediately throw most of it away" describes the byte
+  count, not the row count — the stored map is 840 KB, 5.7% of the dump.
 - **T01** — `dotnet new func --worker-runtime dotnet-isolated` is wrong.
   `--worker-runtime` belongs to `func init` from Core Tools, and is unnecessary:
   the `func` template in `Microsoft.Azure.Functions.Worker.ProjectTemplates` is
