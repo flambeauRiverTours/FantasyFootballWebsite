@@ -324,9 +324,22 @@ WS=$(az monitor log-analytics workspace show -g rg-fantsybosty -n log-idealpoint
 Needed only once T32 gives the `web` job something to deploy. One command, so the
 token never reaches your screen or shell history:
 
+**Run this in Git Bash.** `$( )` is command substitution in bash and literal text
+in `cmd` — run it there and the secret is silently set to the command itself
+rather than its output. The length check below is what makes that loud instead of
+silent, and the value reaches `gh` over stdin rather than through `--body`, which
+removes a layer of quoting.
+
 ```bash
-gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --body "$(az staticwebapp secrets list -n stapp-idealpoints -g rg-fantsybosty --query 'properties.apiKey' -o tsv)"
+TOKEN=$(az staticwebapp secrets list -n stapp-idealpoints -g rg-fantsybosty --query 'properties.apiKey' -o tsv | tr -d '
+') && echo "captured ${#TOKEN} chars" && [ "${#TOKEN}" -ge 100 ] && printf %s "$TOKEN" | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN && echo set
 ```
+
+Expect `captured 119 chars` then `set`. The `tr -d '
+'` matters on Windows:
+`$( )` strips a trailing newline but not a trailing carriage return, and a token
+stored with one fails SWA authentication later with an error that blames the
+token rather than the whitespace.
 
 ### 10 · Cost
 
