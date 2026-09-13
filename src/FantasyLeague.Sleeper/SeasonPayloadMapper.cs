@@ -12,8 +12,8 @@ namespace FantasyLeague.Sleeper
     /// </summary>
     /// <remarks>
     /// A pure function of its arguments, so it can be tested without a Functions
-    /// host. The endpoint supplies the clock and the exclusion set rather than
-    /// this reaching for either.
+    /// host. The endpoint supplies the clock and the configured owner ids rather
+    /// than this reaching for either.
     /// </remarks>
     public static class SeasonPayloadMapper
     {
@@ -49,6 +49,27 @@ namespace FantasyLeague.Sleeper
                 // M6 fills this; an empty object beats omitting the key
                 new Dictionary<string, decimal>(),
                 teams);
+        }
+
+        /// <summary>
+        /// Resolves configured owner ids to this season's roster ids.
+        /// </summary>
+        /// <param name="snapshot">The assembled season.</param>
+        /// <param name="ownerIds">The configured owner ids. Empty excludes nobody.</param>
+        /// <returns>The rosters to exclude, and every owner id no roster matched.</returns>
+        public static ExcludedRosters ResolveExcludedRosters(SeasonSnapshot snapshot, IEnumerable<string> ownerIds)
+        {
+            var owners = ownerIds as IReadOnlyCollection<string> ?? [.. ownerIds];
+            if (owners.Count == 0)
+            {
+                return new ExcludedRosters(new HashSet<int>(), []);
+            }
+
+            var matched = snapshot.RosterOwnerIds.Where(pair => owners.Contains(pair.Value, StringComparer.Ordinal)).ToList();
+
+            return new ExcludedRosters(
+                matched.Select(pair => pair.Key).ToHashSet(),
+                [.. owners.Except(matched.Select(pair => pair.Value), StringComparer.Ordinal)]);
         }
 
         /// <summary>
