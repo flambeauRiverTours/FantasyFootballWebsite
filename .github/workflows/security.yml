@@ -24,7 +24,7 @@ jobs:
             9.0.x
             10.0.x
 
-      - run: dotnet restore the
+      - run: dotnet restore
       - name: Vulnerable packages
         run: |
           dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
@@ -91,7 +91,7 @@ jobs:
           az bicep build --file infra/main.bicep --outfile arm/main.json
 
       - name: Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
