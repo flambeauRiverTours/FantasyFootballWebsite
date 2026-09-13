@@ -46,7 +46,9 @@ namespace FantasyLeague.Sleeper
         /// <exception cref="InvalidOperationException">The player map has never been refreshed.</exception>
         public async Task<SeasonSnapshot> BuildAsync(string leagueId, CancellationToken cancellationToken)
         {
-            // the map starts empty; without this every player comes back unresolved (A8)
+            await players.EnsureCurrentAsync(cancellationToken);
+
+            // the map starts empty; without this every player comes back unresolved
             if (players.LastRefreshedUtc is null)
             {
                 throw new InvalidOperationException("The player map has not been refreshed.");

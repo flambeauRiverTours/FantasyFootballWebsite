@@ -394,6 +394,58 @@ decisions ever put anything but runtime state in that account.
 
 ---
 
+## A12 · The player map is stored, because instance memory is not storage
+
+The first deployed request returned 500, six times over:
+
+```
+System.InvalidOperationException: The player map has not been refreshed.
+   at FantasyLeague.Sleeper.SeasonService.BuildAsync
+```
+
+Nothing in the Functions host called `RefreshAsync`. The console harness called
+it explicitly on line 29 of its `Program.cs`, which is why every local run
+worked and the deployed one never could.
+
+**The fix is not a startup hook.** `PlayerMapRefresher` held the map in a
+`volatile` field — per instance, in memory. Flex Consumption scales to zero and
+out to forty, so a startup hook or a timer trigger populates the instance that
+ran it and no other. `HybridCache` does not help either: with no
+`IDistributedCache` registered it is L1-only, so it is per-instance too.
+
+And the obvious workaround is the one T14 forbids in as many words: *"This call
+must never sit on a request path. A cold Function serving its first request
+should read the slim map from storage, not go and fetch five megabytes while a
+viewer waits."* The storage half was designed and never built.
+
+**What exists now:**
+
+- `IPlayerMapStore`, with a blob implementation over the storage account the
+  Function App already has, and a null implementation for hosts with no
+  connection string. The console runs on the null one and fetches every run,
+  exactly as before.
+- `IPlayerMapRefresher.EnsureCurrentAsync` — safe on a request path. It adopts
+  a stored map inside `PlayerMapOptions.MaxAge` (24 h), and only falls back to
+  the dump when the store is empty or stale. `RefreshAsync` still always
+  refetches; that is what the timer calls.
+- A `SemaphoreSlim` so a cold-start stampede fetches once, not once per caller.
+- `RefreshPlayerMap`, a daily timer trigger, deliberately **not**
+  `RunOnStartup` — that would refetch on every cold instance, which is the cost
+  the store exists to remove.
+- `SeasonService.BuildAsync` calls `EnsureCurrentAsync` before its A8 guard, so
+  the guard now means "the store and Sleeper both failed" rather than "nobody
+  called the refresher".
+
+**Store failures are warnings, never throws.** An unreachable store — no
+Azurite locally, a transport fault in Azure — makes a request slower, not
+failed. The catch is deliberately broad for that reason, excluding only
+cancellation.
+
+**No bicep change.** The container is created on demand, and
+`AzureWebJobsStorage` is already an App Setting.
+
+---
+
 ## Where the design is now out of date
 
 - **§03 is wrong about team names** — see A6.

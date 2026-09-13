@@ -1,9 +1,12 @@
 ﻿using System.Net;
 using System.Threading.RateLimiting;
+using Azure.Storage.Blobs;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Sleeper
@@ -48,6 +51,13 @@ namespace FantasyLeague.Sleeper
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
+            // bound through the provider rather than BindConfiguration: a bare
+            // ServiceCollection has no IConfiguration, and every default here is
+            // usable without one
+            services.AddOptions<PlayerMapOptions>()
+                .Configure<IServiceProvider>((options, provider) =>
+                    provider.GetService<IConfiguration>()?.GetSection("PlayerMap").Bind(options));
+
             services.TryAddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
                 new TokenBucketRateLimiterOptions
                 {
@@ -83,6 +93,25 @@ namespace FantasyLeague.Sleeper
             //Add the hybrid cache to the service collection, so that it can be used by the SleeperClient and other services.
             services.AddHybridCache();
             services.TryAddTransient<SleeperReaderCache>();
+
+            // AzureWebJobsStorage is already present wherever a Functions host runs;
+            // with no connection string at all the map simply is not persisted
+            services.TryAddSingleton<IPlayerMapStore>(provider =>
+            {
+                var playerMap = provider.GetRequiredService<IOptions<PlayerMapOptions>>().Value;
+                var connectionString = playerMap.ConnectionString
+                    ?? provider.GetService<IConfiguration>()?["AzureWebJobsStorage"];
+
+                if (string.IsNullOrWhiteSpace(connectionString))
+                {
+                    return new NullPlayerMapStore();
+                }
+
+                return new BlobPlayerMapStore(
+                    new BlobServiceClient(connectionString).GetBlobContainerClient(playerMap.ContainerName),
+                    playerMap.BlobName,
+                    provider.GetRequiredService<ILogger<BlobPlayerMapStore>>());
+            });
 
             // singleton: the map it holds is shared state
             services.TryAddSingleton<IPlayerMapRefresher, PlayerMapRefresher>();
