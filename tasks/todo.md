@@ -78,13 +78,13 @@ Finalized weeks become permanent; history becomes reachable. Two tasks here —
 the managed-identity connection and the migration step — are fiddlier than their
 hours suggest.
 
-- [ ] **T25** EF Core model — 3 h
+- [x] **T25** EF Core model — 3 h
       Context, four entities, initial migration. `HasPrecision` on every decimal.
-- [ ] **T26** Azure SQL in bicep — 3 h `±`
+- [x] **T26** Azure SQL in bicep — 3 h `±`
       Free-tier serverless, pause-on-limit, managed-identity connection with no password.
-- [ ] **T27** Read path — 2 h
+- [x] **T27** Read path — 2 h
       Hydrate finalized weeks on cold start; SQL off the hot path.
-- [ ] **T28** Finalize timer — 2 h
+- [x] **T28** Finalize timer — 2 h
       Tuesday morning: freeze the completed week, recompute sigma, drop the cached season.
 - [ ] **T29** Season chain walk — 2 h
       Follow `previous_league_id` back, upsert a `League` row per hop. Not exercised until the 2027 rollover (A4).

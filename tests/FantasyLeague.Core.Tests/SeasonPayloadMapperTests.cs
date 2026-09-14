@@ -10,7 +10,7 @@ namespace FantasyLeague.Core.Tests
 
         private static TeamSeason Team(int rosterId, string name, params (decimal Actual, decimal Ideal, bool IsFinal)[] weeks) =>
             new(rosterId, name,
-                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], w.IsFinal))]);
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal))]);
 
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,

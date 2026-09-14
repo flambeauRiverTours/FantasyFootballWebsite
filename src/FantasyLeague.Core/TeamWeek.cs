@@ -9,11 +9,12 @@
     /// <param name="Ideal">The ideal points scored by the team.</param>
     /// <param name="Starters">The list of players who started the week.</param>
     /// <param name="IdealLineup">The ideal lineup for the week.</param>
-    /// <param name="IsFinal">Indicates whether the week's results are final.</param>
+    /// <param name="Players">Every player rostered that week, with the points they scored.</param>
     public sealed record TeamWeek(
     int RosterId, int Week,
     decimal Actual, decimal Ideal,
     IReadOnlyList<PlayerId> Starters,
     IReadOnlyList<PlayerId> IdealLineup,
+    IReadOnlyList<RosteredPlayer> Players,
     bool IsFinal);
 }
