@@ -516,6 +516,43 @@ near-constant and close to useless as a leading key.
 
 ---
 
+## A15 · Two Microsoft natives are exempt from the licence allowlist
+
+2026-09-14. Adding EF Core pulled two packages into the graph that carry
+**proprietary Microsoft Software License Terms** as a licence *file* rather than
+an SPDX expression:
+
+| Package | Reached via |
+|---|---|
+| `Microsoft.Data.SqlClient.SNI.runtime` | `Microsoft.Data.SqlClient` |
+| `Microsoft.Identity.Client.NativeInterop` | `Azure.Identity` → `Microsoft.Identity.Client.Broker` |
+
+`nuget-license` reports the filename (`LICENSE.txt`, `LICENSE`) as the licence,
+and their `licenseUrl` is NuGet's `aka.ms/deprecateLicenseUrl` placeholder, so
+neither the allowlist nor the URL mapping can resolve them. **The gate was
+right**: these are not MIT, Apache-2.0 or BSD-3-Clause, and it caught them the
+first time they appeared.
+
+**Why they are allowed anyway.** Both are Microsoft first-party, both arrive
+transitively as a consequence of connecting to Azure SQL with a managed identity
+(T26), and neither can be removed without giving that up. Their terms permit use
+and redistribution with an application, which is the only thing this project
+does with them. Neither is redistributed by the repository itself.
+
+**Both are also Windows-only in effect.** `SNI.runtime` is the native SQL Server
+Network Interface library used on Windows, and `NativeInterop` backs the Windows
+broker authentication path. The Function App runs Linux, so neither is loaded at
+runtime there — they are in the graph, not on the hot path.
+
+**Recorded as an ignore, not a widened allowlist.** Adding `LICENSE.txt` to the
+allowed set would admit *any* package that ships a licence file, whatever it
+says, which would gut the gate. The exception names the two packages and no
+others. It ignores by **package name rather than version**, so a routine bump
+does not silently re-break CI — and a genuinely new file-licensed package still
+fails, which is the behaviour worth keeping.
+
+---
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

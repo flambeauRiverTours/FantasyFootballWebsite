@@ -244,6 +244,7 @@ Listed here only so their implementation state is visible in one place.
 | **A12** | The player map is stored in blob, because instance memory is not storage | done |
 | **A13** | No commissioner overrides; `WeekScore` stores the actual only | decided — T25 |
 | **A14** | The stored key leads on `Season`, not `LeagueId` | decided — T25 |
+| **A15** | Two Microsoft natives exempt from the licence allowlist | done |
 
 ---
 
