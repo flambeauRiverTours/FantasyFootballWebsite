@@ -34,12 +34,16 @@ jobs:
           EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
           BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
           RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+          SQL_ADMIN_ID: ${{ secrets.AZ_SQL_ADMIN_OBJECT_ID }}
+          SQL_ADMIN_NAME: ${{ secrets.AZ_SQL_DB_ADMIN_NAME }}
         run: |
           az deployment group create \
             --name deploy-${{ github.run_number }} \
             --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
-            --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" budgetAlertEmail="$BUDGET_ALERT_EMAIL" \
+            --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
+            budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
+            sqlAdminLogin="$SQL_ADMIN_ANME" \
             -o json > out.json
           for k in functionAppName functionAppUrl staticWebAppName; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
