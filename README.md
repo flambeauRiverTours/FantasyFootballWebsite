@@ -12,7 +12,7 @@ no head-to-head views.
 | | |
 |---|---|
 | Data source | Sleeper read API (unauthenticated, free) |
-| Stack | .NET 9 · Azure Functions · Azure SQL · Vite/React/TypeScript/D3 |
+| Stack | .NET 10 · Azure Functions · Azure SQL · Vite/React/TypeScript/D3 |
 | Hosting | Static Web Apps (Free) + Functions (Consumption) |
 | Steady-state cost | $0.00 / month |
 | Sleeper request budget | ≤ 2.3 req/min regardless of viewer count |
