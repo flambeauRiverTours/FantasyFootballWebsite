@@ -331,11 +331,13 @@ silent, and the value reaches `gh` over stdin rather than through `--body`, whic
 removes a layer of quoting.
 
 ```bash
-TOKEN=$(az staticwebapp secrets list -n stapp-idealpoints -g rg-fantsybosty --query 'properties.apiKey' -o tsv | tr -d '
+TOKEN=$(az staticwebapp secrets list -n stapp-idealpoints -g rg-fantsybosty --query 'properties.apiKey' -o tsv | tr -d '
+
 ') && echo "captured ${#TOKEN} chars" && [ "${#TOKEN}" -ge 100 ] && printf %s "$TOKEN" | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN && echo set
 ```
 
-Expect `captured 119 chars` then `set`. The `tr -d '
+Expect `captured 119 chars` then `set`. The `tr -d '
+
 '` matters on Windows:
 `$( )` strips a trailing newline but not a trailing carriage return, and a token
 stored with one fails SWA authentication later with an error that blames the
