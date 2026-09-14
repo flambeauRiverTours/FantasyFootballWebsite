@@ -13,7 +13,7 @@ namespace FantasyLeague.Core.Tests
             params (int RosterId, (int Week, decimal Actual, decimal Ideal, bool IsFinal)[] Weeks)[] teams) =>
             new(season, currentWeek, finalThroughWeek, Slot.Parse(["QB"]),
                 [.. teams.Select(t => new TeamSeason(t.RosterId, $"Team {t.RosterId}",
-                    [.. t.Weeks.Select(w => new TeamWeek(t.RosterId, w.Week, w.Actual, w.Ideal, [], [], w.IsFinal))]))],
+                    [.. t.Weeks.Select(w => new TeamWeek(t.RosterId, w.Week, w.Actual, w.Ideal, [], [], [], w.IsFinal))]))],
                 [], [], new Dictionary<int, string>());
 
         private static SeasonSnapshot OneTeam(decimal actual = 100m, decimal ideal = 120m, bool isFinal = true) =>
@@ -151,12 +151,12 @@ namespace FantasyLeague.Core.Tests
         {
             var before = SeasonPayloadMapper.ComputeETag(
                 new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
-                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], false)])],
+                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], false)])],
                     [], [], new Dictionary<int, string>()));
 
             var after = SeasonPayloadMapper.ComputeETag(
                 new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
-                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 17m, 20m, [], [], false)])],
+                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 17m, 20m, [], [], [], false)])],
                     [], [], new Dictionary<int, string>()));
 
             SeasonPayloadMapper.MatchesETag(new StringValues(before), after)

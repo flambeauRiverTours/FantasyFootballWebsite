@@ -181,8 +181,8 @@ namespace FantasyLeague.Core.Tests
         {
             var snapshot = new SeasonSnapshot(2026, 2, 1, Slot.Parse(["QB"]),
                 [
-                    new TeamSeason(1, "Real Team", [new TeamWeek(1, 1, 30m, 30m, [], [], true)]),
-                    new TeamSeason(9, "POON SQUAD", [new TeamWeek(9, 1, 0m, 0m, [], [], true)]),
+                    new TeamSeason(1, "Real Team", [new TeamWeek(1, 1, 30m, 30m, [], [], [], true)]),
+                    new TeamSeason(9, "POON SQUAD", [new TeamWeek(9, 1, 0m, 0m, [], [], [], true)]),
                 ],
                 [], [],
                 new Dictionary<int, string> { [1] = "u1", [9] = "u9" });

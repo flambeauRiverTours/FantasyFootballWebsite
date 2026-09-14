@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Threading.RateLimiting;
 using Azure.Storage.Blobs;
+using FantasyLeague.Core;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -112,6 +113,9 @@ namespace FantasyLeague.Sleeper
                     playerMap.BlobName,
                     provider.GetRequiredService<ILogger<BlobPlayerMapStore>>());
             });
+
+            //TryAdd, so a host with a database registers the SQL adapter instead and the console keeps rebuilding from Sleeper
+            services.TryAddSingleton<IFinalizedWeekStore, NullFinalizedWeekStore>();
 
             // singleton: the map it holds is shared state
             services.TryAddSingleton<IPlayerMapRefresher, PlayerMapRefresher>();

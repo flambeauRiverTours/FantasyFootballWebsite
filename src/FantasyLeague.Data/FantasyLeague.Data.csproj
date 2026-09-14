@@ -5,5 +5,14 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.10.0" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FantasyLeague.Core\FantasyLeague.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FantasyLeague.Core.Tests" />
+  </ItemGroup>
+
 </Project>
