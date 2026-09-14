@@ -473,6 +473,86 @@ cancellation.
 
 ---
 
+## A13 · The league does not use commissioner overrides, and only the actual is stored
+
+Settled 2026-09-14. `custom_points` is a scoring override the commissioner can
+set on any roster's week. **This league treats using it as cheating**, so it will
+not be set.
+
+**What that changes: nothing in the reading code.** `SleeperMapper.ToRosterWeek`
+still maps `custom_points ?? points`, `RosterWeek` still carries both, and both
+invariants still compare against `points` (A7, A9). A policy that something will
+not happen is not a guarantee that it cannot — the payload can still carry the
+field, and if it ever does, the existing invariant check reports it as a
+violation rather than absorbing it silently. Removing that machinery would trade
+a working tripwire for a saved column.
+
+**What it does change: the schema.** `WeekScore` stores `ActualPts` and not
+Sleeper's raw `points` as a separate column, matching §08 as written. With no
+overrides in play the two values are identical, so a second column would hold a
+duplicate of the first in every row this league will ever produce.
+
+**The cost, stated plainly.** Invariants can be checked when a week is assembled
+but **not re-checked from stored rows afterwards**. If an override ever did
+appear, the violation would be logged at the time and the stored row would carry
+the overridden figure with no record of what Sleeper actually scored. That is an
+acceptable trade for a league that has decided not to use the feature; it would
+not be for one that does.
+
+---
+
+## A14 · The stored key leads on Season
+
+Settled 2026-09-14. §08 specified `PK (LeagueId, Season, Week, RosterId)`; the
+implementation uses `PK (Season, LeagueId, RosterId, Week)` and the design has
+been corrected to match.
+
+A composite primary key is the clustered index, so its leading column decides
+what can be sought rather than scanned. Every read this site performs is scoped
+to one season: T27 hydrates with `WHERE Season = @s AND IsFinal`, and the API's
+only parameter is a year. `LeagueId` leads correctly for a multi-league service
+— this one serves exactly one league per year, which makes that column
+near-constant and close to useless as a leading key.
+
+---
+
+## A15 · Two Microsoft natives are exempt from the licence allowlist
+
+2026-09-14. Adding EF Core pulled two packages into the graph that carry
+**proprietary Microsoft Software License Terms** as a licence *file* rather than
+an SPDX expression:
+
+| Package | Reached via |
+|---|---|
+| `Microsoft.Data.SqlClient.SNI.runtime` | `Microsoft.Data.SqlClient` |
+| `Microsoft.Identity.Client.NativeInterop` | `Azure.Identity` → `Microsoft.Identity.Client.Broker` |
+
+`nuget-license` reports the filename (`LICENSE.txt`, `LICENSE`) as the licence,
+and their `licenseUrl` is NuGet's `aka.ms/deprecateLicenseUrl` placeholder, so
+neither the allowlist nor the URL mapping can resolve them. **The gate was
+right**: these are not MIT, Apache-2.0 or BSD-3-Clause, and it caught them the
+first time they appeared.
+
+**Why they are allowed anyway.** Both are Microsoft first-party, both arrive
+transitively as a consequence of connecting to Azure SQL with a managed identity
+(T26), and neither can be removed without giving that up. Their terms permit use
+and redistribution with an application, which is the only thing this project
+does with them. Neither is redistributed by the repository itself.
+
+**Both are also Windows-only in effect.** `SNI.runtime` is the native SQL Server
+Network Interface library used on Windows, and `NativeInterop` backs the Windows
+broker authentication path. The Function App runs Linux, so neither is loaded at
+runtime there — they are in the graph, not on the hot path.
+
+**Recorded as an ignore, not a widened allowlist.** Adding `LICENSE.txt` to the
+allowed set would admit *any* package that ships a licence file, whatever it
+says, which would gut the gate. The exception names the two packages and no
+others. It ignores by **package name rather than version**, so a routine bump
+does not silently re-break CI — and a genuinely new file-licensed package still
+fails, which is the behaviour worth keeping.
+
+---
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**
