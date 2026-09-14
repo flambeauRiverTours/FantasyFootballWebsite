@@ -183,7 +183,7 @@ namespace FantasyLeague.Core.Tests
     {
         private static TeamWeek Week(int week, decimal actual, bool isFinal) =>
             new(RosterId: 1, Week: week, Actual: actual, Ideal: actual,
-                Starters: [], IdealLineup: [], IsFinal: isFinal);
+                Starters: [], IdealLineup: [], Players: [], IsFinal: isFinal);
 
         [Fact]
         public void An_unfinished_week_is_excluded_not_zeroed()

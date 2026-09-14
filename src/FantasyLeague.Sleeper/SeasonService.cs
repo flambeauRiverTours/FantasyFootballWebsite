@@ -24,14 +24,10 @@ namespace FantasyLeague.Sleeper
     /// Assembles a whole season: matchups joined to the player map, solved, and
     /// grouped per roster.
     /// </summary>
-    /// <remarks>
-    /// Takes the league as an argument rather than reading configuration. D8's
-    /// chain walk builds prior seasons from different league ids, and the console
-    /// harness is handed one on the command line; only the edges read config.
-    /// </remarks>
     internal sealed class SeasonService(
         SleeperReaderCache reader,
         IPlayerMapRefresher players,
+        IFinalizedWeekStore stored,
         ILogger<SeasonService> logger) : ISeasonService
     {
         /// <summary>Float drift tolerance for the starters-sum invariant.</summary>
@@ -63,41 +59,35 @@ namespace FantasyLeague.Sleeper
             var users = await reader.GetUsersAsync(leagueId, cancellationToken);
             var rosters = await reader.GetRostersAsync(leagueId, cancellationToken);
             var names = SleeperMapper.ToTeamNames(users!, rosters!);
-            var owners = rosters!
-                .Where(r => r!.OwnerId is not null)
-                .ToDictionary(r => r!.RosterId, r => r!.OwnerId!);
+            var owners = rosters!.Where(r => r!.OwnerId is not null).ToDictionary(r => r!.RosterId, r => r!.OwnerId!);
             var violations = new List<InvariantViolation>();
             var weeks = new List<TeamWeek>();
             var unresolved = new List<string>();
+            var storedWeeks = await stored.ReadAsync(leagueId, state!.Season, cancellationToken);
+            var storedByWeek = storedWeeks.ToLookup(w => w.Week);
             for (int week = 1; week <= state!.Week; week++)
             {
                 var isFinal = IsFinal(week, state!.Week);
+
+                if (isFinal && storedByWeek.Contains(week))
+                {
+                    weeks.AddRange(storedByWeek[week]);
+                    continue;
+                }
+
                 var (weekTeamWeeks, weekUnresolved, weekViolations) = await BuildWeekAsync(leagueId, week, slots, isFinal, cancellationToken);
                 weeks.AddRange(weekTeamWeeks);
                 unresolved.AddRange(weekUnresolved);
                 violations.AddRange(weekViolations);
             }
             //group teams by week and rosterId, then sort by rosterId and week, then build TeamSeason objects
-            var teams = weeks
-                .GroupBy(w => w.RosterId)
-                .Select(g => new TeamSeason(
-                    g.Key,
-                    names.TryGetValue(g.Key, out var name) ? name : $"Roster {g.Key}",
-                    g.OrderBy(w => w.Week).ToList()))
+            var teams = weeks.GroupBy(w => w.RosterId).Select(g => new TeamSeason(g.Key, names.TryGetValue(g.Key, out var name) ? name : $"Roster {g.Key}", g.OrderBy(w => w.Week).ToList()))
                 .OrderBy(t => t.RosterId)
                 .ToList();
 
             logger.LogInformation("Finished building season snapshot in {ElapsedMilliseconds}ms.", stopwatch.ElapsedMilliseconds);
 
-            return new SeasonSnapshot(
-                state.Season,
-                state.Week,
-                Math.Max(0, state.Week - 1),
-                slots,
-                teams,
-                unresolved.Distinct().ToList(),
-                violations,
-                owners);
+            return new SeasonSnapshot(state.Season, state.Week, Math.Max(0, state.Week - 1), slots, teams, unresolved.Distinct().ToList(), violations, owners);
         }
 
         /// <summary>
@@ -125,7 +115,7 @@ namespace FantasyLeague.Sleeper
             {
                 var mapped = SleeperMapper.ToRosterWeek(matchup!, players.PlayerMap);
                 (var idealPoints, var idealRoster) = IdealLineupSolver.Solve(mapped.Players, slots);
-                teamWeeks.Add(new TeamWeek(mapped.RosterId, week, mapped.Actual, idealPoints, mapped.Starters, idealRoster, isFinal));
+                teamWeeks.Add(new TeamWeek(mapped.RosterId, week, mapped.Actual, idealPoints, mapped.Starters, idealRoster, mapped.Players, isFinal));
                 unresolved.AddRange(mapped.UnresolvedPlayerIds);
                 violations.AddRange(Check(mapped, idealPoints, week));
             }
