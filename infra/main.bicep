@@ -53,6 +53,15 @@ param budgetAlertEmail string = ''
 @description('First day of the month the budget starts. Defaults to this month.')
 param budgetStartDate string = utcNow('yyyy-MM-01')
 
+@description('Region for the SQL server. Azure SQL General Purpose provisioning is restricted per subscription per region; this defaults to a region verified open on this subscription, independent of the resource group location.')
+@allowed([
+  'centralus'
+  'eastasia'
+  'westeurope'
+  'westus2'
+])
+param sqlLocation string = 'westus2'
+
 @description('Object id of the Entra principal that administers the SQL server. Empty skips the SQL resources entirely.')
 param sqlAdminObjectId string = ''
 
@@ -267,9 +276,9 @@ var deploySql = !empty(sqlAdminObjectId)
 var sqlName = 'sql-${namePrefix}'
 var sqlDatabaseName = 'idealpoints'
 
-resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = {
-  name: 'sqlName'
-  location: location
+resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = if (deploySql) {
+  name: sqlName
+  location: sqlLocation
   properties: {
     minimalTlsVersion: '1.2'
     publicNetworkAccess: 'Enabled'
@@ -295,7 +304,7 @@ resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = {
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2024-05-01-preview' = if (deploySql) {
   parent: sqlServer
   name: sqlDatabaseName
-  location: location
+  location: sqlLocation
   sku: {
     name: 'GP_S_Gen5_2'
     tier: 'GeneralPurpose'
