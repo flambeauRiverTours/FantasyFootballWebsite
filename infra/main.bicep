@@ -53,6 +53,15 @@ param budgetAlertEmail string = ''
 @description('First day of the month the budget starts. Defaults to this month.')
 param budgetStartDate string = utcNow('yyyy-MM-01')
 
+@description('Object id of the Entra principal that administers the SQL server. Empty skips the SQL resources entirely.')
+param sqlAdminObjectId string = ''
+
+@description('Display name of that principal, shown in the portal.')
+param sqlAdminLogin string = ''
+
+@description('Minutes of inactivity before the database pauses. Required on the free offer; 60 is the minimum.')
+param sqlAutoPauseDelayMinutes int = 60
+
 var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
 
 var excludedOwnerSettings = [
@@ -62,6 +71,13 @@ var excludedOwnerSettings = [
   }
 ]
 
+// no secret in it: Entra auth means there is no password to protect
+var sqlConnectionSettings = deploySql ? [
+  {
+    name: 'ConnectionStrings__FantasyLeague'
+    value: 'Server=tcp:${sqlName}${environment().suffixes.sqlServerHostname},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;'
+  }
+] : []
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}'
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -208,7 +224,8 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
             value: leagueId
           }
         ],
-        excludedOwnerSettings
+        excludedOwnerSettings,
+        sqlConnectionSettings
       )
     }
   }
@@ -246,6 +263,56 @@ resource budget 'Microsoft.Consumption/budgets@2023-05-01' = if (!empty(budgetAl
   }
 }
 
+var deploySql = !empty(sqlAdminObjectId)
+var sqlName = 'sql-${namePrefix}'
+var sqlDatabaseName = 'idealpoints'
+
+resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = {
+  name: 'sqlName'
+  location: location
+  properties: {
+    minimalTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled'
+    // A2: no password anywhere. Entra-only means there is no SQL login to leak.
+    administrators: {
+      administratorType: 'ActiveDirectory'
+      principalType: 'User'
+      login: sqlAdminLogin
+      sid: sqlAdminObjectId
+      tenantId: tenant().tenantId
+      azureADOnlyAuthentication: true
+    }
+  }
+  resource allowAzure 'firewallRules' = {
+    name: 'AllowAllWindowsAzureIps'
+    properties: {
+      startIpAddress: '0.0.0.0'
+      endIpAddress: '0.0.0.0'
+    }
+  }
+}
+
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2024-05-01-preview' = if (deploySql) {
+  parent: sqlServer
+  name: sqlDatabaseName
+  location: location
+  sku: {
+    name: 'GP_S_Gen5_2'
+    tier: 'GeneralPurpose'
+    family: 'Gen5'
+    capacity: 2
+  }
+  properties: {
+    useFreeLimit: true
+    freeLimitExhaustionBehavior: 'AutoPause'
+    autoPauseDelay: sqlAutoPauseDelayMinutes
+    minCapacity: json('0.5')
+    maxSizeBytes: 34359738368
+    zoneRedundant: false
+    requestedBackupStorageRedundancy: 'Local'
+  }
+}
+
 @description('Name of the Function App, for the deploy workflow.')
 output functionAppName string = functions.name
 
@@ -260,3 +327,12 @@ output staticWebAppName string = site.name
 
 @description('Public address of the site.')
 output staticWebAppUrl string = 'https://${site.properties.defaultHostname}'
+
+@description('Fully qualified name of the SQL server, or empty when SQL is not deployed.')
+output sqlServerFqdn string = sqlServer.?properties.fullyQualifiedDomainName ?? ''
+
+@description('Name of the SQL server, for the migration step in T31.')
+output sqlServerName string = deploySql ? sqlName : ''
+
+@description('Database name, for T31.')
+output sqlDatabaseName string = deploySql ? sqlDatabaseName : ''
