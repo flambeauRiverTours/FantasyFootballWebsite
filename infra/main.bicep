@@ -285,7 +285,6 @@ resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = if (deploySql) {
     // A2: no password anywhere. Entra-only means there is no SQL login to leak.
     administrators: {
       administratorType: 'ActiveDirectory'
-      principalType: 'User'
       login: sqlAdminLogin
       sid: sqlAdminObjectId
       tenantId: tenant().tenantId
