@@ -36,10 +36,15 @@ jobs:
           dotnet list package --deprecated 2>&1 | tee deprecated.txt
           ! grep -q 'has the following deprecated packages' deprecated.txt
 
+      # Two Microsoft first-party natives reach us transitively through
+      # Microsoft.Data.SqlClient and Azure.Identity, and both carry proprietary
+      # Microsoft Software License Terms as a licence file rather than an SPDX
+      # expression, so there is nothing to add to the allowed set. Reasoning is
+      # in A15. Ignoring by name, not version, so a bump does not re-break this.
       - name: Licences
         run: |
           dotnet tool install --global nuget-license
-          nuget-license -i FantasyLeague.slnx -t -a 'MIT;Apache-2.0;BSD-3-Clause' -mapping .github/license-url-mappings.json -o JsonPretty > licenses.json
+          nuget-license -i FantasyLeague.slnx -t -a 'MIT;Apache-2.0;BSD-3-Clause' -mapping .github/license-url-mappings.json -ignore 'Microsoft.Data.SqlClient.SNI.runtime;Microsoft.Identity.Client.NativeInterop' -o JsonPretty > licenses.json
 
       - uses: actions/upload-artifact@v7
         if: always()
