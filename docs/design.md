@@ -15,7 +15,7 @@
 A live standings board for one Sleeper fantasy league, scoring the season on total points — beside how steadily those points arrived and how many were left on the bench.
 
 - Data source · Sleeper API
-- Stack · .NET 9 · Azure
+- Stack · .NET 10 · Azure
 - Steady-state cost · $0.00 / mo
 - Sleeper budget · ≈ 12.2 req/min as built, against a 50/min bucket — see §07
 - Status · **M0–M2 built and deployed.** M3 (persistence) is next
@@ -203,7 +203,7 @@ Test it with pinned JSON fixtures from two or three real weeks — offline, no n
 
 ### D5 — Static Web Apps + Azure Functions, not a single container app
 
-Chosen: SWA Free for the SPA, Functions Consumption (.NET 9 isolated) for the API and scheduled jobs.
+Chosen: SWA Free for the SPA, Functions Consumption (.NET 10 isolated) for the API and scheduled jobs.
 
 > **Corrected · the plan is Flex Consumption (FC1), not Consumption (Y1).**
 > Y1 could not be provisioned at all — `SubscriptionIsOverQuotaForSku`, current
@@ -272,12 +272,21 @@ WeekScore(LeagueId, Season, Week, RosterId,
           ActualPts, IdealPts,
           StartersJson, PlayersPointsJson, IdealLineupJson,
           IsFinal, ComputedUtc,
-          PK (LeagueId, Season, Week, RosterId))
+          PK (Season, LeagueId, RosterId, Week))
 
 Player   (PlayerId PK, FullName, Team, PositionsJson, UpdatedUtc)
 ```
 
 Four tables, down from five. `PlayerWeek` is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersPointsJson` on the row that needs it. **Corrected: this league has six rosters, five of them scoring (A1)** — so roughly 6 × 18 is 108 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes either way.
+
+**Corrected · the key leads on `Season`, not `LeagueId`.** The composite is the
+same four columns; the order is what changed. A composite primary key is the
+clustered index, so its leading column decides what can be sought rather than
+scanned. Every read this site makes is scoped to one season — T27 hydrates with
+`WHERE Season = @s AND IsFinal`, and the API's only parameter is a year. Leading
+on `LeagueId` would be right for a multi-league service; this one serves exactly
+one league per year, so that column is near-constant and contributes almost no
+selectivity.
 
 **σ is never stored.** It is a function of every finalized week at once, so it changes for every team each time a week finalizes. Storing it would create a second source of truth that goes stale silently — precisely the failure mode that separate table and chart endpoints would have caused in §09. It is computed on read from the weekly array.
 

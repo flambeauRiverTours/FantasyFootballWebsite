@@ -174,7 +174,7 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
       }
       runtime: {
         name: 'dotnet-isolated'
-        version: '9.0'
+        version: '10.0'
       }
     }
     siteConfig: {

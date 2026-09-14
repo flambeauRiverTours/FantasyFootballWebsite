@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\FantasyLeague.Data\FantasyLeague.Data.csproj" />
     <ProjectReference Include="..\FantasyLeague.Sleeper\FantasyLeague.Sleeper.csproj" />
   </ItemGroup>
 

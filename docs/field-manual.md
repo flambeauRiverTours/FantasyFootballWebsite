@@ -29,8 +29,8 @@ somewhere unhelpful, that is called out.
 
 | Tool | Why | Check it works |
 |---|---|---|
-| .NET SDK 10 | Builds everything. Projects target `net9.0`; SDK 10 builds that fine | `dotnet --list-sdks` |
-| .NET 9 runtime | `dotnet test` runs on it | `dotnet --list-runtimes` |
+| .NET SDK 10 | Builds everything. Projects target `net10.0` | `dotnet --list-sdks` |
+| .NET 10 runtime | `dotnet test` runs on it; ships with the SDK | `dotnet --list-runtimes` |
 | Azure CLI | Every `az` command | `az account show` |
 | GitHub CLI | Secrets and workflow runs | `gh auth status` |
 | Python 3 | `scripts/capture_fixtures.py`, and JSON on the command line since there is no `jq` | `python --version` |
@@ -71,7 +71,7 @@ traps that still bite.
 | `FantasyLeague.Data` | Empty. M3 fills it | — |
 | `FantasyLeague.Core.Tests` | All 268 tests | everything |
 
-`Directory.Build.props` sets `net9.0`, `LangVersion=latest`, nullable enabled,
+`Directory.Build.props` sets `net10.0`, `LangVersion=latest`, nullable enabled,
 `TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` for every project at once.
 
 ## The three gates

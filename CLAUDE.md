@@ -44,7 +44,7 @@ A public, read-only page for one Sleeper fantasy league, decided on **total
 season points**. Two commentary columns sit beside it: **consistency σ** (how
 steadily the points arrived) and **ideal** (how many never left the bench).
 A third view, the **positional radar**, plots one team's average at each of its
-own starting slots as a ratio to the league average at that slot. .NET 9 on
+own starting slots as a ratio to the league average at that slot. .NET 10 on
 Azure Functions behind Static Web Apps, Azure SQL for finalized weeks,
 Vite/React/TypeScript/D3 for the page. $0.00/month steady state, ≤ 2.3 Sleeper
 requests per minute regardless of viewer count.
@@ -163,7 +163,7 @@ slots and one QB slot makes every team's RB axis twice its QB axis.
 
 ## Conventions
 
-- .NET 9, `Nullable` enabled, `TreatWarningsAsErrors` — Sleeper's payload is full
+- .NET 10, `Nullable` enabled, `TreatWarningsAsErrors` — Sleeper's payload is full
   of legitimately absent fields and the compiler is the cheapest defence available.
 - `FantasyLeague.Core` takes **no** Azure dependency. Solver and σ are pure
   functions over fixtures, testable offline in milliseconds.

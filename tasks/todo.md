@@ -242,6 +242,9 @@ Listed here only so their implementation state is visible in one place.
 | **A10** | Excluded owners are a list, carried as one comma-separated secret | done — proven on the deployed app |
 | **A11** | The storage firewall stays open, exception expires 2027-03-01 | done — see F6 |
 | **A12** | The player map is stored in blob, because instance memory is not storage | done |
+| **A13** | No commissioner overrides; `WeekScore` stores the actual only | decided — T25 |
+| **A14** | The stored key leads on `Season`, not `LeagueId` | decided — T25 |
+| **A15** | Two Microsoft natives exempt from the licence allowlist | done |
 
 ---
 
