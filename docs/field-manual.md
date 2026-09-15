@@ -352,7 +352,13 @@ you first.
 
 ---
 
-# M3 · Persistence · 17.0 h
+# M3 · Persistence · built, bar three deferred tasks
+
+T25 to T28 are done: the database is deployed in **westus2** on the free
+serverless offer, the `Initial` migration is applied, and `FinalizeWeek` writes
+every finalized week each Tuesday. **T29, T30 and T31 are deferred to the end**
+of this manual — none is blocked on effort, each waits on something that does
+not exist yet.
 
 Until now every request rebuilds the whole season from Sleeper. That works
 because the league is six teams and one season. It stops working when you want
@@ -552,107 +558,85 @@ from, including why it is deliberately **not** `RunOnStartup`.
 
 **Reference** — [Timer trigger](https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer)
 
-## T29 · Season chain walk — 2.0 h
-
-Sleeper links each season's league to the one before it. Start at the configured
-league ID and follow `previous_league_id` backwards, upserting a `League` row per
-hop.
-
-```csharp
-var id = options.CurrentLeagueId;
-var seen = new HashSet<string>();
-
-while (!string.IsNullOrEmpty(id) && id != "0" && seen.Add(id))
-{
-    var league = await sleeper.GetLeagueAsync(id, ct);
-    await UpsertLeagueAsync(league, ct);
-    id = league.PreviousLeagueId;
-}
-```
-
-The `seen` set is not paranoia — a malformed chain pointing at itself would loop
-forever against a rate-limited API. Sleeper uses the string `"0"` as well as null
-to mean "no previous league", so test both.
-
-Merge `League:SeasonOverrides` from configuration after the walk, for seasons the
-chain cannot reach.
-
-**Watch out — this is unexercisable today.** 2026 is the first season (A4), so
-`previous_league_id` is null and the loop runs once. Write it, test it against
-fixtures, and expect its first real run at the August 2027 rollover.
-
-## T30 · Historical backfill job — 2.5 h
-
-An explicitly triggered function — not a timer, not a request path — that takes a
-season, walks weeks 1 to 18, and writes every `WeekScore` with `IsFinal = true`.
-
-Roughly 21 calls per season. It goes through the T11 token bucket like everything
-else, so it self-throttles and takes about half a minute. Make it idempotent:
-upsert on the composite key, so re-running after a solver fix is safe and
-expected.
-
-**Watch out — do not wire this to a missing-season request.** A visitor would
-wait twenty seconds for a page, and a crawler hitting `?season=1998` repeatedly
-would generate bursts against Sleeper for seasons that never existed. The API
-already returns 404 with the available list; backfill is something you run
-deliberately.
-
-## T31 · Migrations in the pipeline — 2.5 h  ±
-
-The GitHub runner has a different IP on every run, so the SQL firewall must be
-opened for it and closed again — including when the migration fails.
-
-```yaml
-- name: Open firewall for runner
-  run: |
-    IP=$(curl -s https://api.ipify.org)
-    az sql server firewall-rule create -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
-
-- name: Apply migrations
-  run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Functions
-
-- name: Close firewall
-  if: always()
-  run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}"
-```
-
-**Watch out — `if: always()` on the close step is the whole point.** Without it,
-a failed migration leaves the database open to a public IP that will shortly
-belong to someone else's CI run.
-
-Name the rule after the run ID rather than a fixed `gh-runner`: two concurrent
-deploys would otherwise collide on one rule name, and the second one's close step
-would delete the first one's access mid-migration.
-
-Soft-estimated because the deploy identity needs both the firewall grant and
-schema rights, and a connection timeout and a permission denial look identical in
-the log.
-
-Remember `RESOURCE_GROUP` must be set as **job-level** `env:` from
-`secrets.AZ_RESOURCE_GROUP_NAME` — the `secrets` context is not available in
-workflow-level `env:`, and an unquoted empty value makes `-g` swallow the next
-flag rather than failing cleanly.
-
----
-
 # M4 · The page · 24.0 h
 
 The first milestone anyone else in the league can look at, and the first that
 will generate opinions. The table is the primary object; the chart is the thing
 people will play with.
 
-**Before starting, know what you are building against.** The API is live and its
-shape is fixed (§09). Fetch it once and read the JSON before writing any
-TypeScript — every field name below comes from a real response, not a plan.
+Everything in this milestone is built against an API that is **already live and
+already correct**. Before writing a line of TypeScript, fetch it and read it:
 
 ```bash
-curl -fsS "https://$(az functionapp show -n func-idealpoints -g rg-fantsybosty --query defaultHostName -o tsv)/api/season" | python -m json.tool | head -40
+curl -fsS "https://$(az functionapp show -n func-idealpoints -g rg-fantsybosty --query defaultHostName -o tsv)/api/season" | python -m json.tool
 ```
+
+## The contract, as it actually responds
+
+This is the real shape, captured from the deployed endpoint — not the spec.
+Write your types from this.
+
+```ts
+export interface SeasonPayload {
+  season: number;
+  isCurrent: boolean;
+  currentWeek: number;
+  finalThroughWeek: number;
+  asOfUtc: string;                              // ISO 8601
+  slotOrder: string[];                          // radar axis order (R2) - never re-sort
+  leagueSlotAverages: Record<string, number>;   // empty object until M6
+  teams: TeamPayload[];
+}
+
+export interface TeamPayload {
+  rosterId: number;
+  name: string;
+  totals: TotalsPayload;
+  slotAverages: Record<string, number>;         // empty object until M6
+  weeks: WeekPayload[];
+}
+
+export interface TotalsPayload {
+  actual: number;
+  ideal: number;
+  sigma: number | null;                         // null below four final weeks (D1)
+  cv: number | null;
+  mean: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface WeekPayload {
+  week: number;
+  actual: number;
+  ideal: number;
+  isFinal: boolean;
+}
+
+export interface SeasonsPayload {
+  current: number;
+  available: number[];                          // [2026] until T29 runs
+}
+```
+
+Three things about that shape that will shape your components:
+
+**The five `totals` fields are null together or present together.** They are all
+null below four finalized weeks. Do not write five separate null checks — one
+guard decides whether the consistency column renders at all.
+
+**`leagueSlotAverages` and `slotAverages` are empty objects, not missing keys.**
+That is deliberate so M6 can fill them without a contract change. Bind to them
+now and render nothing.
+
+**`available` is `[2026]` and will stay that way** until T29 runs, which is
+deferred. The season picker in T37 must still be built against the list rather
+than hardcoding a year, but expect one option for a long time.
 
 ## T32 · Frontend scaffold — 2.0 h
 
-This task also **unblocks three things that are currently stubbed**: the `web`
-job in `deploy.yml`, the node steps that were removed from `ci.yml`, and the
+This task also unblocks three things that are currently stubbed: the `web` job in
+`deploy.yml`, the node steps removed from `ci.yml`, and the
 `AZURE_STATIC_WEB_APPS_API_TOKEN` secret.
 
 ### 1 · Create the app
@@ -677,87 +661,134 @@ npm i -D @types/d3-scale @types/d3-shape @types/d3-array
 
 Install the sub-packages, **not** the `d3` meta-package. You need scales, path
 generators and `extent`. You do not need selections, transitions, geo projections
-or force simulations, and pulling the whole bundle drags in the DOM layer you
-have deliberately decided not to use.
+or force simulations, and the meta-package drags in the DOM layer you have
+deliberately decided not to use.
 
-### 3 · SPA fallback
+### 3 · Lay the files out
 
-Add `web/staticwebapp.config.json` so client-side routes survive a refresh:
+```
+web/
+  src/
+    api/
+      types.ts          the interfaces above, by hand
+      client.ts         fetchSeason, fetchSeasons, ETag handling
+    hooks/
+      useSeason.ts      fetch + poll + 304 handling (T39)
+    components/
+      StandingsTable.tsx
+      RangeMark.tsx
+      SeasonChart.tsx
+      ChartControls.tsx
+    theme.css           tokens only, no component styles
+    App.tsx
+  staticwebapp.config.json
+```
+
+Write `types.ts` by hand from the contract above rather than generating it. There
+are five interfaces, they are stable, and a generator is a dependency plus a
+build step to solve a twenty-minute problem once.
+
+### 4 · SPA fallback
+
+`web/staticwebapp.config.json`:
 
 ```json
 { "navigationFallback": { "rewrite": "/index.html" } }
 ```
 
 Without it, loading `/2025` directly returns 404 from the static host — it looks
-for a file at that path. Works locally under the dev server, fails once deployed;
-the classic SPA-on-static-hosting trap.
+for a file at that path. Works under the dev server, fails once deployed. The
+classic SPA-on-static-hosting trap.
 
-### 4 · A typed fetch layer
+### 5 · Get past CORS in development
 
-Write the response types by hand from §09 rather than generating them. There are
-five records and they are stable.
+The API allows exactly one origin: the Static Web App hostname. Your Vite dev
+server is a different origin and **will be refused**. Two ways through, and the
+proxy is the better one:
 
-Point the dev server at the deployed API, and remember it is a **different
-origin** — CORS allows only the SWA hostname today. For local development add
-your Vite origin to the bicep `devOrigins` parameter, or proxy through Vite so
-the browser sees a same-origin request.
+```ts
+// vite.config.ts
+server: {
+  proxy: {
+    '/api': {
+      target: 'https://func-idealpoints.azurewebsites.net',
+      changeOrigin: true,
+    },
+  },
+}
+```
 
-### 5 · Turn the stubs back on
+The browser then makes a same-origin request to the dev server, which forwards
+it. No CORS involved, no infrastructure change, and your fetch code uses the
+relative path `/api/season` in both development and production.
+
+The alternative is adding your dev origin to the bicep `devOrigins` parameter,
+which exists for exactly this. It requires an infrastructure deploy to change,
+so prefer the proxy unless you need the real preflight behaviour.
+
+### 6 · Turn the stubs back on
 
 Once `web/package-lock.json` exists, restore the node steps in `ci.yml` and
 replace the `web` job's echo in `deploy.yml` with
 `Azure/static-web-apps-deploy@v1`. Fetch the deploy token first — step 9 of the
 T24 runbook.
 
-**Reference** — [Vite guide](https://vite.dev/guide/) ·
-[SWA configuration](https://learn.microsoft.com/azure/static-web-apps/configuration)
-
 ## T33 · Design system — 3.0 h
 
-CSS custom properties for the whole palette on `:root`, redefined under
-`@media (prefers-color-scheme: dark)`. Every colour used anywhere comes from a
-token — no literal hex outside the token block.
+Every colour comes from a token on `:root`, redefined under
+`@media (prefers-color-scheme: dark)`. No literal hex outside that block.
 
 Design the dark theme rather than inverting the light one. A naive inversion
-produces a muddy accent and unreadable mid-tones. Check contrast on both grounds,
-particularly for the team colours, which are the hardest part of the palette to
-get right in two themes.
+gives a muddy accent and unreadable mid-tones.
+
+**This league has five scoring teams, not twelve.** The design's palette worries
+were written for twelve and are much easier at five. Do not over-engineer a
+categorical scale; pick five that hold up in both themes and check contrast.
 
 Set `font-variant-numeric: tabular-nums` on every cell containing a figure.
 Points totals that do not line up column-wise are the difference between a table
 you can scan and one you have to read.
 
-**This league has five scoring teams, not twelve.** The design's colour-scale
-worries were written for twelve. Five distinguishable colours is a much easier
-problem — do not over-engineer it.
-
 ## T34 · Standings table — 3.0 h
 
-Four columns: team, points, sigma, ideal. Sorted descending on points, because
-that is what decides the league.
+Columns: team, points, sigma, ideal. Sorted descending on points, because that
+is what decides the league.
 
-- Mark the sort column visually — it is not obvious that points decide this
-  league rather than a win-loss record.
-- Show the gap to first place. A standings table whose story requires arithmetic
-  is not finished.
-- Sigma renders as an em dash below four final weeks, and its column header
-  carries the week range: **"σ · through wk 6"** while the points column already
-  includes week 7. The API gives you both numbers; use them rather than
+```tsx
+const ranked = [...payload.teams].sort((a, b) => b.totals.actual - a.totals.actual);
+const leader = ranked[0]?.totals.actual ?? 0;
+```
+
+Requirements, each of which is a decision already made:
+
+- **Mark the sort column.** It is not obvious that points decide this league
+  rather than a win-loss record.
+- **Show the gap to first.** `team.totals.actual - leader`, rendered as a signed
+  figure. A standings table whose story requires arithmetic is not finished.
+- **Sigma is an em dash below four final weeks**, and its header carries the week
+  range: `sigma - through wk {finalThroughWeek}` while the points column already
+  includes `currentWeek`. Both numbers are in the payload; use them rather than
   inferring.
-- Do not give sigma the same bar or heat encoding as the two point columns —
-  lower is better there, and a shared encoding reads backwards.
+- **Do not give sigma the same bar or heat encoding as the point columns.** Lower
+  is better there, and a shared encoding reads backwards.
 
 Use a real `<table>` with `<th scope="col">`, inside a container with
 `overflow-x: auto`. Screen readers and narrow phones both benefit, and neither is
 served by a grid of divs.
 
+```tsx
+const hasConsistency = team.totals.sigma !== null;
+```
+
+One guard, not five. The five consistency fields are null together.
+
 ## T35 · Inline range mark — 2.5 h
 
 A small SVG in the sigma cell giving the number a shape: a rule from the team's
-minimum to maximum weekly score, a shaded band at one sigma either side of the
-mean, and a tick at the mean.
+minimum to maximum weekly score, a shaded band one sigma either side of the mean,
+and a tick at the mean.
 
-```jsx
+```tsx
 <svg viewBox="0 0 140 16" width="140" height="16" role="img"
      aria-label={`${min} to ${max}, mean ${mean}, sigma ${sigma}`}>
   <line x1={s(min)} x2={s(max)} y1="8" y2="8" stroke="currentColor" opacity=".35" />
@@ -767,24 +798,29 @@ mean, and a tick at the mean.
 </svg>
 ```
 
-**The scale `s` must be shared across every row** — computed from the
-league-wide minimum and maximum, not per team. Per-team scales make every row
-look identical, which defeats the only purpose the mark has.
+**The scale `s` must be shared across every row**, computed from the league-wide
+min and max rather than per team:
 
-`min`, `max`, `mean` and `sigma` all come straight from `totals` in the payload,
-and are all `null` together below four final weeks. Render nothing rather than a
-degenerate mark.
+```tsx
+const lo = Math.min(...teams.map(t => t.totals.min!).filter(Number.isFinite));
+const hi = Math.max(...teams.map(t => t.totals.max!).filter(Number.isFinite));
+const s = scaleLinear().domain([lo, hi]).range([2, 138]);
+```
+
+Per-team scales make every row look identical, which defeats the only purpose the
+mark has. Render nothing when `sigma` is null — a degenerate mark is worse than
+no mark.
 
 ## T36 · D3 line chart — 4.0 h  ±
 
-**The mental model.** D3 is usually taught as a library that manipulates the DOM
-for you — `select`, `append`, `enter`, `exit`. Do not use any of that here. Use
-D3 only as a **maths library**: it turns data into numbers and path strings, and
-React renders the elements. Everything after this task — hover, filtering, mode
-switching — then becomes ordinary React state rather than a second rendering
-system fighting the first.
+**The mental model, because this is where the milestone gets its soft estimate.**
+D3 is usually taught as a library that manipulates the DOM for you — `select`,
+`append`, `enter`, `exit`. Use none of that. Use D3 as a **maths library**: it
+turns data into numbers and path strings, and React renders every element.
+Everything afterwards — hover, filtering, mode switching — is then ordinary React
+state rather than a second rendering system fighting the first.
 
-```jsx
+```tsx
 import { scaleLinear } from "d3-scale";
 import { line } from "d3-shape";
 
@@ -792,9 +828,7 @@ const m = { top: 16, right: 20, bottom: 28, left: 44 };
 const x = scaleLinear().domain([1, maxWeek]).range([m.left, width - m.right]);
 const y = scaleLinear().domain([0, maxValue]).nice().range([height - m.bottom, m.top]);
 
-const path = line<Point>()
-  .x(d => x(d.week))
-  .y(d => y(d.value));
+const path = line<Point>().x(d => x(d.week)).y(d => y(d.value));
 
 return (
   <svg viewBox={`0 0 ${width} ${height}`}>
@@ -806,57 +840,67 @@ return (
 );
 ```
 
-A scale is a function from data space to pixel space. `y`'s range is inverted
-(`height - m.bottom` first) because SVG's y axis points down and charts point up.
+A scale is a function from data space to pixel space. The `y` range is inverted —
+`height - m.bottom` first — because the SVG y axis points down and charts point up.
 
-Axes are the one awkward part, because D3's `axisBottom` wants a DOM node. **Do
-not reach for a ref.** Call `x.ticks()`, get back an array of values, and map them
-to your own `<line>` and `<text>` elements. It is a dozen lines and keeps every
-node under React's control.
+**Axes without a ref.** `axisBottom` wants a DOM node; do not give it one. Call
+`x.ticks()`, get values back, map them to your own elements:
 
-**Watch out — leave room in the `viewBox` for the outermost tick labels.** A
-label at the left edge of the drawing area is clipped by the SVG boundary. That
-is what the margin object is for: the scale's range starts at `m.left`, not at
-zero.
+```tsx
+{x.ticks(maxWeek).map(t => (
+  <g key={t} transform={`translate(${x(t)},${height - m.bottom})`}>
+    <line y2={4} stroke="var(--rule)" />
+    <text y={16} textAnchor="middle" fontSize={11}>{t}</text>
+  </g>
+))}
+```
 
-Soft-estimated because D3-inside-React is a genuine mental shift if you have only
-seen D3's own idiom.
+A dozen lines, and every node stays under React's control.
 
-**Reference** — [d3-scale](https://d3js.org/d3-scale) · [d3-shape](https://d3js.org/d3-shape)
+**Watch out — leave room in the viewBox for the outermost tick labels.** A label
+at the left edge is clipped by the SVG boundary. That is what the margin object
+is for: the scale range starts at `m.left`, not at zero.
 
 ## T37 · Chart controls — 3.0 h
 
-- **Season** — populated from `/api/seasons`, never a hardcoded list, so a new
-  year appears the day the chain walk finds it. Today that endpoint returns only
-  2026; the control should still be built against the list.
+- **Season** — populated from `/api/seasons`, never a hardcoded list. It returns
+  `{"current":2026,"available":[2026]}` today and will until T29 runs, but build
+  against the list so a new year appears the day it is found.
 - **Teams** — multi-select, all on by default, colour-coded to match the lines.
 - **Metric** — single-select: cumulative points, cumulative ideal, or expanding
-  sigma. Single rather than multi because sigma (roughly 25) and cumulative
-  points (roughly 800) cannot share a y-axis without sigma flattening into a line
-  along the bottom. Switching metric switches the axis.
+  sigma. Single rather than multi because sigma (roughly 25) and cumulative points
+  (roughly 800) cannot share a y-axis without sigma flattening along the bottom.
+  Switching metric switches the axis.
 - **Display mode** — cumulative, per-week, or vs league median, for the two point
   metrics.
 
-Keep control state in the URL query string. It costs almost nothing and makes
+**Keep control state in the query string.** It costs almost nothing and makes
 "look at what happened to me in week 9" a link someone can paste into the league
 chat, which is the whole social point of the site.
 
 ## T38 · Hover interaction — 2.0 h
 
 Hovering a team — in the chart, the legend, or the table — raises that line and
-mutes the rest.
+mutes the rest. One piece of state drives all three:
 
-Implement as a single `hoveredRosterId` state driving opacity and stroke width.
-To raise the hovered path so it draws on top, **sort the series array with the
-hovered one last** rather than manipulating the DOM: SVG has no z-index, and
-paint order is document order.
+```tsx
+const [hovered, setHovered] = useState<number | null>(null);
+const ordered = hovered === null
+  ? series
+  : [...series.filter(s => s.rosterId !== hovered),
+     ...series.filter(s => s.rosterId === hovered)];
+```
+
+**Sort the hovered series last rather than manipulating the DOM.** SVG has no
+z-index; paint order is document order. Reordering the array is how you raise a
+path in React.
 
 Provide a keyboard equivalent — arrow keys through the legend with the same
 highlight on focus — or the interaction only exists for mouse users.
 
 ## T39 · Polling — 2.0 h
 
-```jsx
+```tsx
 useEffect(() => {
   if (!isCurrentSeason) return;              // a finished season never changes
 
@@ -876,14 +920,14 @@ Firing `tick` on `visibilitychange` as well as on the interval means returning t
 the tab refreshes immediately rather than waiting up to thirty seconds — the
 difference between a page that feels live and one that feels stale.
 
-Send `If-None-Match` with the stored ETag. The server returns **304** with no
-body when nothing has moved, which costs almost nothing on either side. The
-`isCurrent` flag in the payload is what tells you whether to poll at all.
+**Send `If-None-Match` with the stored ETag.** The server returns **304** with no
+body when nothing has moved. The `isCurrent` flag in the payload is what tells
+you whether to poll at all.
 
-**Watch out — the API's `Cache-Control` is `max-age=5`, not 30.** The browser may
-serve its own cached copy for five seconds; your 30-second interval is the real
-polling rate. Do not also add a cache-busting query parameter — it would defeat
-the ETag.
+**Watch out — `Cache-Control` is `max-age=5`, not 30.** The browser may serve its
+own cached copy for five seconds; the 30-second interval is the real polling
+rate. Do **not** add a cache-busting query parameter — it would defeat the ETag,
+which is the thing making the poll nearly free.
 
 ## T40 · Responsive and accessibility — 2.5 h
 
@@ -896,7 +940,10 @@ the ETag.
 - Respect `prefers-reduced-motion` for any line transitions.
 - Check contrast for the team palette in both themes.
 
-**Reference** — [ARIA authoring practices](https://www.w3.org/WAI/ARIA/apg/)
+**Reference** — [ARIA authoring practices](https://www.w3.org/WAI/ARIA/apg/) ·
+[Vite guide](https://vite.dev/guide/) ·
+[SWA configuration](https://learn.microsoft.com/azure/static-web-apps/configuration) ·
+[d3-scale](https://d3js.org/d3-scale) · [d3-shape](https://d3js.org/d3-shape)
 
 ---
 
@@ -1320,3 +1367,95 @@ Using the individual `translate` and `rotate` properties rather than a combined 
 
 - **MDN** — [offset-path](https://developer.mozilla.org/docs/Web/CSS/offset-path)
 - **MDN** — [prefers-reduced-motion](https://developer.mozilla.org/docs/Web/CSS/@media/prefers-reduced-motion)
+
+
+---
+
+# Deferred · the rest of M3
+
+Moved behind M4 on 2026-09-14. None is blocked on effort; each waits on
+something that does not exist yet. Rationale for each is in
+[`tasks/todo.md`](../tasks/todo.md) under *Deferred*.
+
+## T29 · Season chain walk — 2.0 h
+
+Sleeper links each season's league to the one before it. Start at the configured
+league ID and follow `previous_league_id` backwards, upserting a `League` row per
+hop.
+
+```csharp
+var id = options.CurrentLeagueId;
+var seen = new HashSet<string>();
+
+while (!string.IsNullOrEmpty(id) && id != "0" && seen.Add(id))
+{
+    var league = await sleeper.GetLeagueAsync(id, ct);
+    await UpsertLeagueAsync(league, ct);
+    id = league.PreviousLeagueId;
+}
+```
+
+The `seen` set is not paranoia — a malformed chain pointing at itself would loop
+forever against a rate-limited API. Sleeper uses the string `"0"` as well as null
+to mean "no previous league", so test both.
+
+Merge `League:SeasonOverrides` from configuration after the walk, for seasons the
+chain cannot reach.
+
+**Watch out — this is unexercisable today.** 2026 is the first season (A4), so
+`previous_league_id` is null and the loop runs once. Write it, test it against
+fixtures, and expect its first real run at the August 2027 rollover.
+
+## T30 · Historical backfill job — 2.5 h
+
+An explicitly triggered function — not a timer, not a request path — that takes a
+season, walks weeks 1 to 18, and writes every `WeekScore` with `IsFinal = true`.
+
+Roughly 21 calls per season. It goes through the T11 token bucket like everything
+else, so it self-throttles and takes about half a minute. Make it idempotent:
+upsert on the composite key, so re-running after a solver fix is safe and
+expected.
+
+**Watch out — do not wire this to a missing-season request.** A visitor would
+wait twenty seconds for a page, and a crawler hitting `?season=1998` repeatedly
+would generate bursts against Sleeper for seasons that never existed. The API
+already returns 404 with the available list; backfill is something you run
+deliberately.
+
+## T31 · Migrations in the pipeline — 2.5 h  ±
+
+The GitHub runner has a different IP on every run, so the SQL firewall must be
+opened for it and closed again — including when the migration fails.
+
+```yaml
+- name: Open firewall for runner
+  run: |
+    IP=$(curl -s https://api.ipify.org)
+    az sql server firewall-rule create -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
+
+- name: Apply migrations
+  run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Functions
+
+- name: Close firewall
+  if: always()
+  run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}"
+```
+
+**Watch out — `if: always()` on the close step is the whole point.** Without it,
+a failed migration leaves the database open to a public IP that will shortly
+belong to someone else's CI run.
+
+Name the rule after the run ID rather than a fixed `gh-runner`: two concurrent
+deploys would otherwise collide on one rule name, and the second one's close step
+would delete the first one's access mid-migration.
+
+Soft-estimated because the deploy identity needs both the firewall grant and
+schema rights, and a connection timeout and a permission denial look identical in
+the log.
+
+Remember `RESOURCE_GROUP` must be set as **job-level** `env:` from
+`secrets.AZ_RESOURCE_GROUP_NAME` — the `secrets` context is not available in
+workflow-level `env:`, and an unquoted empty value makes `-g` swallow the next
+flag rather than failing cleanly.
+
+---
