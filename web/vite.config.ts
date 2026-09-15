@@ -6,14 +6,14 @@ import react from '@vitejs/plugin-react';
 // same-origin request that Vite forwards, so no CORS is involved and no
 // infrastructure change is needed. The alternative is adding this origin to the
 // bicep devOrigins parameter, which costs a deploy every time it changes.
-const api = process.env.VITE_API_ORIGIN ?? 'https://func-idealpoints.azurewebsites.net';
+const proxyTarget = process.env.VITE_DEV_PROXY_TARGET ?? 'https://func-idealpoints.azurewebsites.net';
 
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
       '/api': {
-        target: api,
+        target: proxyTarget,
         changeOrigin: true,
       },
     },
