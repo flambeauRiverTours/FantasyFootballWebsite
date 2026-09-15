@@ -93,7 +93,7 @@ applied, and the read and write paths both exist.
 **The remaining three are deferred to the end** — see *Deferred* below. None is
 blocked on effort; each is waiting on something that does not exist yet.
 
-## M4 · The page — 25.5 h
+## M4 · The page — 24.5 h
 
 First milestone anyone else in the league can look at, and the first that will
 generate opinions.
@@ -128,8 +128,10 @@ What remains is the chart and everything that hangs off it.
       Scales, axes and path generators; React renders every node.
 - [ ] **T37** Chart controls — 3 h
       Season, team multi-select, metric, display mode. State in the query string.
-- [ ] **T38** Hover interaction — 2 h
-      Raise one team, mute the rest, with a keyboard equivalent.
+- [ ] **T38** Hover interaction — 1 h
+      Raise the nearest line, mute the rest, with focus on T37's chips as the
+      keyboard equivalent. **Chart panel only** — the panels are never on screen
+      together, so `hovered` stays in `ChartPanel` and the table is not involved.
 - [ ] **T39** Polling — 2 h
       Gated on tab visibility and game windows; stops on a past season.
 - [ ] **T40** Responsive and a11y — 2.5 h
@@ -167,6 +169,22 @@ that cutting it is a decision rather than an omission.
 - [ ] **T55** Football loader — 2.5 h
 
 ---
+
+## Deferred · season picker — 1 h
+
+- [ ] **T56** Season picker in the masthead — 1 h · **waiting on August 2027**
+      The masthead already prints the season; make that text the control. A
+      `<select>` populated from `/api/seasons`, not a hardcoded list, so a new
+      year appears the day T29 finds it. Season state lives in `App` because it
+      is the argument to `useSeason`, which already takes it and is passed
+      `null` today; `fetchSeasons` is already written and never called.
+      Mirrored to `?season=`. Selecting a past season stops the poll with no new
+      code — `useSeason` returns early when `payload.isCurrent` is false — but
+      the page should also visibly settle: the "as of" line gives way to the
+      final week, and the live affordances disappear.
+      **`available` is `[2026]` until T29 runs, so this control has one option
+      and changes nothing until the 2027 rollover.** Deliberately not part of
+      T37.
 
 ## Deferred · the rest of M3 — 7 h
 

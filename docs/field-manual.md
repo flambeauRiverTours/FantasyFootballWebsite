@@ -251,7 +251,7 @@ week continues to come from Sleeper on every request. Two tasks here — the
 password-less database connection and the migration step — are fiddlier than
 their hours suggest, and both fail with error messages that point elsewhere.
 
-# M4 · The page · 25.5 h · 13.5 h remaining
+# M4 · The page · 24.5 h · 12.5 h remaining
 
 The first milestone anyone else in the league can look at, and the first that
 will generate opinions. The table is the primary object; the chart is the thing
@@ -426,6 +426,29 @@ or as `(v: number) => number`.
 substitutes a fallback for a legitimate `0`. The fix was not `??` but making the
 nulls unreachable: `hasConsistency` narrows to the exported `ConsistentTotals`,
 `SigmaDisplay` takes that type, and there is nothing left to guard.
+
+### One visualisation per screen is a constraint, not just a layout
+
+Each panel is `min-height: calc(100svh - var(--masthead-h))` and sticky-stacked,
+so **no two panels are ever on screen together**. That rules out any interaction
+that spans them, and the rule is easy to forget because the components are
+siblings in one tree and nothing in the type system stops you wiring them up.
+
+Three things it has already ruled out:
+
+- The standings table as T37's team filter — you would be adjusting a chart you
+  cannot see.
+- Hovering a table row to raise a chart line, which is why T38 is scoped to the
+  chart panel alone and `hovered` stays in `ChartPanel`.
+- Any radar control that reads from the table, when M6 arrives.
+
+The one exception proves nothing: under `prefers-reduced-motion` the panels
+become `position: static; min-height: 0` and stack as an ordinary document, so
+two can be visible at once. Do not build a feature that only works there.
+
+**State that two panels both need belongs in `App`; state one panel owns should
+stay in that panel.** Season is the first kind (T56 — it is the argument to
+`useSeason`). Hover, metric and the team filter are all the second.
 
 ### The one structural idea worth carrying into T36
 
@@ -765,11 +788,196 @@ width is a feedback loop that either oscillates or settles at zero.
 
 ## T37 · Chart controls — 3.0 h
 
-Controls are where pages most often start looking cheap. Three rules:
+### What is in scope, and what only looks like it
 
-**Use a segmented control for small exclusive choices**, not a dropdown. Metric
-and display mode have three or four options each — showing them is faster to
-read and to click than hiding them behind a select.
+`docs/design.md:403` lists five controls. Two of them are other tasks and one is
+deferred, so read that list as the eventual surface rather than this task's
+scope.
+
+| Control | Here? | Why |
+|---|---|---|
+| Season | **no** — T56 | `available` is `[2026]` until T29 runs. One option, changes nothing until the 2027 rollover. It belongs in the masthead, not this panel. |
+| Team filter | **yes** | No dependencies. Buildable today. |
+| Metric | **yes**, two options | Points and ideal are one boolean over data you already have. |
+| Display mode | **no** — T41 | The three transforms are T41's whole job. |
+| σ variant | **no** — T42 | Raw vs CV, and the expanding/rolling window, are T42. |
+
+**The metric control ships with two options, not three.** The design's third
+option is expanding σ, and there is no per-week σ in the payload:
+
+```ts
+interface WeekPayload  { week; actual; ideal; isFinal }   // no sigma
+interface TotalsPayload { sigma: number | null }          // season-level only
+```
+
+Plotting it means computing σ over weeks 1…w on the client, in the population
+form (÷n, D1), matching the server exactly or the table and the chart will
+disagree by a few percent and you will lose an evening deciding which is right.
+That is T42's work. Add the third segment there, when the control already exists
+and you are only adding an option — and switch the y-axis with it, because σ on
+a points axis is a flat line along the bottom.
+
+`ChartPanel` already carries the stub this task resolves:
+
+```tsx
+const useIdeal = false; //to do - decide where the user would select this
+```
+
+### The framing that decides the design
+
+T38 gives desktop readers hover-to-raise. **Touch has no hover.** On a phone,
+tapping a team is the only way to isolate one line out of five.
+
+So the filter is not a secondary convenience that desktop users might discover —
+on mobile it is the entire interaction. Design it at 375 px first and let the
+desktop inherit. Every trade-off below resolves in favour of the phone.
+
+### Where the controls live
+
+```
+Season Shape                            h2, from Panel
+
+[ Points | Ideal ]                      segmented, exclusive
+● sullynator9   ● LilDab   ● …          chips, multi-select, wraps
+
+[ chart ]                               max-height: 70svh
+```
+
+**Above the chart, never below.** The panel is `100svh` with `scroll-snap-align:
+start`. Controls placed under the chart on a phone sit below the fold; the reader
+scrolls to reach them, crosses the snap threshold, and lands on the next panel
+instead. A control you cannot reach without leaving the screen it belongs to is
+not a control.
+
+### The team filter
+
+Chips: a swatch and the team name, wrapping freely.
+
+```tsx
+<div className="chips" role="group" aria-label="Teams shown">
+  {series.map((s) => (
+    <button
+      key={s.rosterId}
+      type="button"
+      className="chip"
+      aria-pressed={shown.has(s.rosterId)}
+      style={{ '--chip': s.colour } as CSSProperties}
+      onClick={() => toggle(s.rosterId)}
+    >
+      <span className="swatch" aria-hidden="true" />
+      {s.name}
+    </button>
+  ))}
+</div>
+```
+
+`role="group"` with a label, and `aria-pressed` on each button. **Not
+`aria-checked`** — these are buttons, not checkboxes, and a screen reader
+announces "pressed"/"not pressed" correctly for a toggle button. The swatch is
+`aria-hidden` because the name beside it already identifies the team; announcing
+"orange circle" adds nothing.
+
+`--chip` passes the team colour in as a custom property so the CSS can use it for
+both the filled and the outlined state without a second inline style. The cast is
+needed because React's `CSSProperties` does not include arbitrary custom
+properties.
+
+```css
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--chip);
+  background: transparent;
+}
+
+.chip[aria-pressed='true'] {
+  color: var(--fg);
+  border-color: var(--rule);
+  background: var(--bg-subtle);
+}
+
+.chip[aria-pressed='true'] .swatch { background: var(--chip); }
+```
+
+**`min-height: 44px`** is the touch target minimum, and it is why the chips are
+the control rather than the chart's own labels. It costs nothing on desktop.
+
+**Selected state is carried by three things at once** — filled vs outlined
+swatch, `--fg` vs `--fg-muted` text, and a background. Never by colour alone.
+A reader who cannot distinguish two team hues must still be able to see which
+chips are on.
+
+**Radius 6px**, matching the segmented control. One radius across the page or
+none at all; 4 and 8 mixed together is the tell.
+
+#### What not to build
+
+**Colour dots with no names on mobile.** Five 44 px dots fit one row in about
+220 px and it is tempting. But identification then rests entirely on matching a
+dot's hue to a line's hue — precisely what the chart's direct labels exist to
+avoid — and it fails outright for a colour-blind reader. The two extra rows of
+wrapped chips are the cost of the control being usable. Pay it.
+
+**The standings table as the filter.** The teams are already listed there with
+their numbers, so making rows clickable looks like free functionality. T33b puts
+the table on a different scroll panel: you would be adjusting a chart that is not
+on screen. Cross-panel controls do not work in this layout.
+
+**A select-all / clear-all button.** With five teams the chips are their own
+affordance. One more control to lay out, on the axis where space is tightest.
+
+#### Clickable direct labels, for pointer devices
+
+The chart's right-edge labels are already the team name in the team's colour.
+Making them toggle the same state costs one handler and rewards the reader who is
+already looking at the line they want to remove:
+
+```tsx
+<text className="series-label" onClick={() => toggle(s.rosterId)} …>
+```
+
+Add it **after** the chips work, and treat it as an enhancement rather than a
+control. It cannot be the only filter: the labels sit inside the 84 px right
+margin at `--text-xs`, nowhere near a 44 px touch target, and a long name like
+"Aaron Donald Relief Fund" is cramped against the SVG edge. Give it
+`cursor: pointer` and nothing else — a hover treatment there competes with T38.
+
+### The metric control
+
+A segmented control. Exclusive choice, few options, all of them visible.
+
+```tsx
+<div className="segmented" role="group" aria-label="Metric">
+  {(['actual', 'ideal'] as const).map((m) => (
+    <button key={m} type="button" aria-pressed={metric === m} onClick={() => setMetric(m)}>
+      {m === 'actual' ? 'Points' : 'Ideal'}
+    </button>
+  ))}
+</div>
+```
 
 ```css
 .segmented {
@@ -783,7 +991,8 @@ read and to click than hiding them behind a select.
 .segmented button {
   border: 0;
   background: transparent;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  min-height: 44px;
   font: inherit;
   font-size: var(--text-sm);
   color: var(--fg-muted);
@@ -799,20 +1008,30 @@ read and to click than hiding them behind a select.
 }
 ```
 
-That single soft shadow on the *selected* segment only is the whole effect. Do
+That single soft shadow on the **selected** segment only is the whole effect. Do
 not add shadows anywhere else on the page.
 
-**Team toggles carry their colour.** A small swatch in each toggle, matching the
-line. Deselected goes to `--fg-muted` with the swatch outlined rather than filled.
+A native `<select>` is the honest alternative: it gets the OS picker for free,
+which is genuinely better on a phone for a long list. For two or three short
+options it hides the choices behind a tap and gains nothing. Revisit if the list
+ever passes four.
 
-**Radius: 4–6px, everywhere or nowhere.** Mixing 4, 8 and 12 across a page is a
-tell. One value, used consistently.
+### One breakpoint
 
-### Query-string state, without a router
+```css
+@media (max-width: 40rem) {
+  .segmented { display: flex; width: 100%; }
+  .segmented button { flex: 1; }
+}
+```
 
-State in the URL is D6 and the social point of the site: `?season=&teams=&metric=`
-makes any view a link someone can paste into the league chat. You have no router
-installed and you do not need one — but you do need to pick the right browser API.
+Three segments at 375 px come out about 118 px each — well past the touch
+minimum. The chips need no rule; `flex-wrap` already does the work.
+
+### Query-string state
+
+D6, and the social point of the site: `?teams=&metric=` makes any view a link
+someone can paste into the league chat.
 
 ```tsx
 function useQueryState(key: string, fallback: string) {
@@ -833,38 +1052,262 @@ function useQueryState(key: string, fallback: string) {
 }
 ```
 
-**React state is the source of truth; the URL is a mirror.** Making the URL
-itself the state means re-reading `location.search` every render and inventing a
-way to be notified when it changes — which is most of what a router is for. Hold
-the value in `useState` and write it out on change.
+**React state is the source of truth; the URL is a mirror.** Making the URL the
+state means re-reading `location.search` every render and inventing a way to be
+notified when it changes, which is most of what a router is for.
 
-**`replaceState`, not `pushState`.** `pushState` adds a history entry, so
-toggling four teams on and off buries the previous page under eight presses of
-Back. Use `pushState` only for a change a reader would expect Back to undo, and
-on this page none of them are.
+**`replaceState`, not `pushState`.** Toggling four chips on and off would
+otherwise bury the previous page under eight presses of Back. Use `pushState`
+only for a change a reader would expect Back to undo; none of these are. This
+hook therefore needs no `popstate` listener — the moment you add a `pushState`,
+you owe one.
 
-**Drop the parameter when it equals the default.** Otherwise a shared link reads
-`?metric=cumulative&mode=total&season=2026`, restating defaults — and a default
-you change later silently keeps the old behaviour for everyone holding an old
-link.
+**Drop the parameter when it equals the default.** All five teams on is the
+default, so `?teams=` should be *absent* then, not a list of every roster id.
+Otherwise a shared link restates the defaults, and a default you change later
+silently keeps the old behaviour for everyone holding an old link.
 
-**Encode the team set as a sorted, comma-joined list of roster ids** —
-`?teams=2,4,7` — and validate it against the payload on read. A roster id from a
-stale link that no longer exists must be dropped, not passed into a colour
-lookup.
+**Encode teams as sorted, comma-joined roster ids** — `?teams=2,4,7` — and
+validate on read against the payload:
 
-This hook does not react to Back and Forward. That is fine while every write is
-`replaceState`, because there are no entries to go back to. The moment you add a
-`pushState`, you owe a `popstate` listener as well.
+```tsx
+const valid = new Set(payload.teams.map((t) => t.rosterId));
+const shown = new Set(
+  param.split(',').map(Number).filter((id) => valid.has(id)),
+);
+```
 
-## T38 · Hover interaction — 2.0 h
+A roster id from a stale link that no longer exists must be dropped, not passed
+into a colour lookup. Sorting makes the same selection produce the same URL
+regardless of click order, which is what stops two identical views having two
+different links.
 
-One state, three surfaces, concrete values:
+### Two rules the controls must not break
+
+**Never zero teams.** Deselecting the last shown team is a no-op, not an empty
+chart. Guard it in `toggle`, not in the render:
+
+```tsx
+const toggle = (id: number) => {
+  if (shown.has(id) && shown.size === 1) return;
+  …
+};
+```
+
+**Filtering and hovering are different states and must not look alike.** T38
+mutes a line to `opacity: 0.18`. A deselected team is *gone* — not drawn at all,
+and its label absent with it. If a filtered-out team renders as a faint line, a
+reader cannot tell which of the two things happened. Settle this before building
+T38 or the two states will collide.
+
+### Where the state lives
+
+```
+App.tsx           season (T56) — it is the argument to useSeason
+ChartPanel.tsx    metric, shown — both local, both mirrored to the query string
+Controls.tsx      presentational: props in, events out, no state of its own
+Chart.tsx         still pure; receives the already-filtered series
+```
+
+Filter in `ChartPanel` — pass `Chart` the series it should draw, not the full set
+plus a predicate. `Chart` stays a pure function of what is on screen, which is
+what keeps the scales honest: the y domain must come from the *visible* series,
+or hiding the leader leaves a stretch of empty space above every remaining line.
+
+### Done when
+
+- Every control works with a keyboard alone, and the focus ring is visible on each.
+- The page reads correctly from a pasted URL with `?teams=` and `?metric=`.
+- Defaults produce a bare URL with no query string at all.
+- At 375 px nothing overflows horizontally and every target is at least 44 px.
+- Hiding the top team rescales the y axis.
+- Deselecting all five is impossible.
+
+## T38 · Hover interaction — 1.0 h
+
+### What this task is, exactly
+
+One piece of state — **which team is raised** — owned by `ChartPanel`. Moving the
+pointer across the chart raises the nearest line and mutes the rest. Focusing one
+of T37's chips does the same thing from the keyboard.
+
+Everything here lives inside the chart panel, and that is not an accident: **no
+interaction may span two panels** (see T33b). The standings table and the chart
+are never on screen together, so a hover in one cannot usefully change the other.
+
+`docs/design.md:419` asks for exactly this and no more: *"Hovering a team in the
+chart should raise it and mute the rest."*
+
+Two things are **not** in scope:
+
+- **A tooltip** showing the value at a given week. It needs a positioned overlay
+  and a week readout, and doubles the task.
+- **Anything driven by the standings table.** Hovering a row can still tint that
+  row — `tbody tr:hover { background: var(--bg-subtle) }` already does — but it
+  cannot reach the chart.
+
+### The piping, top to bottom
+
+`hovered` lives in `ChartPanel`, the nearest component that owns both the chips
+and the chart:
+
+```tsx
+// ChartPanel.tsx
+const [hovered, setHovered] = useState<number | null>(null);
+…
+<Chart
+  series={visible}
+  width={width}
+  height={Math.round(width * AspectRatio)}
+  hovered={hovered}
+  onHover={setHovered}
+/>
+```
+
+`useState` must be called **before** the `if (!isPlottable(visible)) return …`
+guard, alongside the existing `useState`/`useQueryState`/`useMemo` calls. React
+requires every render of a component to call the same hooks in the same order; a
+hook placed after a conditional `return` is skipped on some renders and the whole
+hook state shifts by one. This is the Rules of Hooks, and it fails loudly in
+development with "Rendered fewer hooks than expected".
+
+`Chart` takes two new props:
+
+- **`hovered: number | null`** — the roster id being raised, or `null`. Read it to
+  decide how to render.
+- **`onHover: (id: number | null) => void`** — call it to change the state.
+
+This shape is called a **controlled component**: the child owns no state, it
+renders what it is given and reports events upward. It is what keeps `Chart`
+pure — a callback prop is not a side effect, because `Chart` never *calls* it
+during render, only from an event handler.
+
+`App` is untouched. It stays the fetch, its guards, and the panel order.
+
+### The hit area
+
+The chart needs to answer "which line is the pointer nearest?". Two things are
+wrong with the obvious approach of putting handlers on each `<path>`:
+
+- A path's hit area is its **stroke**, 1.75 px wide. That is a hard target with a
+  mouse and impossible with a finger.
+- The space *between* lines is dead, so the pointer generates a stream of
+  enter/leave pairs as it crosses them, and the raised line flickers.
+
+Instead, cover the plot area with one invisible rectangle and compute the answer.
+
+```tsx
+// Chart.tsx, rendered LAST so it sits above the paths in paint order
+<rect
+  className="hit"
+  x={m.left}
+  y={m.top}
+  width={width - m.left - m.right}
+  height={height - m.top - m.bottom}
+  fill="transparent"
+  onPointerMove={onMove}
+  onPointerLeave={() => onHover(null)}
+/>
+```
 
 ```css
-.chart path.series { transition: opacity 140ms ease, stroke-width 140ms ease; }
-.chart path.series[data-muted='true'] { opacity: 0.18; }
+.chart .hit { touch-action: pan-y; }
+```
+
+Four details, each load-bearing:
+
+- **`fill="transparent"`, not `fill="none"`.** `none` means "do not paint", and an
+  unpainted SVG shape receives no pointer events at all. `transparent` paints a
+  fully transparent colour, which does receive them. This is the single most
+  common reason an overlay "does nothing".
+- **Rendered last.** SVG has no `z-index`; paint order is document order, so the
+  rect must come after the paths to be on top of them.
+- **`onPointerLeave`, not just move.** Without it, the last hovered team stays
+  raised forever once the pointer exits.
+- **`touch-action: pan-y`** tells the browser that vertical scrolling over this
+  element is still the browser's job. Without it, a touch drag inside the rect can
+  be swallowed and the panel stops scrolling on a phone.
+
+`onPointerMove` is the modern unified event — it fires for a mouse, a pen and a
+finger alike, so you write one handler instead of a mouse pair and a touch pair.
+
+### Turning a pixel into a team
+
+```tsx
+function onMove(e: React.PointerEvent<SVGRectElement>) {
+  const box = e.currentTarget.getBoundingClientRect();
+  const px = e.clientX - box.left + m.left;
+  const py = e.clientY - box.top + m.top;
+
+  const week = Math.min(Math.max(Math.round(x.invert(px)), 1), maxWeek);
+
+  let best: { id: number; d: number } | null = null;
+  for (const s of series) {
+    const p = s.points.find((q) => q.week === week);
+    if (!p) continue;
+    const d = Math.abs(y(p.value) - py);
+    if (best === null || d < best.d) best = { id: s.rosterId, d };
+  }
+
+  onHover(best && best.d < 40 ? best.id : null);
+}
+```
+
+Reading it line by line:
+
+- **`e.clientX`** is the pointer's position in *viewport* pixels — measured from
+  the top-left of the browser window, not of your element.
+- **`getBoundingClientRect()`** returns the element's position in those same
+  viewport pixels, so `clientX - box.left` converts to a position within the rect.
+- **`+ m.left`** converts again, from "within the rect" to "within the SVG's
+  coordinate system", because the rect begins at the left margin rather than at
+  the SVG's origin. Forget this and every reading is 44 px out.
+- **`x.invert(px)`** runs the scale backwards: pixels in, weeks out. This is the
+  method that makes it worth keeping `x` in a variable instead of inlining it.
+- **`Math.round`** snaps to the nearest whole week, which is what makes the
+  highlight feel like it locks on rather than drifting between weeks.
+- **`Math.min(Math.max(…))`** clamps to the real week range, because the pointer
+  can sit in the padding at either end.
+- The loop measures the **vertical** distance from the pointer to each series at
+  that week and keeps the closest. With five teams a linear scan is faster than
+  any index; `d3-array`'s `bisector` is the right tool only when the array is long
+  enough for the scan to hurt, and eighteen weeks is not that.
+- **`best.d < 40`** is a proximity threshold: if the nearest line is more than
+  40 px away vertically, nothing is raised. Without it, the chart always has
+  something highlighted, including when the pointer is in empty space at the top.
+
+`Chart` therefore gains one more prop:
+
+```tsx
+interface ChartProps {
+  series: Series[];
+  width: number;
+  height: number;
+  hovered?: number | null;
+  onHover: (id: number | null) => void;
+}
+```
+
+### What the raised and muted states look like
+
+`Chart` already emits the attributes:
+
+```tsx
+data-muted={hovered !== null && hovered !== s.rosterId}
+data-raised={hovered === s.rosterId}
+```
+
+React renders a boolean `data-*` value as the string `"true"` or `"false"`, which
+is why the selectors quote it.
+
+```css
+.chart path.series {
+  transition: opacity 140ms ease, stroke-width 140ms ease;
+}
+.chart path.series[data-muted='true']  { opacity: 0.18; }
 .chart path.series[data-raised='true'] { stroke-width: 2.5; }
+
+.chart .series-label[data-muted='true'] { opacity: 0.18; }
 
 @media (prefers-reduced-motion: reduce) {
   .chart path.series { transition: none; }
@@ -872,138 +1315,429 @@ One state, three surfaces, concrete values:
 ```
 
 **0.18, not 0.5.** A timid mute does not separate the raised line from the rest;
-the point is that one line becomes obvious. **140ms, not 300ms** — long enough to
-read as a transition, short enough not to feel sluggish while moving across rows.
+the point is that one line becomes obvious.
 
-**Sort the hovered series last rather than manipulating the DOM.** SVG has no
-z-index; paint order is document order.
+**140 ms, not 300 ms** — long enough to read as a transition, short enough not to
+feel sluggish while the pointer sweeps across five lines.
+
+**Mute the labels with their lines.** Five full-strength names beside four ghost
+lines looks like a rendering fault.
+
+**A muted line and a filtered-out line must not look alike.** T37's chips remove
+a team entirely — no path, no label. Hover mutes to `opacity: 0.18`. If a filtered
+team rendered as a faint line, nobody could tell which of the two happened.
+
+### Paint order, again
+
+A raised line that is drawn first still sits underneath the four muted ones. Sort
+it last:
 
 ```tsx
 const ordered = hovered === null
   ? series
-  : [...series.filter(s => s.rosterId !== hovered),
-     ...series.filter(s => s.rosterId === hovered)];
+  : [...series.filter((s) => s.rosterId !== hovered),
+     ...series.filter((s) => s.rosterId === hovered)];
 ```
 
-Hovering a **table row** should raise the same line. Same state, set from
-`onMouseEnter` on `<tr>`, and a keyboard equivalent on the legend so the feature
-exists for more than mouse users.
+Note this reorders **`series`**, an array you built in `ChartPanel` — never the
+DOM. Do not reach for `element.appendChild` to raise a node; React owns those
+nodes and will put them back (D9).
 
-### Finding what the pointer is over
+### The keyboard path
 
-Do not put a mouse handler on each `<path>`. A 1.75 px line is a hard target, the
-gaps between lines are dead, and a moving pointer fires a stream of enter and
-leave events as it crosses them.
-
-Instead put one transparent `<rect>` over the plot area and work the answer out
-arithmetically. Every tutorial does this with `pointer` from `d3-selection`,
-which D9 forbids — and which you do not need, because it is four lines of DOM
-maths:
+Hover is a pointer idea; a keyboard has no pointer. The accessible equivalent is
+**focus**, and T37's chips are already five focusable elements in this same
+panel — the only reason a keyboard path exists here at all.
 
 ```tsx
-function onMove(e: React.PointerEvent<SVGRectElement>) {
-  const box = e.currentTarget.getBoundingClientRect();
-  const week = Math.round(x.invert(e.clientX - box.left + m.left));
-  setActiveWeek(Math.min(Math.max(week, 1), maxWeek));
-}
+<button
+  className="chip"
+  onFocus={() => onHover(s.rosterId)}
+  onBlur={() => onHover(null)}
+  …
+>
 ```
 
-`x.invert` is the scale run backwards — pixels to weeks — and it is the reason to
-keep the scale in a variable rather than inlining it. `Math.round` snaps to the
-nearest week, which is what makes a readout feel like it locks on rather than
-drifting.
+Tabbing through the chips now walks the highlight down the teams, which is the
+same experience a pointer user gets by sweeping across the chart. It costs two
+lines because the focusable elements already exist — which is the argument for
+not inventing a separate legend.
 
-**Attach the handler to the rect, not to the SVG.** The SVG includes the margins,
-so a pointer over the y-axis labels would otherwise report week 0. The `+ m.left`
-above is because the rect starts at the margin, not at the SVG origin.
+### Touch
 
-For the nearest *series* at that week, compare values directly — with five teams
-a linear scan beats any index:
+There is no hover on a touch screen, and you should not simulate one. A tap that
+raises a line competes with the tap that scrolls the panel, and iOS Safari fires
+a synthetic mouse event 300 ms later that produces a second, delayed highlight.
 
-```tsx
-const nearest = series.reduce<{ s: Series; d: number } | null>((best, s) => {
-  const p = s.points.find((q) => q.week === week);
-  if (!p) return best;
-  const d = Math.abs(y(p.value) - pointerY);
-  return best === null || d < best.d ? { s, d } : best;
-}, null);
-```
+T37's chips are the touch affordance: tapping a chip filters, which is the
+touch-appropriate way to isolate a line. `onPointerMove` still fires for a finger
+drag, which is harmless — it raises a line while the finger is down and clears on
+`onPointerLeave`.
 
-`d3-array`'s `bisector` is the right tool when the array is long enough that a
-scan hurts. Eighteen weeks is not that, and `bisector` is the kind of
-optimisation that costs a reader more than it saves the machine.
+### Done when
+
+- Moving the pointer across the chart raises the nearest line and clears in empty
+  space.
+- Tabbing through the chips raises each line, with a visible focus ring.
+- The raised line is drawn on top of the muted ones.
+- Under `prefers-reduced-motion: reduce` the states still change, without
+  animating.
+- A filtered-out team is absent, not faint.
 
 ## T39 · Polling — 2.0 h
 
-The UI question is what a refresh *looks* like. The answer is: almost nothing.
+### What already exists
 
-**Never return to a spinner on a poll.** `loading` is already derived so it is
-true only before the first response — a poll replaces data in place. A page that
-flashes a skeleton every thirty seconds is worse than a static one.
+`useSeason` implements the whole mechanism and has done since T32. Before writing
+anything, read it — the work here is what the reader *sees*, not how the fetch
+happens.
 
-**A quiet freshness indicator instead.** One muted line, updated from `asOfUtc`:
+| Behaviour | Where |
+|---|---|
+| 30 s interval | `PollIntervalMs`, the second `useEffect` |
+| Stops on a finished season | `if (payload !== null && !payload.isCurrent) return;` |
+| Pauses in a background tab | `document.visibilityState === 'visible'` inside `tick` |
+| Refreshes on tab return | `visibilitychange` listener |
+| Sends `If-None-Match` | `fetchSeason(season, etag.current, …)` |
+| Keeps data on a 304 | `if (result.payload !== null)` |
+| Cancels an in-flight request | `AbortController`, one per load |
+| `loading` only before the first response | `payload === null && error === null` |
+
+Two consequences worth stating plainly, because they are the reason the rest of
+this task is small:
+
+**A poll never shows a spinner.** `loading` is derived, not stored, and becomes
+false permanently once any payload arrives. A page that flashes a skeleton every
+thirty seconds is worse than a static one.
+
+**A finished season is never polled at all.** Selecting 2025 (once T56 exists)
+stops the timer with no new code, because nothing about a completed season can
+change.
+
+### The bug to fix first
+
+`App.tsx` currently reads:
 
 ```tsx
-<p className="muted">Updated {formatRelative(payload.asOfUtc)}</p>
+if (loading) return <p>Loading…</p>;
+if (error)   return <p role="alert">Could not load the season: {error.message}</p>;
+if (!payload) return <p>No season data.</p>;
 ```
 
-Use `Intl.RelativeTimeFormat` rather than writing "3 minutes ago" by hand, and
-re-render it on a timer of its own — the string goes stale even when the data
-does not, and a page that reads "Updated 0 minutes ago" for an hour is worse than
-no indicator at all.
+`useSeason` deliberately keeps the last good `payload` when a later fetch throws —
+but this error branch runs **before** the payload check, so one failed poll
+replaces a working page with an error message. During a live Sunday, a single
+blip wipes the scoreboard.
 
-If you want to signal the moment of update, a 400ms background fade on changed
-rows is the ceiling. Anything more is distracting during a live Sunday, which is
-precisely when people are watching.
+The order has to be: payload wins, and the error becomes a banner.
 
-The mechanics — `If-None-Match`, visibility gating, `max-age=5` and why no
-cache-busting parameter — are already implemented in `useSeason`.
+```tsx
+if (loading) return <p>Loading…</p>;
+if (!payload) return <p role="alert">Could not load the season: {error?.message}</p>;
+// payload exists — render the page, and show `error` as a non-blocking notice
+```
+
+### The freshness indicator
+
+One muted line in the masthead, driven by `payload.asOfUtc` — the ISO 8601
+timestamp the API sets when it assembled the snapshot.
+
+The subtlety: **the string goes stale even when the data does not.** If the last
+successful poll was a 304, `asOfUtc` does not change, but "updated 1 minute ago"
+becomes wrong a minute later. The component therefore needs a timer of its own,
+independent of the fetch.
+
+```tsx
+// hooks/useRelativeTime.ts
+import { useEffect, useState } from 'react';
+
+const Units: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['second', 60],
+  ['minute', 60],
+  ['hour', 24],
+  ['day', 7],
+];
+
+export function useRelativeTime(iso: string): string {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  let delta = (new Date(iso).getTime() - now) / 1000;
+
+  for (const [unit, step] of Units) {
+    if (Math.abs(delta) < step) return format.format(Math.round(delta), unit);
+    delta /= step;
+  }
+  return format.format(Math.round(delta), 'week');
+}
+```
+
+- **`Intl.RelativeTimeFormat`** is built into the browser and produces "1 minute
+  ago", "in 3 days", localised, with no library. `numeric: 'auto'` is what turns
+  "1 day ago" into "yesterday".
+- **The delta is negative for the past**, which is what the API produces, and the
+  formatter expects exactly that sign convention.
+- **`setInterval` at 15 s** re-renders the component so the string stays true. It
+  is deliberately not the 30 s poll interval; the two are unrelated clocks and
+  coupling them means the label is wrong for up to 30 s after a 304.
+- **The cleanup function** returned from `useEffect` clears the interval when the
+  component unmounts. Without it, every mount leaks a timer that keeps calling
+  `setNow` on a component that no longer exists.
+
+```tsx
+<p className="muted">Updated {useRelativeTime(payload.asOfUtc)}</p>
+```
+
+### Game-window gating
+
+Polling every 30 s around the clock is wasted on a Wednesday afternoon, when no
+scores can change. The design asks for the poll to be gated on game windows as
+well as visibility.
+
+The trap: **the viewer's clock is not the league's clock.** Someone opening the
+page in London must get the same answer as someone in Chicago, so the decision has
+to be made in US Eastern time regardless of where the browser is.
+
+```tsx
+function isGameWindow(at: Date): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    hour12: false,
+  }).formatToParts(at);
+
+  const day = parts.find((p) => p.type === 'weekday')!.value;
+  const hour = Number(parts.find((p) => p.type === 'hour')!.value);
+
+  if (day === 'Thu') return hour >= 20;
+  if (day === 'Fri') return hour < 1;
+  if (day === 'Sun') return hour >= 13;
+  if (day === 'Mon') return hour >= 20 || hour < 1;
+  if (day === 'Tue') return hour < 2;
+  return false;
+}
+```
+
+**`Intl.DateTimeFormat` with a `timeZone` is the only correct way to do this.**
+`getHours()` returns the viewer's local hour; adding a fixed offset is wrong twice
+a year, because the US and Europe change clocks on different dates. `formatToParts`
+hands back the pieces already converted, and the browser's own tz database handles
+daylight saving.
+
+The windows above deliberately overrun the games — kickoff times move, and the
+finalize job runs Tuesday at 12:00 UTC.
+
+Wire it into the existing `tick`, beside the visibility check:
+
+```tsx
+const tick = () => {
+  if (document.visibilityState === 'visible' && isGameWindow(new Date())) void load();
+};
+```
+
+Keep the `visibilitychange` listener calling `load()` **unconditionally** — a
+reader returning to the tab on a Wednesday should still get fresh data once, even
+though the interval is idle.
+
+### If you want to signal the moment of update
+
+A 400 ms background fade on rows whose value changed is the ceiling. Anything more
+is distracting during a live Sunday, which is precisely when people are watching.
+Skip it entirely under `prefers-reduced-motion`.
+
+### Done when
+
+- A failed poll leaves the page on screen with a notice, not an error screen.
+- The "updated" line changes without a data change.
+- No network request fires on a Wednesday with the tab focused.
+- Switching to a background tab stops the requests; returning fires exactly one.
+- No timer survives a component unmount (check with the React DevTools profiler,
+  or add a `console.log` to the cleanup and navigate away).
 
 ## T40 · Responsive and accessibility — 2.5 h
 
-**One breakpoint is enough.** This page is a table and a chart.
+### Check what is already responsive before writing rules
+
+`box-sizing: border-box` and the `width: 99%` team column do most of the work; the
+standings table collapses to 375 px unaided. Measure before adding anything:
+
+```js
+// in the browser console at 375 px wide
+const d = document.documentElement;
+[...document.querySelectorAll('body *')]
+  .filter((e) => e.getBoundingClientRect().right > d.clientWidth + 1)
+  .map((e) => e.tagName + '.' + e.className);
+```
+
+An empty array means nothing overflows. **The first overflowing element in
+document order is the cause; everything after it is a symptom** — which is the
+lesson from the scrollbar that looked like a table-width bug and was a missing
+`box-sizing`.
+
+### The one breakpoint
 
 ```css
 @media (max-width: 40rem) {
   th, td { padding: var(--space-2); }
-  /* drop the least important column rather than shrinking everything */
   .col-ideal { display: none; }
-  /* the context line loses to the title on a phone */
   .masthead p { display: none; }
+  .segmented { display: flex; width: 100%; }
+  .segmented button { flex: 1; }
 }
 ```
 
-`box-sizing: border-box` and the `width: 99%` team column already do most of the
-responsive work — the table collapses to 375 px unaided. Verify that before
-adding rules for a problem you no longer have.
+Two of those selectors do not exist yet and must be added to the markup:
 
-**The table scrolls in its own container**, and the page body never scrolls
-sideways:
+**`.col-ideal`** needs to go on the header cell *and* every body cell of that
+column — CSS cannot hide a column as a unit, because an HTML table has no element
+representing one:
+
+```tsx
+<th scope="col" className="col-ideal">Ideal</th>
+…
+<td className="col-ideal">{team.totals.ideal.toFixed(1)}</td>
+```
+
+Dropping the least important column beats shrinking every column: four legible
+columns are worth more than five cramped ones. Ideal goes because Points decides
+the league and Gap is derived from it.
+
+**`.masthead p`** is the season context line, which at 375 px wraps to two lines
+and collides with a title that has also wrapped. The σ column header already says
+which weeks are counted, so nothing is lost.
+
+### The table scrolls in its own container
+
+If a future column makes the table genuinely too wide, the *table* should scroll
+sideways, never the page:
+
+```tsx
+<div className="table-wrap">
+  <table>…</table>
+</div>
+```
 
 ```css
 .table-wrap { overflow-x: auto; }
 ```
 
-**The chart needs a text equivalent.** An SVG of five paths is silent to a screen
-reader:
+A horizontally scrolling page is the single most obvious sign that nobody checked
+a phone. A horizontally scrolling table is a normal, expected control.
 
-```tsx
-<svg role="img" aria-label={`Cumulative points by week for ${names.join(', ')}, weeks 1 to ${maxWeek}`}>
+### Touch targets
+
+Anything tappable needs about 44 × 44 px. T37's chips and segmented buttons carry
+`min-height: 44px` for this reason. Verify rather than assume:
+
+```js
+[...document.querySelectorAll('button, a, select')]
+  .map((e) => [e.textContent.trim().slice(0, 20), Math.round(e.getBoundingClientRect().height)])
+  .filter(([, h]) => h < 44);
 ```
 
-**Check contrast in both themes.** `--fg-muted` against `--bg` is the pair most
-likely to fail. Target 4.5:1 for body text, 3:1 for large text and UI borders.
+### What a screen reader needs
 
-**Respect `prefers-reduced-motion`** for every transition, not just the chart —
-that is R1, and the reduced-motion version has to look finished on its own.
+A screen reader announces a page as a tree of **landmarks**, **headings** and
+**roles**. Three things matter here:
 
-### A finishing pass worth 20 minutes
+**The chart is silent.** Five `<path>` elements convey nothing. `role="img"` plus
+`aria-label` makes the whole SVG announce as a single image with a description,
+which `Chart.tsx` already does. Check the sentence reads as English when spoken,
+not as a list of fields.
 
-- A real `<title>` — "Ideal Points" beats Vite's default `web`.
-- A favicon that is not the Vite logo.
-- `<meta name="theme-color">` for both schemes.
-- `::selection` using `--accent-weak`.
-- Check the page at 200% zoom; nothing should overlap.
+**Every panel is a labelled region.** `Panel.tsx` already emits
+`aria-labelledby={headingId}` on each `<section>`, which turns each panel into a
+navigable landmark. This is why the empty state must be a `<p>` and not a second
+`<h2>` — two headings of the same rank inside one labelled section announce as two
+sections that are not there.
+
+**The sort column is announced.** `aria-sort="descending"` on the Points header is
+what tells a screen reader the table is ordered, and by what. Colour alone does
+not.
+
+To test without installing anything: **VoiceOver** on macOS is `Cmd+F5`, and
+`Ctrl+Option+U` opens the rotor for landmarks and headings. On Windows, **NVDA**
+is free; `Insert+F7` lists the same. Tab through the page once with the screen
+reader on and listen for anything that announces as "clickable" but does nothing.
+
+### The keyboard pass
+
+Unplug the mouse and use the page. In order:
+
+1. `Tab` reaches every control, in visual order.
+2. The focus ring is visible on each — your global `:focus-visible` rule handles
+   this; the failure mode is a component that sets `outline: none` locally.
+3. `Enter` and `Space` activate every chip and segment. They do this for free
+   **because they are `<button>` elements**; a `<div onClick>` would need
+   `tabIndex`, a `role`, and its own key handler, and would still get it subtly
+   wrong.
+4. Nothing traps focus.
+
+Scroll-snap and keyboard scrolling interact badly if the snap is `mandatory`,
+which is why T33b uses `proximity`. Confirm `Page Down` still moves the page.
+
+### Contrast
+
+Target **4.5:1** for body text and **3:1** for large text and UI borders. The pair
+most likely to fail is `--fg-muted` on `--bg`, in both themes.
+
+Measure rather than guess: in Chrome DevTools, inspect the element, open the
+colour swatch in the Styles pane, and read the contrast ratio it prints. Test both
+themes by toggling `prefers-color-scheme` in the Rendering panel
+(`Cmd/Ctrl+Shift+P` → "Show Rendering").
+
+If muted text fails, raise its lightness rather than its chroma — the token is
+`oklch(52% 0.012 250)` in light mode, and lightness is the first number.
+
+### Reduced motion
+
+R1 requires it, and T33b already turns the sticky panel stack back into an
+ordinary document under it. Extend the same treatment to every transition you have
+added since — the chart's opacity fade, any row highlight.
+
+The test that matters: **if the page does not look finished with motion disabled,
+the scrolling was carrying the design rather than the design carrying itself.**
+
+### The finishing pass
+
+`web/index.html` still ships Vite's defaults:
+
+```html
+<title>web</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+```
+
+- A real `<title>`. It is the browser tab, the bookmark name, and what a pasted
+  link shows in the league chat.
+- A favicon that is not the Vite logo. A single-letter SVG is fine.
+- `<meta name="theme-color">` for both schemes, which tints the browser chrome on
+  mobile:
+  ```html
+  <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#111317" media="(prefers-color-scheme: dark)" />
+  ```
+  These must be hex or rgb; `theme-color` does not accept `oklch()` or a CSS
+  variable, so they are the one place a literal colour is allowed. Keep them in
+  step with `--bg`.
+- `::selection { background: var(--accent-weak); }`.
+- Check the page at 200 % browser zoom. Nothing should overlap, and nothing should
+  need horizontal scrolling — this is the same test as the 375 px width, because
+  200 % zoom on a 1280 px window is a 640 px layout.
+
+### Done when
+
+- Nothing overflows horizontally at 375 px, measured with the snippet above.
+- Every interactive element is at least 44 px tall on a phone.
+- The whole page is usable with `Tab` and `Enter` alone, with a visible ring.
+- Both themes pass 4.5:1 for body text.
+- With reduced motion on, the page still looks finished.
+- The tab says something other than "web".
 
 
 ---

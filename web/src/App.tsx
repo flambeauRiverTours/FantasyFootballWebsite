@@ -2,6 +2,7 @@ import { useSeason } from './hooks/useSeason';
 import StandingsPanel from './components/StandingsPanel';
 import ChartPanel from './components/ChartPanel';
 import RadarPanel from './components/RadarPanel';
+import { useRelativeTime } from './hooks/useRelativeTime';
 
 /**
  * Owns the fetch and its three states, then orders the panels. A panel may
@@ -9,10 +10,10 @@ import RadarPanel from './components/RadarPanel';
  */
 export default function App() {
   const { payload, error, loading } = useSeason(null);
+  const updated = useRelativeTime(payload?.asOfUtc);
 
   if (loading) return <p>Loading…</p>;
-  if (error) return <p role="alert">Could not load the season: {error.message}</p>;
-  if (!payload) return <p>No season data.</p>;
+  if (!payload) return <p role="alert">Could not load the season: {error?.message}</p>;
 
   // M6 fills leagueSlotAverages; until then the radar has nothing to plot, so the
   // data answers the question and no flag has to be flipped when T48 ships.
@@ -27,7 +28,7 @@ export default function App() {
         <div className="panel-inner">
           <h1>Bosty Base Fantasy Football</h1>
           <p className="muted">
-            {payload.season} · Week {payload.currentWeek}
+            {payload.season} · Week {payload.currentWeek} · Updated {updated}
           </p>
         </div>
       </header>
