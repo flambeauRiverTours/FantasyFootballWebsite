@@ -1,10 +1,11 @@
 import { useSeason } from './hooks/useSeason';
-import { hasConsistency } from './api/types';
-import './App.css';
+import StandingsPanel from './components/StandingsPanel';
+import ChartPanel from './components/ChartPanel';
+import RadarPanel from './components/RadarPanel';
 
 /**
- * T32 only proves the pipe: fetch, types, polling and the 304 path.
- * T33 brings tokens, T34 the real table.
+ * Owns the fetch and its three states, then orders the panels. A panel may
+ * assume a payload exists.
  */
 export default function App() {
   const { payload, error, loading } = useSeason(null);
@@ -13,44 +14,30 @@ export default function App() {
   if (error) return <p role="alert">Could not load the season: {error.message}</p>;
   if (!payload) return <p>No season data.</p>;
 
-  const ranked = [...payload.teams].sort((a, b) => b.totals.actual - a.totals.actual);
-  const leader = ranked[0]?.totals.actual ?? 0;
-  const hasAnyConsistency = hasConsistency(ranked[0].totals);
-  return (
-    <main>
-      <h1>Bosty Base Fantasy Football Standings</h1>
-      <p>
-        {payload.season} · Week {payload.currentWeek} · Final Through{' '}
-        {payload.finalThroughWeek}
-      </p>
+  // M6 fills leagueSlotAverages; until then the radar has nothing to plot, so the
+  // data answers the question and no flag has to be flipped when T48 ships.
+  // ?radar forces the panel open to build against hand-written data first.
+  const hasRadar =
+    Object.keys(payload.leagueSlotAverages).length > 0 ||
+    new URLSearchParams(window.location.search).has('radar');
 
-      <table>
-        <thead>
-            <tr>
-              <th scope="col">Team</th>
-              <th scope="col">Points</th>
-              <th scope="col">Ideal</th>
-              <th scope="col">Gap</th>
-              {hasAnyConsistency ? 
-              <th scope="col">σ</th> : null }
-            </tr>
-        </thead>
-        <tbody>
-          {ranked.map((team) => (
-            <tr key={team.rosterId}>
-              <td>{team.name}</td>
-              <td>{team.totals.actual.toFixed(1)}</td>
-              <td>{team.totals.ideal.toFixed(1)}</td>
-              <td>
-                {team.totals.actual === leader
-                  ? '—'
-                  : (team.totals.actual - leader).toFixed(1)}
-              </td>
-              {hasAnyConsistency ? <td>team.totals.sigma.toFixed(1)</td> : null }
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+  return (
+    <>
+      <header className="masthead">
+        <div className="panel-inner">
+          <h1>Bosty Base Fantasy Football</h1>
+          <p className="muted">
+            {payload.season} · Week {payload.currentWeek} · final through week{' '}
+            {payload.finalThroughWeek}
+          </p>
+        </div>
+      </header>
+
+      <main className="panels">
+        <StandingsPanel teams={payload.teams} finalThroughWeek={payload.finalThroughWeek} />
+        <ChartPanel payload={payload} />
+        {hasRadar ? <RadarPanel payload={payload} /> : null}
+      </main>
+    </>
   );
 }
