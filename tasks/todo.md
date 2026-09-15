@@ -4,10 +4,12 @@
 eighth milestone worth 7.5 h. Ordered so the work most likely to be wrong
 happens first and needs no cloud account to prove.
 
-**Where things stand (2026-09-13).** M0, M1 and M2 are built. The site is
-deployed: the API serves the real league, CI and deploy pipelines run on every
-PR and merge, and the standings are correct against live data. What is left is
-persistence (M3) and a page a human can look at (M4).
+**Where things stand (2026-09-14).** M0, M1 and M2 are built and deployed. M3 is
+built as far as it usefully can be: the database exists, the schema is applied,
+and weeks persist as they finalize. Its last three tasks are **deferred** — each
+waits on a prior season, on data that accumulates on its own, or on a second
+migration. **M4, the page, is next**, and it is the first milestone anyone else
+in the league can look at.
 
 - Step-by-step instructions per task: [`docs/field-manual.md`](../docs/field-manual.md)
 - Rationale for every decision: [`docs/design.md`](../docs/design.md)
@@ -72,34 +74,34 @@ the deployed API when T32 needs it.
 
 ---
 
-## Next · M3 · Persistence — 17 h
+## M3 · Persistence — 10 of 17 h done
 
-Finalized weeks become permanent; history becomes reachable. Two tasks here —
-the managed-identity connection and the migration step — are fiddlier than their
-hours suggest.
+Finalized weeks become permanent. The database is deployed, the schema is
+applied, and the read and write paths both exist.
 
 - [x] **T25** EF Core model — 3 h
-      Context, four entities, initial migration. `HasPrecision` on every decimal.
+      Four entities, `Initial` migration applied. PK leads on `Season` (**A14**).
 - [x] **T26** Azure SQL in bicep — 3 h `±`
-      Free-tier serverless, pause-on-limit, managed-identity connection with no password.
+      `GP_S_Gen5_2` serverless in **westus2**, free limit with auto-pause, Entra-only auth.
 - [x] **T27** Read path — 2 h
-      Hydrate finalized weeks on cold start; SQL off the hot path.
+      `IFinalizedWeekStore` in Core, SQL adapter and cache decorator in Data,
+      consumed by `SeasonService`. 24 tests.
 - [x] **T28** Finalize timer — 2 h
-      Tuesday morning: freeze the completed week, recompute sigma, drop the cached season.
-- [ ] **T29** Season chain walk — 2 h
-      Follow `previous_league_id` back, upsert a `League` row per hop. Not exercised until the 2027 rollover (A4).
-- [ ] **T30** Historical backfill job — 2.5 h
-      One-shot per prior season, roughly 21 calls, never on a request path.
-- [ ] **T31** Migrations in the pipeline — 2.5 h `±`
-      Open the firewall for the runner, migrate, close it in an `always()` step.
+      `FinalizeWeek`, Tuesdays 12:00 UTC. Writes **every** finalized week, not just
+      the last, so the current season backfills itself.
+
+**The remaining three are deferred to the end** — see *Deferred* below. None is
+blocked on effort; each is waiting on something that does not exist yet.
 
 ## M4 · The page — 24 h
 
 First milestone anyone else in the league can look at, and the first that will
 generate opinions.
 
-- [ ] **T32** Frontend scaffold — 2 h
-      Vite, React, TypeScript, SWA config, typed fetch layer. Unblocks the `web` job in deploy.yml and the node steps dropped from ci.yml.
+- [x] **T32** Frontend scaffold — 2 h
+      Vite 8, React 19, TypeScript. Types written from the live response, ETag-aware
+      fetch layer, `useSeason` with visibility-gated polling, dev proxy past CORS.
+      `web` jobs restored in ci.yml and wired to SWA in deploy.yml.
 - [ ] **T33** Design system — 3 h
       Tokens, type scale, light and dark, both designed rather than inverted.
 - [ ] **T34** Standings table — 3 h
@@ -147,6 +149,39 @@ that cutting it is a decision rather than an omission.
 - [ ] **T53** Chart reveal and transitions — 2 h `±`
 - [ ] **T54** Section transitions — 1 h
 - [ ] **T55** Football loader — 2.5 h
+
+---
+
+## Deferred · the rest of M3 — 7 h
+
+Moved behind M4 on 2026-09-14. Each was written into the plan before it was
+clear what would and would not have input.
+
+- [ ] **T29** Season chain walk — 2 h · **waiting on August 2027**
+      Follows `previous_league_id` backwards from the configured league, upserting
+      a `League` row per hop, and is what would populate `available` on
+      `/api/seasons`. 2026 is the first season (**A4**), so the chain is one hop
+      and the loop runs exactly once. It also cannot discover a new season on its
+      own — the walk runs *backwards* from `League__CurrentLeagueId`, so nothing
+      changes until that app setting is updated at rollover (T45's checklist).
+      Needs a `Core` record for a league season before `ILeagueStore` can be
+      defined the way `IFinalizedWeekStore` was, and a `SeasonOverrides` property
+      that `LeagueOptions` does not yet have.
+- [ ] **T30** Historical backfill job — 2.5 h · **no input, and largely redundant**
+      T28 writes every finalized week rather than only the most recent, and
+      `WriteAsync` upserts, so **the current season already backfills itself**.
+      That leaves prior seasons, of which there are none. When it is needed, the
+      console harness is the right home rather than a deployed function — it
+      already builds a whole season, the local Entra auth path is proven, and a
+      once-per-season job does not need a permanent trigger surface in Azure.
+      Register `AddFantasyData` behind a flag so the harness stays database-free
+      by default.
+- [ ] **T31** Migrations in the pipeline — 2.5 h `±` · **nothing to migrate yet**
+      Not blocked, just not yet earning its keep: there is one migration and it is
+      applied. The risk of deferring is that the *next* schema change gets applied
+      by hand and the step is never built. Worth doing the moment a second
+      migration exists — which M6 does not require, since the radar adds no
+      columns (§08).
 
 ---
 
@@ -253,6 +288,34 @@ Listed here only so their implementation state is visible in one place.
 _One entry per work session: what changed, what was verified, what is still
 open. Detail that outlived the session has moved to `amendments.md` or
 `lessons.md`; these are pointers, not a transcript._
+
+### 2026-09-14 — M3 built, then deliberately cut short
+
+Framework bumped to **.NET 10** — .NET 9 leaves support on Flex Consumption on
+2026-11-10, 57 days out and mid-season. Azure's own runtime list settled it.
+
+M3's substance landed: EF Core model and `Initial` migration applied to a real
+`GP_S_Gen5_2` database in **westus2** (eastus and eastus2 are both restricted for
+General Purpose on this subscription), `IFinalizedWeekStore` in `Core` with a SQL
+adapter and a caching decorator in `Data`, `SeasonService` reading stored weeks,
+and `FinalizeWeek` writing every finalized week each Tuesday.
+
+**`TeamWeek` gained `Players`** so a stored week is re-solvable on its own — the
+player map is refreshed daily and overwritten, so a week rebuilt against today's
+map would use the wrong eligibility.
+
+Then **T29, T30 and T31 were deferred**. T29 needs a prior season and cannot find
+one until the August 2027 rollover. T30 is largely redundant, because T28 writes
+all finalized weeks rather than the most recent and `WriteAsync` upserts — the
+current season backfills itself. T31 has one migration, already applied. M4 is
+next because it is the first thing anyone else can look at.
+
+Three deploy failures on the way, each a different lesson: a region restricted
+per-subscription, a quoted variable name (`'sqlName'`), and `$SQL_ADMIN_ANME` —
+a transposed pair of letters that made Azure reject `ExternalAdminProperties`
+with no hint which field was empty. `set -u` now guards the deploy step.
+
+Suite: 292 passing, 1 skipped.
 
 ### 2026-09-13 — deployed, broken, fixed
 
