@@ -353,3 +353,20 @@ Prove a new gate fails by feeding it the bad input once, before trusting it.
 **Corollary:** run `actionlint` with `shellcheck` on `$PATH`. Without shellcheck
 present, actionlint silently disables the rule and reports zero errors, so a
 green run means less than it looks.
+
+## `environment:` on a job changes its OIDC subject
+
+**What happened:** Adding `environment: production` to the deploy's `infra` job
+broke `azure/login` with `AADSTS700213`. GitHub replaces the ref segment of the
+subject claim rather than appending to it — `…:ref:refs/heads/main` became
+`…:environment:production` — and no federated credential matched. Jobs in the
+same workflow with no `environment:` were unaffected, which is why only one of
+three jobs failed.
+
+**Rule:** A federated credential authorises one subject shape. Adding
+`environment:`, changing a branch, or moving a trigger between `push` and
+`pull_request` each mint a different subject and each need their own credential.
+Before changing any of those, read the intended subject out of the workflow log —
+`azure/login` prints it under "Federated token details" — and check it against
+`az ad app federated-credential list` rather than assuming the existing one
+covers it.

@@ -133,10 +133,10 @@ jobs:
           test -n "$asset"
           curl -fsS "$SITE$asset" | grep -qF "$API"
 
-          #/api must not be swallowed by the fallback
-          body=$(curl -s "$SITE/api/season" || true)
-          case "$body" in
-            *"<!doctype"*|*"<!DOCTYPE"*)
-              echo "::error::$SITE/api/season is answered by the SPA fallback"
-              exit 1 ;;
-          esac
+          #/api swallowed by the fallback is 200 + HTML; a 404 is the exclude
+          #working, and SWA's own 404 page is HTML too
+          code=$(curl -s -o api.out -w '%{http_code}' "$SITE/api/season" || true)
+          if [ "$code" = "200" ] && grep -qi '<!doctype html' api.out; then
+            echo "::error::$SITE/api/season returned 200 HTML: the SPA fallback is answering it"
+            exit 1
+          fi
