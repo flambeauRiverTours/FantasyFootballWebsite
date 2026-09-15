@@ -54,15 +54,19 @@ export interface SeasonsPayload {
   available: number[];
 }
 
-/** True when every consistency figure is available. */
-export function hasConsistency(
-  totals: TotalsPayload,
-): totals is TotalsPayload & {
+/** Totals whose five consistency figures are all present. */
+export type ConsistentTotals = TotalsPayload & {
   sigma: number;
   cv: number;
   mean: number;
   min: number;
   max: number;
-} {
+};
+
+/** True when every consistency figure is available. */
+export function hasConsistency(totals: TotalsPayload): totals is ConsistentTotals {
+  if(!totals) return false;
   return totals.sigma !== null;
 }
+
+
