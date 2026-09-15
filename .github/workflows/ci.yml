@@ -30,6 +30,23 @@ jobs:
       - run: dotnet format --verify-no-changes
       - run: dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln.txt
       - run: "! grep -q 'has the following vulnerable packages' vuln.txt"
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit -p tsconfig.app.json
+      - run: npm run build
   infra:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
