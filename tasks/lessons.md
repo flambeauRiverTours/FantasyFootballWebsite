@@ -283,3 +283,73 @@ making an error unactionable. Any gate that compares against a secret should
 report what it can safely say — length, line numbers, the variable's name — and
 never just "something matched".
 
+
+## CSS that removes a box removes everything attached to the box
+
+**What happened:** I proposed `display: contents` on `.masthead .panel-inner` to
+flatten a wrapper into a flex row. It worked — and silently discarded that
+element's `max-width: 64rem`, `margin-inline: auto` and side padding, so the
+masthead ran full-bleed with a flush-left title while every panel below it stayed
+centred at 64 rem. The reported symptom was "padding in the masthead is off".
+
+**Rule:** `display: contents` is not a layout adjustment, it is a deletion of the
+element's box. Anything that box was carrying — width constraints, padding,
+background, border — goes with it. To make a wrapper's children into a row, put
+the row on the wrapper. Reach for `display: contents` only when the wrapper is
+purely structural and styles nothing.
+
+## Measure before diagnosing a layout bug
+
+**What happened:** A horizontal scrollbar was reported as "width computation of
+table is off". Two plausible table-level causes came to mind. Measuring in the
+browser showed `panel-inner w=807` against `clientWidth 775`, while the table was
+already at 775 — the table had been collapsing correctly the whole time, and the
+overflow was `width: 100%` plus padding under a missing `box-sizing` reset.
+
+**Rule:** For any overflow, list the elements whose `getBoundingClientRect().right`
+exceeds `documentElement.clientWidth` before forming a theory. The first
+overflowing element in document order is the cause; everything after it is a
+symptom. Guessing from a screenshot picks the most visually prominent element,
+which is usually one of the symptoms.
+
+**Corollary:** a stylesheet with no `box-sizing: border-box` reset has a latent
+overflow in every `width: 100%` element that also has padding. Check for the
+reset before debugging any individual one.
+
+## `Function` as a type is an opt-out from type checking
+
+**What happened:** A prop typed `scalingFunction: Function` accepted any
+arguments and returned `any`. The only error the compiler could still report was
+a prop-name mismatch; the arithmetic built on its `any` return was unchecked.
+
+**Rule:** Never `Function`. Type a callback by its signature — `(v: number) =>
+number` — or by the library's own type. The same applies to `object` and to a
+bare `any` in a prop: a single loose type at a component boundary silently
+unchecks everything downstream of it.
+
+## Truthiness is not a null check on a number
+
+**What happened:** `totals.min ? totals.min : -1` was written to handle a
+nullable figure. `0` is falsy, so a legitimate zero score would have been
+replaced by a sentinel and drawn off the edge of the chart.
+
+**Rule:** For a nullable number use `??`, never `?:` or `||`. Better, make the
+null unreachable: if a type guard already exists, export the narrowed type and
+have the component demand it, so there is no fallback to get wrong.
+
+## `! cmd` under `set -e` is not a guard
+
+**What happened:** `! grep -q "/src/" dist/index.html` was used to assert the
+built bundle does not reference source. POSIX exempts a command prefixed with
+`!` from `errexit`, so when the grep *succeeds* — source is present, the exact
+regression the line exists to catch — the script continues and the step exits 0.
+It only works when the `!` command is the last statement, whose status becomes
+the step's status. Two of the four such guards in this repo were inert;
+shellcheck flags it as SC2251 and had never been run.
+
+**Rule:** Write negative assertions as `if cmd; then echo "::error::…"; exit 1; fi`.
+Prove a new gate fails by feeding it the bad input once, before trusting it.
+
+**Corollary:** run `actionlint` with `shellcheck` on `$PATH`. Without shellcheck
+present, actionlint silently disables the rule and reports zero errors, so a
+green run means less than it looks.

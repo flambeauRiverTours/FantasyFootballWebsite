@@ -16,14 +16,17 @@ concurrency:
 jobs:
   infra:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     outputs:
       functionAppName: ${{ steps.deploy.outputs.functionAppName }}
       functionAppUrl: ${{ steps.deploy.outputs.functionAppUrl }}
       staticWebAppName: ${{ steps.deploy.outputs.staticWebAppName }}
+      staticWebAppUrl: ${{ steps.deploy.outputs.staticWebAppUrl }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: az bicep build --file infra/main.bicep --stdout > /dev/null
-      - uses: azure/login@v3
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
@@ -47,38 +50,38 @@ jobs:
             budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
             sqlAdminLogin="$SQL_ADMIN_NAME" \
             -o json > out.json
-          for k in functionAppName functionAppUrl staticWebAppName; do
+          for k in functionAppName functionAppUrl staticWebAppName staticWebAppUrl; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
           done
 
   functions:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: infra
     env:
       RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-      - run: dotnet publish -c Release -o publish src/FantasyLeague.Functions/FantasyLeague.Functions.csproj
-      - uses: anchore/sbom-action@v0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - run: dotnet test --no-restore --verbosity normal
+      - run: dotnet publish -c Release --no-restore -o publish src/FantasyLeague.Functions/FantasyLeague.Functions.csproj
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: publish
           artifact-name: sbom-functions.spdx.json
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: publish
           scanners: vuln
           severity: CRITICAL,HIGH
           exit-code: '1'
-      - uses: azure/login@v3
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - uses: Azure/functions-action@v1
+      - uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
         with:
           app-name: ${{ needs.infra.outputs.functionAppName }}
           package: publish
@@ -92,10 +95,11 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: infra
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -107,10 +111,32 @@ jobs:
         env:
           VITE_API_ORIGIN: ${{ needs.infra.outputs.functionAppUrl }}
 
-      - uses: Azure/static-web-apps-deploy@v1
+      - uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: upload
           app_location: web/dist
           skip_app_build: true
           api_location: ''
+      - name: The deployed site is the built bundle
+        env:
+          SITE: ${{ needs.infra.outputs.staticWebAppUrl }}
+          API: ${{ needs.infra.outputs.functionAppUrl }}
+        run: |
+          set -euo pipefail
+          # SWA takes a little while to swap the upload in
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 6 "$SITE" -o index.html
+          grep -q "/assets/" index.html
+          if grep -q "/src/" index.html; then echo "::error::$SITE serves source, not the bundle"; exit 1; fi
+
+          asset=$(grep -o "/assets/[^\"]*[.]js" index.html | head -1)
+          test -n "$asset"
+          curl -fsS "$SITE$asset" | grep -qF "$API"
+
+          #/api must not be swallowed by the fallback
+          body=$(curl -s "$SITE/api/season" || true)
+          case "$body" in
+            *"<!doctype"*|*"<!DOCTYPE"*)
+              echo "::error::$SITE/api/season is answered by the SPA fallback"
+              exit 1 ;;
+          esac
