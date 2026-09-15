@@ -15,14 +15,11 @@ concurrency:
 jobs:
   dependencies:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      - run: dotnet restore
+      - uses: ./.github/actions/dotnet
       - name: Vulnerable packages
         run: |
           dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
@@ -46,7 +43,7 @@ jobs:
           dotnet tool install --global nuget-license
           nuget-license -i FantasyLeague.slnx -t -a 'MIT;Apache-2.0;BSD-3-Clause' -mapping .github/license-url-mappings.json -ignore 'Microsoft.Data.SqlClient.SNI.runtime;Microsoft.Identity.Client.NativeInterop' -o JsonPretty > licenses.json
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: dependency-report
@@ -56,10 +53,31 @@ jobs:
             licenses.json
           if-no-files-found: warn
 
+  codeql:
+    runs-on: ubuntu-latest
+    if: github.event.repository.visibility == 'public'
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3
+
   secrets:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # The OIDC identifiers are deliberately absent: federated credentials make
       # them public. Unknown credential shapes are Trivy's job, below.
       - name: No configured secrets in tracked files
@@ -99,8 +117,9 @@ jobs:
 
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Trivy reads ARM JSON, not bicep, so compile first.
       - name: Compile bicep
@@ -109,7 +128,7 @@ jobs:
           az bicep build --file infra/main.bicep --outfile arm/main.json
 
       - name: Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .

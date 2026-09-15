@@ -251,11 +251,15 @@ week continues to come from Sleeper on every request. Two tasks here — the
 password-less database connection and the migration step — are fiddlier than
 their hours suggest, and both fail with error messages that point elsewhere.
 
-# M4 · The page · 25.5 h
+# M4 · The page · 25.5 h · 13.5 h remaining
 
 The first milestone anyone else in the league can look at, and the first that
 will generate opinions. The table is the primary object; the chart is the thing
 people will play with.
+
+**T32 to T35 are built** — the design system, the panel layout, the standings
+table and the range mark. What they cost is recorded below; the tasks themselves
+are cut. T36 onward is what remains, and T36 is where D3 enters the project.
 
 Everything in this milestone is built against an API that is **already live and
 already correct**. Before writing a line of TypeScript, fetch it and read it:
@@ -359,459 +363,300 @@ The single biggest trap: **do not install a component library**. A five-row tabl
 and one chart do not need one, and the result will look like every other
 Tailwind/MUI page. The whole visual identity here is type, space and one accent.
 
-## T33 · Design system — 3.0 h
+## T33, T33b, T34, T35 · built
 
-T32 is done: Vite, React, the typed fetch layer, `useSeason`, the dev proxy and
-the CI wiring all exist. `src/index.css` is a bare reset, deliberately, so this
-task starts from nothing.
-
-Everything on the page pulls from the tokens below. No literal colour, size or
-spacing value appears anywhere else.
-
-### 1 · Colour
-
-Use **OKLCH**, not hex. It is perceptually uniform, which means lightening a
-colour by 5% actually looks 5% lighter, and a neutral ramp built by varying one
-number stays neutral. Browser support is universal now.
-
-```css
-:root {
-  color-scheme: light dark;
-
-  /* one hue for every neutral: 250 is a barely-blue grey that reads as
-     "considered" where pure grey reads as "unstyled" */
-  --bg:        oklch(99% 0.002 250);
-  --bg-subtle: oklch(96.5% 0.004 250);
-  --fg:        oklch(22% 0.01 250);
-  --fg-muted:  oklch(52% 0.012 250);
-  --rule:      oklch(90% 0.006 250);
-  --rule-soft: oklch(94% 0.005 250);
-
-  /* the one accent */
-  --accent:    oklch(52% 0.13 165);
-  --accent-weak: oklch(52% 0.13 165 / 0.12);
-
-  /* five teams, evenly spaced in hue at constant lightness and chroma, so no
-     line looks louder than another - the usual failure of a hand-picked palette */
-  --team-1: oklch(58% 0.14 25);
-  --team-2: oklch(58% 0.14 95);
-  --team-3: oklch(58% 0.14 165);
-  --team-4: oklch(58% 0.14 245);
-  --team-5: oklch(58% 0.14 315);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg:        oklch(17% 0.008 250);
-    --bg-subtle: oklch(21% 0.009 250);
-    --fg:        oklch(94% 0.005 250);
-    --fg-muted:  oklch(68% 0.011 250);
-    --rule:      oklch(30% 0.01 250);
-    --rule-soft: oklch(25% 0.009 250);
-
-    --accent:    oklch(72% 0.13 165);
-    --accent-weak: oklch(72% 0.13 165 / 0.16);
-
-    /* lighter and slightly less saturated: the same values on a dark ground
-       look muddy, which is why inverting a light theme never works */
-    --team-1: oklch(70% 0.13 25);
-    --team-2: oklch(70% 0.13 95);
-    --team-3: oklch(70% 0.13 165);
-    --team-4: oklch(70% 0.13 245);
-    --team-5: oklch(70% 0.13 315);
-  }
-}
-```
-
-**Why this works and hand-picking does not.** Every neutral shares one hue, so
-nothing clashes. Every team colour shares one lightness and one chroma, so no
-line dominates. The dark theme raises lightness and drops chroma rather than
-inverting, which is D9's "designed rather than inverted" made concrete.
-
-### 2 · Type
-
-```css
-:root {
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-
-  /* four sizes. not five, not nine */
-  --text-xs: 0.75rem;    /* column headers, axis labels */
-  --text-sm: 0.875rem;   /* table body, controls */
-  --text-md: 1rem;       /* body copy */
-  --text-lg: 1.375rem;   /* the one page title */
-
-  --weight-normal: 400;
-  --weight-medium: 550;  /* the only emphasis you need */
-}
-```
-
-The system stack costs nothing and looks native. If you want the page to feel
-designed rather than default, one variable font from Google Fonts — **Inter** is
-the safe choice — changes more than any other single decision. Self-host it or
-accept the extra request; do not load six weights when you use two.
-
-**Three type rules that matter more than the typeface:**
-
-```css
-/* every figure, everywhere. non-negotiable for a table of numbers */
-.numeric { font-variant-numeric: tabular-nums; }
-
-/* column headers: small, uppercase, letterspaced, muted. this single treatment
-   is most of what makes a table look professional rather than default */
-th {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-
-/* headings do not need to be huge. one step up and a weight change is enough */
-h1 { font-size: var(--text-lg); font-weight: var(--weight-medium); }
-```
-
-Without `tabular-nums`, `167.5` and `111.1` occupy different widths and the
-column visibly wobbles. It is the single most noticeable difference between a
-data table that looks built and one that looks thrown together.
-
-### 3 · Space
-
-One scale, every gap drawn from it. A `13px` anywhere means you guessed.
-
-```css
-:root {
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-12: 3rem;
-}
-```
-
-**Be more generous than feels right.** The commonest amateur mistake is
-cramming. Section gaps of `--space-12`, table cell padding of `--space-3`
-vertical, and the page breathing inside a `max-width` will look sparse in your
-editor and correct in a browser.
-
-### 4 · The page frame
-
-```css
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: var(--weight-normal) var(--text-md)/1.5 var(--font);
-  -webkit-font-smoothing: antialiased;
-}
-
-/* main is the scroll container; the max-width lives on each panel's inner
-   wrapper instead - see T33b */
-main { display: block; }
-
-.panel-inner {
-  margin-inline: auto;
-  max-width: 64rem;
-  padding: var(--space-8) var(--space-4);
-  width: 100%;
-}
-```
-
-A `max-width` is not optional. Full-bleed text on a wide monitor is the clearest
-possible signal that nobody thought about the layout. With panels it belongs on
-the inner wrapper rather than on `main`, so each panel's background can still run
-edge to edge.
-
-### 5 · Focus, once, globally
-
-```css
-:where(a, button, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-```
-
-`:focus-visible` rather than `:focus` shows the ring for keyboard users and not
-on mouse clicks. Never `outline: none` without a replacement — that is T40's
-requirement and an accessibility failure, not a style choice.
-
-## T33b · Panel layout — 1.5 h
-
-Each visualisation gets its own screen, and you scroll between them. Not for
-fashion: **the chart wants to be big**. Stacked as an ordinary document the table
-takes the top of the viewport and the chart gets whatever is left. One panel each
-gives both the room they need, and M6's radar becomes a natural third.
-
-### What the reference sites actually do
-
-Two sites, two different techniques, and only one is worth copying:
-
-| Site | Technique |
-|---|---|
-| b-egg.farm | `gsap` + `CustomEase` + `lenis` + a `scrolldisable.js` — scroll-jacked with a smooth-scroll library |
-| ellipsus.com | No animation library at all. `position: sticky` with `top: 64px` per section — native scrolling, sections pin as you pass them |
-
-Copy **ellipsus**. It is plain CSS, it does not fight the browser, and it
-degrades to ordinary scrolling when anything goes wrong.
-
-**Do not install Lenis or GSAP.** b-egg needs them because it runs custom
-animation timelines off scroll position. Here they would be roughly 70 KB and a
-scroll hijack to reproduce an effect that is four CSS properties — and
-smooth-scroll libraries are precisely what `prefers-reduced-motion` users turn
-off.
-
-### The panels
+The design system, the panel layout, the standings table and the range mark are
+done. `web/src/index.css` holds every token and every rule; there is no second
+stylesheet and no component library. The page is four components:
 
 ```
-1  Standings table      the data, immediately
-2  Season chart         the thing people play with
-3  Positional radar     built now, hidden until M6 fills its data
+App.tsx               the fetch, its three states, the masthead, the panel order
+components/Panel.tsx  section.panel > .panel-inner > h2, id and aria-labelledby
+  StandingsPanel.tsx  the league-wide scale, the table
+  ChartPanel.tsx      a real scroll stop, empty until T36
+  RadarPanel.tsx      built and gated; revealed by T48
+  SigmaDisplay.tsx    the inline range mark
 ```
 
-**Panel one is the table, not a title card.** This is a live scoreboard: during a
-Sunday someone opens it to check one number. Making them scroll past a hero to
-reach the standings is a real cost, and the reason this pattern usually annoys
-people on marketing sites.
+**Nine things this cost that the tasks did not predict.** Each is a rule now.
 
-### Revealing the radar panel
+**`box-sizing: border-box` was never set.** `.panel-inner` is `width: 100%` plus
+`padding: … var(--space-4)`, which under the default `content-box` is 100% + 32 px.
+Every panel overflowed by exactly its own side padding and the page grew a
+horizontal scrollbar that looked like a table-width bug. The table had been
+collapsing correctly the whole time. Put the reset at the top of any stylesheet
+before writing a single `width: 100%`.
 
-Build the third panel now and gate it, so the layout is designed for three from
-the start rather than retrofitted. **Derive the gate from the data rather than a
-literal flag** — the payload already says whether the radar has anything to show:
+**`display: contents` deletes the box, and everything attached to it.** It was
+used to flatten `.masthead .panel-inner` into a flex row; it also discarded that
+element's `max-width: 64rem`, `margin-inline: auto` and side padding, so the
+masthead ran full-bleed with a flush-left title while the panel below stayed
+centred at 64 rem. Put the row on the wrapper instead of removing the wrapper.
+
+**`text-transform: uppercase` changes what a symbol means.** The `th` treatment
+converted the sigma in the consistency header from σ (U+03C3) to Σ (U+03A3) —
+standard deviation into summation. Greek letters and unit symbols need
+`.symbol { text-transform: none }`. This is not a styling preference; the
+uppercased header is simply wrong.
+
+**A long column header sets the column width.** `σ · through wk 1` on one line
+gave a two-character column 94 px. Split it: the symbol, then the qualifier in a
+smaller, unletterspaced `.th-note` span underneath.
+
+**`width: 99%` on the team column is what makes the numbers line up.** It absorbs
+all the slack, so the numeric columns size to their content and sit in a block on
+the right. It is the whole difference between this and a table whose columns
+drift about with the data.
+
+**A sticky masthead and sticky panels fight.** Later siblings paint over earlier
+ones, so the masthead needs `z-index`, the panels need `top: var(--masthead-h)`,
+and their height needs to be `calc(100svh - var(--masthead-h))` or panel one is a
+full viewport tall *below* the masthead and opens with a band of dead space.
+
+**Panels need an opaque background and a leading edge.** They overlap as they
+pin. Without a background you see through them; with the same background on both
+and no `border-top`, the covered panel looks clipped rather than covered.
+
+**`Function` as a prop type disables type checking.** `scalingFunction: Function`
+accepted any arguments and returned `any`, so a prop-name mismatch was the only
+error the compiler could still see. Type the scale as `ScaleLinear<number, number>`
+or as `(v: number) => number`.
+
+**Truthiness is not a null check on a number.** `totals.min ? totals.min : -1`
+substitutes a fallback for a legitimate `0`. The fix was not `??` but making the
+nulls unreachable: `hasConsistency` narrows to the exported `ConsistentTotals`,
+`SigmaDisplay` takes that type, and there is nothing left to guard.
+
+### The one structural idea worth carrying into T36
+
+`rangeScale` returns `ScaleLinear | null`, and `null` means "no team has four
+finalized weeks yet". The column renders when the scale exists. There is no
+second boolean that can disagree with it:
 
 ```tsx
-// leagueSlotAverages is an empty object until T48 fills it, deliberately, so
-// that M6 needs no contract change (see "The contract, as it actually responds")
-const radarReady = Object.keys(payload.leagueSlotAverages).length > 0;
-
-// ?radar lets you work on the panel before the API serves the data
-const forced = new URLSearchParams(location.search).has('radar');
-
-const showRadar = radarReady || forced;
-```
-
-Why this rather than `VITE_ENABLE_RADAR`:
-
-- **Nothing to remember.** The panel appears the moment T48 ships, with no second
-  deploy and no checklist item that gets skipped.
-- **Nothing to remove.** A build-time flag leaves dead branches and a cleanup
-  task; this expression stays correct forever and reads as a guard rather than a
-  leftover.
-- **It cannot lie.** A flag can be on while the data is absent, which renders an
-  empty chart. This condition is true exactly when there is something to draw.
-
-The `?radar` escape hatch is what makes it workable during M6: you can build and
-style the panel against hand-written data locally while the deployed API still
-returns `{}`.
-
-**Two panels is thin for this pattern and three is where it earns its keep.** In
-the meantime the page is standings then chart, which still reads fine — the
-sticky stack degrades to an ordinary two-section scroll. Do not add a filler
-panel to pad the count.
-
-### The CSS
-
-```css
-.panels {
-  /* proximity, never mandatory - see below */
-  scroll-snap-type: y proximity;
-}
-
-.panel {
-  position: sticky;
-  top: 0;
-  min-height: 100svh;
-  scroll-snap-align: start;
-  display: grid;
-  align-content: center;
-  background: var(--bg);
-}
-
-.panel > .panel-inner {
-  margin-inline: auto;
-  max-width: 64rem;
-  padding: var(--space-8) var(--space-4);
-  width: 100%;
+function rangeScale(teams: TeamPayload[]) {
+  const consistent = teams.map((t) => t.totals).filter(hasConsistency);
+  const [lo, hi] = extent(consistent.flatMap((t) => [t.min, t.max]));
+  return lo === undefined || lo === hi ? null : scaleLinear().domain([lo, hi]).range([2, 138]);
 }
 ```
 
-**`100svh`, not `100vh`.** `svh` is the *small* viewport height, which excludes
-the mobile browser chrome that collapses as you scroll. `100vh` on iOS Safari
-gives a panel taller than the visible area, with content hidden under the
-toolbar. That single unit is the difference between this working on a phone and
-not.
-
-**`proximity`, never `mandatory`.** Mandatory snap traps the user on any panel
-taller than the viewport, breaks find-in-page, and makes keyboard scrolling
-unpredictable. Proximity snaps when you are already close and otherwise leaves
-scrolling alone.
-
-**Each panel needs an opaque `background`.** They overlap as they pin; without a
-background you see the previous panel through the current one.
-
-### The chart panel must not fight the pointer
-
-Scrolling over an interactive chart while trying to hover a line is the classic
-failure of this pattern. Either give the chart panel enough padding that there is
-dead space to scroll through, or size the chart shorter than the panel:
-
-```css
-.panel-chart .chart { max-height: 70svh; }
-```
-
-### Reduced motion turns it back into a document
-
-```css
-@media (prefers-reduced-motion: reduce) {
-  .panels { scroll-snap-type: none; }
-  .panel { position: static; min-height: 0; }
-}
-```
-
-R1 requires this anyway, and it doubles as the test that matters: **if the page
-does not look finished in this state, the scrolling was carrying the design
-rather than the design carrying itself.** Check it before calling the milestone
-done.
-
-### Give each panel a heading and an id
-
-```tsx
-<section className="panel" id="standings" aria-labelledby="standings-h">
-  <div className="panel-inner">
-    <h2 id="standings-h">Standings</h2>
-```
-
-Ids make each panel linkable, which fits the query-string state from T37 — a
-paste-able link to a specific view is the social point of the site. Headings keep
-the document navigable for a screen reader, which a set of unlabelled
-full-viewport `div`s is not.
-
-
-## T34 · Standings table — 3.0 h
-
-The primary object on the page. Five rows, five columns, and it has to be
-readable without a single interaction.
-
-### The columns
-
-| Column | Align | Notes |
-|---|---|---|
-| Team | left | the only left-aligned column |
-| Points | right | what decides the league; mark it as the sort |
-| σ | right | em dash below four final weeks |
-| Ideal | right | |
-| Gap | right | signed, muted, em dash for the leader |
-
-### The CSS that does the work
-
-```css
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-
-/* hairline rules, no zebra striping. striping is the dated look; a 1px rule at
-   low contrast separates rows perfectly well and stays out of the way */
-tbody tr { border-top: 1px solid var(--rule-soft); }
-thead tr { border-bottom: 1px solid var(--rule); }
-
-th, td {
-  padding: var(--space-3) var(--space-3);
-  text-align: right;
-}
-
-th:first-child, td:first-child {
-  text-align: left;
-  font-weight: var(--weight-medium);
-}
-
-td:not(:first-child) { font-variant-numeric: tabular-nums; }
-
-/* the sort column, marked by weight and ground rather than a coloured header */
-th[aria-sort], td.is-sorted { background: var(--bg-subtle); }
-td.is-sorted { font-weight: var(--weight-medium); }
-
-tbody tr:hover { background: var(--bg-subtle); }
-
-.muted { color: var(--fg-muted); }
-```
-
-**Mark the sort column with `aria-sort`, not just colour.** It is the semantic
-attribute a screen reader announces, and it gives you a free CSS hook:
-
-```tsx
-<th scope="col" aria-sort="descending">Points</th>
-```
-
-### Details that separate this from a default table
-
-- **No vertical rules.** Column separators are almost never needed; alignment
-  already separates the columns.
-- **No borders around the table.** The header rule and row rules are enough.
-- **Right-align every number including the header.** A right-aligned column with
-  a left-aligned header looks broken.
-- **The em dash is `—` (U+2014), not a hyphen.** Render it muted. A blank cell
-  reads as a bug; a dash reads as "not yet".
-- **The gap column is signed and muted:** `−17.3`, using a real minus sign
-  (U+2212) rather than a hyphen so it aligns with the digits.
-- **Do not colour the leader row.** Weight on the points cell is enough.
-
-```tsx
-const ranked = [...payload.teams].sort((a, b) => b.totals.actual - a.totals.actual);
-const leader = ranked[0]?.totals.actual ?? 0;
-
-const gap = (v: number) =>
-  v === leader ? '—' : `\u2212${(leader - v).toFixed(1)}`;
-```
-
-### The header carries the week range
-
-```tsx
-<th scope="col">σ · through wk {payload.finalThroughWeek}</th>
-```
-
-Points already include `currentWeek`; sigma does not (R1). Saying so in the
-header is what stops the column looking wrong during a live Sunday.
-
-## T35 · Inline range mark — 2.5 h
-
-A small SVG in the sigma cell giving the number a shape: a rule from the team's
-minimum to maximum weekly score, a shaded band one sigma either side of the mean,
-and a tick at the mean.
-
-```tsx
-<svg viewBox="0 0 140 16" width="140" height="16" role="img"
-     aria-label={`${min} to ${max}, mean ${mean}, sigma ${sigma}`}>
-  <line x1={s(min)} x2={s(max)} y1="8" y2="8" stroke="currentColor" opacity=".35" />
-  <rect x={s(mean - sigma)} width={s(mean + sigma) - s(mean - sigma)}
-        y="4" height="8" fill="var(--accent)" opacity=".22" />
-  <line x1={s(mean)} x2={s(mean)} y1="2" y2="14" stroke="var(--accent)" strokeWidth="2" />
-</svg>
-```
-
-**The scale `s` must be shared across every row**, computed from the league-wide
-min and max rather than per team:
-
-```tsx
-const lo = Math.min(...teams.map(t => t.totals.min!).filter(Number.isFinite));
-const hi = Math.max(...teams.map(t => t.totals.max!).filter(Number.isFinite));
-const s = scaleLinear().domain([lo, hi]).range([2, 138]);
-```
-
-Per-team scales make every row look identical, which defeats the only purpose the
-mark has. Render nothing when `sigma` is null — a degenerate mark is worse than
-no mark.
-
+`extent` from `d3-array` returns `[undefined, undefined]` for an empty input
+rather than `Math.min`'s `Infinity`, so the empty case is the function's
+documented return and TypeScript narrows on it. Reach for the same shape in T36:
+**a nullable scale is a better guard than a boolean beside a scale.**
 
 ## T36 · D3 line chart — 4.0 h  ±
 
-The chart's visual craft matters as much as the maths. A correct chart that looks
-like a tutorial screenshot undoes the table's work.
+This is the first task in the project that needs D3, so it starts with what D3
+is, and — more usefully — what it is not.
+
+### D3 is not a charting library
+
+There is no `d3.lineChart()`. D3 is about thirty small, independent npm packages,
+most of which you will never install. The famous ones do two very different jobs:
+
+| Package | What it does | Using it here? |
+|---|---|---|
+| `d3-scale` | maths: maps data values to pixel positions | **yes** |
+| `d3-shape` | maths: turns an array of points into an SVG path string | **yes** |
+| `d3-array` | maths: `extent`, `max`, `bisector` | **yes** |
+| `d3-selection` | DOM: `select().append().attr()` | **no** |
+| `d3-axis` | DOM: draws an axis by appending elements | **no** |
+| `d3-transition` | DOM: animates attributes over time | **no** |
+
+The bottom three are the ones every D3 tutorial on the internet teaches first,
+and they are the ones **D9 forbids**. They work by taking a DOM node and mutating
+it — appending children, setting attributes, removing elements. React also owns
+that node and also believes it decides what is inside it. Two owners, one node,
+and the resulting bugs appear only after a re-render.
+
+So the division of labour is:
+
+> **D3 computes numbers. React renders elements.**
+
+Every `<path>`, `<line>`, `<text>` and `<g>` in your chart is written by you in
+JSX, using numbers D3 gave you. If you ever type `.append(`, you have wandered
+into the wrong half of the library.
+
+You already did this once without noticing. `rangeScale` in T35 is D3 — one
+`scaleLinear`, one `extent`, and the SVG hand-written in `SigmaDisplay`. T36 is
+the same pattern at a larger size.
+
+### The four ideas you need
+
+**1 · A scale is a function from data to pixels.**
+
+```ts
+const y = scaleLinear().domain([0, 200]).range([400, 0]);
+y(0);    // 400
+y(200);  // 0
+y(100);  // 200
+```
+
+`domain` is the input, in your units — points. `range` is the output, in pixels.
+That is the entire concept. `scaleLinear()` returns a function you then
+configure, and each configuration method returns the scale again, so they chain.
+
+Two methods you will use beyond calling it:
+
+```ts
+y.ticks(5);        // ~5 round numbers inside the domain: [0, 50, 100, 150, 200]
+y.invert(220);     // 90 — pixels back to points, for T38's pointer handling
+```
+
+`ticks()` is why you do not need `d3-axis`. It gives you the numbers; you render
+them yourself.
+
+**2 · SVG's y axis points down.** `y=0` is the top edge. This catches everyone
+once. You do not fight it — you invert the scale's range and never think about
+it again:
+
+```ts
+.range([height - m.bottom, m.top])   // big pixel value first
+```
+
+Now a high score maps to a small y, which is up the screen, which is what a
+reader expects. If your chart comes out upside down, this line is why.
+
+**3 · A shape generator turns points into a path string.** `d3-shape`'s `line()`
+does not draw anything. It is a function that takes your array and returns the
+string that belongs in a `<path d="…">`:
+
+```ts
+import { line } from 'd3-shape';
+
+const path = line<Point>()
+  .x((p) => x(p.week))
+  .y((p) => y(p.value));
+
+path(points);   // "M44,310L92,255L140,288…"
+```
+
+You tell it how to get an x and a y out of one element; it handles the `M` and
+`L` commands. Then:
+
+```tsx
+<path className="series" d={path(points) ?? undefined} stroke={colour} />
+```
+
+**4 · The margin convention.** An SVG clips at its edges, so axis labels and the
+direct labels at the right need room reserved before you scale anything:
+
+```ts
+const m = { top: 16, right: 84, bottom: 28, left: 44 };
+```
+
+`left: 44` holds three-digit y labels, `right: 84` holds the team names, and the
+scales' ranges start and end at those insets rather than at `0` and `width`. That
+is why a label at the edge of the drawing area is never clipped: nothing is ever
+drawn at the edge.
+
+### Install
+
+```bash
+npm i d3-scale d3-shape d3-array
+npm i -D @types/d3-scale @types/d3-shape @types/d3-array
+```
+
+Submodules, never the `d3` meta-package — that pulls in selection, transition,
+drag, zoom and geo, none of which you want anywhere near this. The types ship
+separately; `d3-scale` has none of its own.
+
+### Shape the data first
+
+Get the arrays right before touching a scale. One series per team, one point per
+week, in week order, with the colour resolved once:
+
+```tsx
+interface Point { week: number; value: number }
+
+interface Series {
+  rosterId: number;
+  name: string;
+  colour: string;
+  points: Point[];
+}
+
+const series: Series[] = ranked.map((team, i) => ({
+  rosterId: team.rosterId,
+  name: team.name,
+  colour: `var(--team-${i + 1})`,
+  points: cumulative(team.weeks),
+}));
+```
+
+`i + 1` indexes the team tokens you already defined. Assign the colour from
+**rank**, not from `rosterId` — roster ids are not 1…5, and a gap would reach for
+`--team-7`, a different hue from the one the reader is being shown in the legend.
+
+Weeks that have not happened are **absent from the array**, not zero. Do not
+`fill(0)` them: zero is a real score a team could have had, and a line that dives
+to the axis at week 15 is a claim about a game nobody has played.
+
+### The scales
+
+```tsx
+const x = scaleLinear()
+  .domain([1, maxWeek])
+  .range([m.left, width - m.right]);
+
+const y = scaleLinear()
+  .domain([0, max(series, (s) => max(s.points, (p) => p.value)) ?? 0])
+  .nice()
+  .range([height - m.bottom, m.top]);
+```
+
+Three decisions are hiding in there:
+
+**`.domain([0, …])` for a cumulative chart, not `extent`.** A running total is a
+magnitude, and truncating a magnitude axis exaggerates differences — five teams
+within 10 % of each other look like a rout. For T41's per-week and vs-median
+modes the reverse holds: those are *differences*, zero means something in its own
+right, and `extent` is correct. The axis baseline is a claim about the data, so
+choose it per mode rather than once.
+
+**`.nice()`** widens the domain out to round numbers, so the top tick reads
+`1200` rather than `1187.4`. One method call, and it is most of what separates an
+axis that looks designed from one that looks computed.
+
+**`max` from `d3-array`** rather than `Math.max(...)`: it skips nulls, it does
+not spread a large array onto the argument stack, and nested like this it reads
+as "the largest value in any series".
+
+### Axes, rendered by you
+
+This is the part every tutorial does with `d3-axis` and a `.call()`. Here it is
+twelve lines of JSX, and you keep control of every element:
+
+```tsx
+<g className="grid">
+  {y.ticks(5).map((t) => (
+    <g key={t}>
+      <line x1={m.left} x2={width - m.right} y1={y(t)} y2={y(t)} />
+      <text x={m.left - 8} y={y(t)} dy="0.32em" textAnchor="end">{t}</text>
+    </g>
+  ))}
+</g>
+
+<g className="x-axis">
+  {x.ticks(Math.min(maxWeek, 9)).filter(Number.isInteger).map((t) => (
+    <text key={t} x={x(t)} y={height - m.bottom + 18} textAnchor="middle">{t}</text>
+  ))}
+</g>
+```
+
+`dy="0.32em"` is the standard trick for vertically centring SVG text on its
+anchor point. SVG aligns text on its baseline, not its middle, so a y-axis label
+sits noticeably high without it.
+
+`.filter(Number.isInteger)` matters because `ticks()` is free to hand you `2.5`,
+and there is no week two-and-a-half. Capping the count keeps labels from
+colliding on a narrow screen.
 
 ### What restraint looks like here
+
+A correct chart that looks like a tutorial screenshot undoes the table's work.
 
 - **No chart border, no plot-area background fill.** The page ground is the
   chart ground.
@@ -839,21 +684,55 @@ like a tutorial screenshot undoes the table's work.
 }
 ```
 
+**`fill: none` is not optional.** An SVG `<path>` fills by default, so a line
+chart without it renders as five overlapping blobs. It is the most common
+first-chart bug there is.
+
+### Curves
+
+`d3-shape` offers `.curve()` on the generator. Most of the options are wrong for
+this chart:
+
+- **`curveLinear`** (the default) — straight segments between real observations.
+  Honest. Start here.
+- **`curveMonotoneX`** — smooths without overshooting, and never invents a peak
+  between two points. The only smoothing that is safe on data.
+- **`curveBasis`** — looks lovely and **does not pass through your data points**.
+  It is an approximating spline. Never use it for a data chart.
+
+### Direct labels
+
+```tsx
+{series.map((s) => {
+  const last = s.points.at(-1);
+  return last ? (
+    <text key={s.rosterId} x={x(last.week) + 8} y={y(last.value)} dy="0.32em"
+          fill={s.colour} fontSize="var(--text-xs)">{s.name}</text>
+  ) : null;
+})}
+```
+
+With five teams they will occasionally collide. Do not reach for a
+label-placement library — sort by final value and push any label within 12 px of
+its neighbour. Ten lines, and it only has to be right for five.
+
+### Gaps in the data
+
+If a week can be missing from the middle of a series — a team with no matchup —
+`.defined()` tells the generator to break the path rather than draw across the
+gap:
+
+```ts
+line<Point>().defined((p) => Number.isFinite(p.value)).x(…).y(…)
+```
+
+A line drawn straight across a gap asserts data you do not have.
+
 ### Inside a panel
 
 T33b gives the chart its own screen. Keep it shorter than the panel so there is
-dead space to scroll through — `max-height: 70svh` — or scrolling over the chart
-while trying to hover a line fights the reader.
-
-### Margins are for labels, not decoration
-
-```tsx
-const m = { top: 16, right: 84, bottom: 28, left: 44 };
-```
-
-`right: 84` is space for the direct labels; `left: 44` is space for y-axis
-numbers. A label at the edge of the drawing area is clipped by the SVG boundary —
-the scale's range starts at `m.left`, not at zero, for exactly this reason.
+dead space to scroll through — `#chart .chart { max-height: 70svh }` — or
+scrolling over the chart while trying to hover a line fights the reader.
 
 ### Make it responsive without a library
 
@@ -869,8 +748,20 @@ useEffect(() => {
 }, []);
 ```
 
-Then draw at that width with a fixed aspect. `ResizeObserver` is a dozen lines and
-removes any reason to reach for a charting library.
+Then draw at that width with a fixed aspect. `ResizeObserver` is a dozen lines
+and removes any reason to reach for a charting library.
+
+Measure the **wrapper div**, never the SVG. Sizing an SVG from its own measured
+width is a feedback loop that either oscillates or settles at zero.
+
+### Done when
+
+- No `d3-selection`, `d3-axis` or `d3-transition` in `package.json`.
+- No `.append(`, no `.attr(`, no `useRef` pointing at an SVG node.
+- `fill: none` on the series paths.
+- The chart redraws correctly as the panel goes from 1400 px to 375 px.
+- A season with one finalized week renders one point per team rather than
+  crashing on an empty path string.
 
 ## T37 · Chart controls — 3.0 h
 
@@ -917,9 +808,54 @@ line. Deselected goes to `--fg-muted` with the swatch outlined rather than fille
 **Radius: 4–6px, everywhere or nowhere.** Mixing 4, 8 and 12 across a page is a
 tell. One value, used consistently.
 
-**State in the query string** (D6, and the social point of the site): reading and
-writing `?season=&teams=&metric=` makes any view a link someone can paste into
-the league chat.
+### Query-string state, without a router
+
+State in the URL is D6 and the social point of the site: `?season=&teams=&metric=`
+makes any view a link someone can paste into the league chat. You have no router
+installed and you do not need one — but you do need to pick the right browser API.
+
+```tsx
+function useQueryState(key: string, fallback: string) {
+  const [value, setValue] = useState(
+    () => new URLSearchParams(window.location.search).get(key) ?? fallback,
+  );
+
+  const set = useCallback((next: string) => {
+    setValue(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === fallback) params.delete(key);
+    else params.set(key, next);
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
+  }, [key, fallback]);
+
+  return [value, set] as const;
+}
+```
+
+**React state is the source of truth; the URL is a mirror.** Making the URL
+itself the state means re-reading `location.search` every render and inventing a
+way to be notified when it changes — which is most of what a router is for. Hold
+the value in `useState` and write it out on change.
+
+**`replaceState`, not `pushState`.** `pushState` adds a history entry, so
+toggling four teams on and off buries the previous page under eight presses of
+Back. Use `pushState` only for a change a reader would expect Back to undo, and
+on this page none of them are.
+
+**Drop the parameter when it equals the default.** Otherwise a shared link reads
+`?metric=cumulative&mode=total&season=2026`, restating defaults — and a default
+you change later silently keeps the old behaviour for everyone holding an old
+link.
+
+**Encode the team set as a sorted, comma-joined list of roster ids** —
+`?teams=2,4,7` — and validate it against the payload on read. A roster id from a
+stale link that no longer exists must be dropped, not passed into a colour
+lookup.
+
+This hook does not react to Back and Forward. That is fine while every write is
+`replaceState`, because there are no entries to go back to. The moment you add a
+`pushState`, you owe a `popstate` listener as well.
 
 ## T38 · Hover interaction — 2.0 h
 
@@ -953,6 +889,50 @@ Hovering a **table row** should raise the same line. Same state, set from
 `onMouseEnter` on `<tr>`, and a keyboard equivalent on the legend so the feature
 exists for more than mouse users.
 
+### Finding what the pointer is over
+
+Do not put a mouse handler on each `<path>`. A 1.75 px line is a hard target, the
+gaps between lines are dead, and a moving pointer fires a stream of enter and
+leave events as it crosses them.
+
+Instead put one transparent `<rect>` over the plot area and work the answer out
+arithmetically. Every tutorial does this with `pointer` from `d3-selection`,
+which D9 forbids — and which you do not need, because it is four lines of DOM
+maths:
+
+```tsx
+function onMove(e: React.PointerEvent<SVGRectElement>) {
+  const box = e.currentTarget.getBoundingClientRect();
+  const week = Math.round(x.invert(e.clientX - box.left + m.left));
+  setActiveWeek(Math.min(Math.max(week, 1), maxWeek));
+}
+```
+
+`x.invert` is the scale run backwards — pixels to weeks — and it is the reason to
+keep the scale in a variable rather than inlining it. `Math.round` snaps to the
+nearest week, which is what makes a readout feel like it locks on rather than
+drifting.
+
+**Attach the handler to the rect, not to the SVG.** The SVG includes the margins,
+so a pointer over the y-axis labels would otherwise report week 0. The `+ m.left`
+above is because the rect starts at the margin, not at the SVG origin.
+
+For the nearest *series* at that week, compare values directly — with five teams
+a linear scan beats any index:
+
+```tsx
+const nearest = series.reduce<{ s: Series; d: number } | null>((best, s) => {
+  const p = s.points.find((q) => q.week === week);
+  if (!p) return best;
+  const d = Math.abs(y(p.value) - pointerY);
+  return best === null || d < best.d ? { s, d } : best;
+}, null);
+```
+
+`d3-array`'s `bisector` is the right tool when the array is long enough that a
+scan hurts. Eighteen weeks is not that, and `bisector` is the kind of
+optimisation that costs a reader more than it saves the machine.
+
 ## T39 · Polling — 2.0 h
 
 The UI question is what a refresh *looks* like. The answer is: almost nothing.
@@ -967,6 +947,11 @@ flashes a skeleton every thirty seconds is worse than a static one.
 <p className="muted">Updated {formatRelative(payload.asOfUtc)}</p>
 ```
 
+Use `Intl.RelativeTimeFormat` rather than writing "3 minutes ago" by hand, and
+re-render it on a timer of its own — the string goes stale even when the data
+does not, and a page that reads "Updated 0 minutes ago" for an hour is worse than
+no indicator at all.
+
 If you want to signal the moment of update, a 400ms background fade on changed
 rows is the ceiling. Anything more is distracting during a live Sunday, which is
 precisely when people are watching.
@@ -980,12 +965,17 @@ cache-busting parameter — are already implemented in `useSeason`.
 
 ```css
 @media (max-width: 40rem) {
-  main { padding-inline: var(--space-3); }
   th, td { padding: var(--space-2); }
   /* drop the least important column rather than shrinking everything */
   .col-ideal { display: none; }
+  /* the context line loses to the title on a phone */
+  .masthead p { display: none; }
 }
 ```
+
+`box-sizing: border-box` and the `width: 99%` team column already do most of the
+responsive work — the table collapses to 375 px unaided. Verify that before
+adding rules for a problem you no longer have.
 
 **The table scrolls in its own container**, and the page body never scrolls
 sideways:
@@ -1024,23 +1014,96 @@ Deliberately last. These are cheap, taste-driven, and much easier to judge again
 
 ## T41 · Display modes — 2.0 h
 
-Three transforms over the same weekly arrays:
+Three transforms over the same weekly arrays. All three are pure functions from
+`WeekPayload[]` to `Point[]`, which is what makes this task two hours instead of
+a rewrite — the chart already renders whatever `points` it is handed.
 
-```
-cumulative:  running sum of weekly values
-perWeek:     the weekly values themselves
-vsMedian:    running sum of (team[w] - median of all teams in week w)
+```ts
+type Mode = 'cumulative' | 'perWeek' | 'vsMedian';
 ```
 
-The median mode changes no ranking — the median sum is an identical constant for every team — but it removes the league-wide trend that dominates the raw chart. Five near-parallel ascending lines are hard to read; the same five diverging from a zero baseline are legible at a glance. Draw a zero rule when this mode is active.
+```ts
+function cumulative(weeks: WeekPayload[]): Point[] {
+  let total = 0;
+  return weeks.map((w) => ({ week: w.week, value: (total += w.actual) }));
+}
+
+function perWeek(weeks: WeekPayload[]): Point[] {
+  return weeks.map((w) => ({ week: w.week, value: w.actual }));
+}
+```
+
+`vsMedian` is the only one that needs the other teams, because the median is a
+league-wide figure per week:
+
+```ts
+function weeklyMedians(teams: TeamPayload[]): Map<number, number> {
+  const byWeek = new Map<number, number[]>();
+  for (const t of teams)
+    for (const w of t.weeks)
+      (byWeek.get(w.week) ?? byWeek.set(w.week, []).get(w.week)!).push(w.actual);
+
+  return new Map([...byWeek].map(([week, vals]) => [week, median(vals) ?? 0]));
+}
+```
+
+`median` comes from `d3-array` — it sorts a copy, handles the even-length average
+and ignores nulls, which is three chances to get it subtly wrong by hand.
+
+**A1 applies here and it is easy to miss.** The median must be taken over the
+five scoring teams only. The dummy team is excluded from the standings by the
+API, but if you ever compute a median from a list that includes it, every team's
+line moves. The payload you receive is already filtered — the trap is recomputing
+anything from a source that is not.
+
+**What each mode is for:**
+
+| Mode | Reads as | Axis baseline |
+|---|---|---|
+| `cumulative` | the standings, drawn | `0` — it is a magnitude |
+| `perWeek` | volatility, week to week | `0`, or `extent` if you prefer the detail |
+| `vsMedian` | who is beating the league, and when | `extent`, with a zero rule drawn |
+
+The median mode changes no ranking — the sum of medians is an identical constant
+for every team — but it removes the league-wide trend that dominates the raw
+chart. Five near-parallel ascending lines are hard to read; the same five
+diverging from a zero baseline are legible at a glance.
+
+**Draw an explicit zero rule when `vsMedian` is active**, heavier than the
+gridlines and in `--fg-muted` rather than `--rule-soft`. A diverging chart whose
+zero is just another gridline loses the only thing that makes it readable.
+
+**Switching mode changes the y domain**, so recompute it from the transformed
+points rather than from the payload. This is the bug that makes a mode switch
+look broken while being arithmetically fine: the lines move, the axis does not.
 
 ## T42 · Sigma variants — 2.0 h
 
-**Expanding** (default): σ over weeks 1…w, converging as the season settles. **Rolling**: σ over the last four weeks, showing whether a team is becoming steadier or wilder — more interesting late, close to meaningless before week eight.
+**Expanding** (default): σ over weeks 1…w, converging as the season settles.
+**Rolling**: σ over the last four weeks, showing whether a team is becoming
+steadier or wilder — more interesting late, close to meaningless before week
+eight.
 
-**Raw σ vs coefficient of variation.** σ is scale-dependent: a team averaging 140 with σ = 25 is relatively steadier than one averaging 90 with σ = 22, and the raw numbers say the opposite. CV is the fair comparison and is one division away. The table keeps σ because it is the number people say out loud; the chart offers both.
+**Raw σ vs coefficient of variation.** σ is scale-dependent: a team averaging 140
+with σ = 25 is relatively steadier than one averaging 90 with σ = 22, and the raw
+numbers say the opposite. CV is the fair comparison and is one division away —
+`cv = sigma / mean`. The table keeps σ because it is the number people say out
+loud; the chart offers both.
 
-Both variants render as an em dash until enough final weeks exist — four for expanding, four for rolling.
+Both variants render as an em dash until enough final weeks exist — four for
+expanding, four for rolling.
+
+**σ here is the population form, ÷n (D1).** If you compute a rolling σ on the
+client, use the same divisor the server uses, or the table and the chart will
+disagree by a few percent and you will spend an evening deciding which is
+correct. Better still: reuse the server's number where one exists and only
+compute what the API does not send.
+
+**Do not chart a σ that does not exist yet.** Below four final weeks every
+variant is null for every team, and the honest chart is the absent one — not a
+flat line at zero. The `rangeScale` shape from T35 applies again: a function that
+returns the series or `null`, and a panel that renders the explanation when it is
+`null`.
 
 ## T43 · Loading and error states — 2.0 h
 
@@ -1051,7 +1114,45 @@ Both variants render as an em dash until enough final weeks exist — four for e
 | Fewer than four final weeks | Em dashes in the σ column with the reason on hover, not a zero and not a blank. |
 | Sleeper unreachable | Finalized weeks still render from SQL; the current week is marked stale with its last-known timestamp. |
 
-That last row is the design paying off: because finalized weeks never depend on Sleeper, an outage degrades the site rather than breaking it. Make that visible instead of failing whole.
+That last row is the design paying off: because finalized weeks never depend on
+Sleeper, an outage degrades the site rather than breaking it. Make that visible
+instead of failing whole.
+
+### The skeleton is worth building properly
+
+`App` currently renders `<p>Loading…</p>`, which is honest but reads as unfinished.
+A skeleton table — the real `<table>`, the real headers, five rows of muted
+blocks at the real column widths — costs twenty lines and removes the layout jump
+when data arrives. Animate it with a slow opacity pulse or not at all; a sweeping
+gradient shimmer is the dated version.
+
+```css
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+```
+
+### Distinguish the two failures
+
+`ApiError` already carries `status`, which is the whole reason it exists:
+
+- **404** — the season is not backfilled. Read `available` out of the body and
+  render those years as links. This is a *navigational* state, not an error.
+- **5xx or a network throw** — something is broken. Say so plainly, keep any
+  payload already on screen, and offer `refetch` as a button rather than
+  reloading the page.
+
+A poll that fails **must not** replace good data with an error screen. `useSeason`
+already keeps `payload` when a later fetch throws — the error state has to respect
+that and render the stale data with a warning rather than instead of it.
+
+### Two invariants for this task
+
+**Never an empty table with no explanation.** Every zero-row state has a reason,
+and the reason is renderable: no seasons, season not backfilled, no finalized
+weeks yet.
+
+**Never a number you do not have.** `0.0` is a score somebody could have posted.
+An em dash is the only honest rendering of an absent figure, and it is `—`
+(U+2014), muted, everywhere on the page.
 
 ## T44 · Cost guardrails — 2.0 h
 

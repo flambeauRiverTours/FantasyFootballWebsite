@@ -19,26 +19,23 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-      - run: dotnet restore
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
       - run: dotnet build --no-restore -warnaserror
       - run: dotnet test --no-build --verbosity normal
       - run: dotnet format --verify-no-changes
-      - run: dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln.txt
-      - run: "! grep -q 'has the following vulnerable packages' vuln.txt"
 
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -50,15 +47,34 @@ jobs:
       - name: The bundle is built, not source
         run: |
           grep -q "/assets/" dist/index.html
-          ! grep -q "/src/" dist/index.html
+          if grep -q "/src/" dist/index.html; then echo "::error::dist/index.html references source"; exit 1; fi
           test -f dist/staticwebapp.config.json
+  actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          command -v shellcheck
+          file=actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz
+          curl -fsSL -o "$file" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$file"
+          echo "$ACTIONLINT_SHA256  $file" | sha256sum -c -
+          tar -xzf "$file" actionlint
+          ./actionlint -color
+
   infra:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: az bicep build --file infra/main.bicep --stdout > /dev/null
-      - uses: azure/login@v3
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
@@ -68,8 +84,15 @@ jobs:
           LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
           EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
           RESOURCE_GROUP:  ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+          BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
+          SQL_ADMIN_ID: ${{ secrets.AZ_SQL_ADMIN_OBJECT_ID }}
+          SQL_ADMIN_NAME: ${{ secrets.AZ_SQL_DB_ADMIN_NAME }}
         run: |
+          set -u
+          : "${LEAGUE_ID:?}" "${RESOURCE_GROUP:?}" "${SQL_ADMIN_ID:?}" "${SQL_ADMIN_NAME:?}"
           az deployment group what-if \
             --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
-            --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS"
+            --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
+            budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
+            sqlAdminLogin="$SQL_ADMIN_NAME"
