@@ -271,12 +271,28 @@ text{
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: opacity 140ms ease, stroke-width 140ms ease;
+}
+
+.chart path.series[data-muted='true'] { opacity: 0.18; }
+.chart path.series[data-raised='true'] { stroke-width: 2.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chart path.series,
+  .chart .series-label { transition: none; }
 }
 
 .chart .series-label {
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
+  transition: opacity 140ms ease;
 }
+
+.chart .series-label[data-muted='true'] { opacity: 0.18; }
+
+.chart .hit { touch-action: pan-y; }
+
+::selection { background: var(--accent-weak); }
 
 /* focus */
 :where(a, button, select, [tabindex]):focus-visible {
@@ -284,3 +300,80 @@ text{
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* Chip/button controls for the chart */
+.segmented {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  background: var(--bg-subtle);
+  border-radius: 6px;
+}
+
+.segmented button {
+  border: 0;
+  background: transparent;
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.08);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--chip);
+  background: transparent;
+}
+
+.chip[aria-pressed='true'] {
+  color: var(--fg);
+  border-color: var(--rule);
+  background: var(--bg-subtle);
+}
+
+.chip[aria-pressed='true'] .swatch { background: var(--chip); }
+
+
+/* A11y */
+@media (max-width: 40rem) {
+  th, td { padding: var(--space-2); }
+  .col-ideal { display: none; }
+  .masthead p { display: none; }
+  .segmented { display: flex; width: 100%; }
+  .segmented button { flex: 1; }
+}
+
+.table-wrap { overflow-x: auto; }
