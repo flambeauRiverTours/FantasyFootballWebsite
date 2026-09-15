@@ -27,8 +27,7 @@ export default function App() {
         <div className="panel-inner">
           <h1>Bosty Base Fantasy Football</h1>
           <p className="muted">
-            {payload.season} · Week {payload.currentWeek} · final through week{' '}
-            {payload.finalThroughWeek}
+            {payload.season} · Week {payload.currentWeek}
           </p>
         </div>
       </header>
