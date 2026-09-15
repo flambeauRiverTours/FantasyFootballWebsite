@@ -98,22 +98,32 @@ blocked on effort; each is waiting on something that does not exist yet.
 First milestone anyone else in the league can look at, and the first that will
 generate opinions.
 
+**T32 to T35 are built.** The page renders the real standings from the live API,
+in three panels, in both themes, without a horizontal scrollbar at 375 px.
+What remains is the chart and everything that hangs off it.
+
 - [x] **T32** Frontend scaffold — 2 h
       Vite 8, React 19, TypeScript. Types written from the live response, ETag-aware
       fetch layer, `useSeason` with visibility-gated polling, dev proxy past CORS.
       `web` jobs restored in ci.yml and wired to SWA in deploy.yml.
-- [ ] **T33** Design system — 3 h
-      OKLCH tokens, four type sizes, one spacing scale, dark designed rather than inverted.
-- [ ] **T33b** Panel layout — 1.5 h
-      One visualisation per screen, sticky-stacked like ellipsus.com. Native CSS,
-      no scroll-jacking library. `100svh`, `proximity` snap, and it must still
-      read as a plain document under `prefers-reduced-motion`. **Three panels
-      built, the radar hidden** until T48 fills `leagueSlotAverages` — the gate is
-      derived from the payload, so there is no flag to flip later.
-- [ ] **T34** Standings table — 3 h
-      Sort on points, tabular figures, sigma em-dash, week-range column header.
-- [ ] **T35** Inline range mark — 2.5 h
-      Min to max rule with a mean tick and a shaded band, on one shared scale.
+- [x] **T33** Design system — 3 h
+      OKLCH tokens, four type sizes, one spacing scale, dark designed rather than
+      inverted. Global `box-sizing: border-box` added later, in T33b, once its
+      absence produced a page-wide horizontal scrollbar.
+- [x] **T33b** Panel layout — 1.5 h
+      Three sticky `100svh` panels under `proximity` snap, a sticky masthead at
+      `--masthead-h` with the panels offset beneath it, and a reduced-motion
+      block that returns the page to an ordinary document. The radar is gated on
+      `leagueSlotAverages` being non-empty — no flag to flip when T48 ships — with
+      `?radar` to force it open while building.
+- [x] **T34** Standings table — 3 h
+      Fixed sort on points, tabular figures, hairline rules, `aria-sort` on the
+      sorted column, em dash for absent values and a real U+2212 in the gap.
+      Split into `Panel` / `StandingsPanel` so each panel owns its own state.
+- [x] **T35** Inline range mark — 2.5 h
+      Min-to-max rule, mean tick and one-sigma band, on a single league-wide
+      scale built by `rangeScale`. Returns `null` when no team is consistent, so
+      holding the scale *is* the fact that there is a column to draw.
 - [ ] **T36** D3 line chart — 4 h `±`
       Scales, axes and path generators; React renders every node.
 - [ ] **T37** Chart controls — 3 h
