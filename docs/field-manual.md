@@ -10,9 +10,14 @@
 
 ---
 
-This manual assumes no prior familiarity with Azure, bicep, EF Core, D3 or
+This manual assumes no prior familiarity with Azure, bicep, EF Core, D3, CSS or
 GitHub Actions. Where a step needs background, the background is here rather
-than assumed. Where a command can fail in a way whose error message points
+than assumed.
+
+**Completed tasks have been cut.** M0-M2, T24's build steps, T25-T28 and T32 are
+built; what survived of them is the *Standing traps* section below, and the
+reasoning lives in [`amendments.md`](amendments.md) and
+[`lessons.md`](../tasks/lessons.md). This file is now what is left to build. Where a command can fail in a way whose error message points
 somewhere unhelpful, that is called out.
 
 ### Conventions
@@ -54,29 +59,18 @@ rot faster than the docs.
 
 ---
 
-# Built · M0–M2
+# Standing traps
 
-These are done. The step-by-step that built them has been removed; what remains
-is where things live, the decisions that are easy to undo by accident, and the
-traps that still bite.
+M0–M2's step-by-step has been cut; the code exists and `amendments.md` holds the
+reasoning. These are the few things that will still bite during work that is
+*not* finished, so they stay.
 
-## The projects
+**`dotnet format` and line endings.** `.editorconfig` requires CRLF, the repo
+stores LF, and `.gitattributes` pins `* text=auto eol=crlf` with
+`.github/** text eol=lf`. A wall of `ENDOFLINE` errors in CI and none locally
+means that file.
 
-| Project | Holds | Depends on |
-|---|---|---|
-| `FantasyLeague.Core` | `Slot`, `IdealLineupSolver`, `SpreadCalculator`. Pure functions, no framework types | nothing |
-| `FantasyLeague.Sleeper` | DTOs, HTTP client, cache, player map, season assembly, payload mapping | Core |
-| `FantasyLeague.Functions` | The two HTTP endpoints and the player-map timer | Sleeper |
-| `FantasyLeague.Console` | Live harness that prints standings and asserts invariants | Sleeper |
-| `FantasyLeague.Data` | Empty. M3 fills it | — |
-| `FantasyLeague.Core.Tests` | All 268 tests | everything |
-
-`Directory.Build.props` sets `net10.0`, `LangVersion=latest`, nullable enabled,
-`TreatWarningsAsErrors` and `EnforceCodeStyleInBuild` for every project at once.
-
-## The three gates
-
-Run these before pushing. CI runs the same ones.
+**The three gates**, which CI runs and you should run before pushing:
 
 ```bash
 dotnet build -warnaserror
@@ -90,136 +84,23 @@ dotnet test
 dotnet format --verify-no-changes
 ```
 
-**Watch out — `dotnet format` and line endings.** `.editorconfig` requires CRLF.
-The repo stores LF and `core.autocrlf` converts on checkout, so Windows always
-passed while Linux always failed. `.gitattributes` now pins `* text=auto
-eol=crlf` with `.github/** text eol=lf`, which makes the checkout identical
-everywhere. If you ever see a wall of `ENDOFLINE` errors in CI and none locally,
-that file is what to look at.
+**A3 is unfinished.** An unrecognised slot code is accepted silently.
+`Parse_rejects_an_unrecognised_slot_code` exists and is skipped, ready to enable.
 
-## The domain (M0)
+**A singleton cache is per-instance.** Flex Consumption scales to zero and out to
+forty, so anything held in memory starts empty on every new instance and any
+invalidation reaches only the instance that ran it. This took the first deploy
+down (A12) and shapes T27's cache TTL. Assume it again for anything you cache.
 
-**`Slot.Parse`** turns `roster_positions` into startable slots. It drops `BN`,
-`IR` and `TAXI`, and **preserves order and duplicates** — two `QB` entries mean
-two QB slots, and the order is the radar's axis order (R2), so it is never
-sorted. `Slot.Accepts` matches against a player's `fantasy_positions`.
+**Bicep only infers dependencies from symbolic references.** A resource that
+interpolates a parent's property does not depend on that parent's *children*.
 
-This league is `QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF` plus eight
-`BN` — eleven startable slots, eight distinct codes.
-
-**Watch out — A3 is not finished.** An unrecognised slot code is currently
-accepted silently. The test `Parse_rejects_an_unrecognised_slot_code` exists and
-is skipped, ready to enable once the guard is written.
-
-**`IdealLineupSolver`** finds the best possible lineup by bitmask dynamic
-programming over `2^11` slot states. Think of it as: for every possible *set of
-filled slots*, remember the best total achievable. Add one player at a time; each
-player can go into any slot that accepts them and is not yet filled.
-
-Two things are load-bearing and were both wrong once:
-
-- The answer is `dp.Max()`, **not** `dp[full]`. A roster short at a position
-  cannot fill every slot, and `dp[full]` would be zero for it.
-- Reconstructing *which players* were chosen needs a chosen-set bitmask carried
-  alongside the score. The original used parent pointers into a rolling array;
-  they went stale, so the total was right and the lineup was wrong in about 23%
-  of cases. A 20,000-case fuzz against exhaustive search found it.
-
-**`SpreadCalculator`** returns **population** sigma (divide by `n`, not `n-1`) —
-these are all the weeks played, not a sample of them — and returns `null` below
-four finalized weeks (D1). Null is a value the caller handles, never a zero.
-
-## The Sleeper client (M1)
-
-`AddSleeperClient()` registers everything as one unit so the client cannot exist
-without its rate limit. The pipeline order matters:
-
-```
-HttpClient → resilience (retries) → rate limiter → network
-```
-
-Resilience is **outermost** so every retry spends its own token. Inside-out, a
-retry storm would bypass the limiter entirely.
-
-**Watch out — `AddStandardResilienceHandler` forces `HttpClient.Timeout` to
-infinite** and overrides any value you configure. That is deliberate: the real
-budget is the pipeline's `TotalRequestTimeout` (30 s) with a 10 s
-`AttemptTimeout` inside it. Setting `HttpClient.Timeout` yourself would cut the
-pipeline off mid-retry and surface as a bare `TaskCanceledException` naming no
-cause.
-
-**Watch out — `AllowReadingFromString` is required, not defensive.** Sleeper
-returns `season` as the string `"2026"`. Binding that to an `int` throws without
-it. All six DTOs share one `SleeperJson.Options` so they cannot drift.
-
-**`SleeperReaderCache`** holds per-endpoint TTLs and gives single-flight
-behaviour: ten concurrent callers for the same key produce one upstream fetch.
-The TTLs currently differ from §07 of the design — see **F4**.
-
-**`SeasonService.BuildAsync`** assembles a whole season and checks two invariants
-per team-week, both against Sleeper's own `points` rather than a commissioner
-override (A9):
-
-- `sum(starters_points) == points`, within a cent
-- `ideal >= points`
-
-Violations are *collected and reported*, never thrown. Same for players the map
-cannot explain (A8) — dropping one silently would lower that team's ideal, and
-`ideal >= actual` cannot see undercounting.
-
-## The player map (T14, extended by A12)
-
-The dump at `/v1/players/nfl` is **14.65 MB across 12,227 players**. The design
-and this manual both used to say 5 MB; that was wrong by 3×.
-
-The projection keeps every player with a non-empty `fantasy_positions` — 11,902
-of them — and throws away every field except name, team and positions. That is a
-17× saving in bytes from dropping *fields*, not rows. Keeping the map general
-rather than pruning it to this season's slots is A3.
-
-Because Flex Consumption scales to zero and out to forty, and the map is
-per-instance memory, the map is persisted to blob storage:
-
-- `EnsureCurrentAsync` is safe on a request path. It adopts the stored map if it
-  is under 24 h old, and only fetches the dump if the store is empty or stale.
-- `RefreshAsync` always refetches. Only the daily timer calls it.
-- A `SemaphoreSlim` collapses a cold-start stampede into one fetch.
-- Store failures are logged and ignored — an unreachable store makes a request
-  slower, never failed.
-
-**Watch out — this is what took the first deploy down.** `SeasonService` used to
-throw if the map had never been refreshed, and only the console harness ever
-called the refresher. Every deployed request returned 500. A precondition that
-one caller satisfies is a bug waiting for a second caller.
-
-## The API and cloud (M2)
-
-Two endpoints, both anonymous and read-only: `GET /api/season` (optional
-`?season=`) and `GET /api/seasons`. The league ID comes from configuration and
-**never** from the query string — that would make the site an open relay against
-Sleeper's rate limit.
-
-`SeasonPayloadMapper` produces the §09 body, applies A1's exclusion at the read
-boundary, and computes a **weak ETag over every week's scores**. Hashing only
-the season and week number would freeze the page mid-Sunday.
-
-Infrastructure is one `infra/main.bicep`: Flex Consumption (FC1) Function App,
-Static Web App on Free, storage with a `deployments` container, Log Analytics
-capped at 0.16 GB/day, App Insights, and a conditional budget.
-
-**Watch out — the design describes a Consumption (Y1) plan that cannot be
-provisioned**; the subscription quota for it is zero. FC1 is what exists.
-
-**Watch out — bicep only infers dependencies from symbolic references.** The
-Function App referenced the storage *account*, so ARM was free to create the app
-before the `deployments` *container* existed. An explicit `dependsOn:
-[storage::blob::deployments]` fixes it.
-
-Three workflows: `ci.yml` (build, test, format, vulnerable packages, bicep
-what-if), `security.yml` (dependency, secret and Trivy scans, weekly and on every
-PR), `deploy.yml` (infra, functions with SBOM and scan, smoke test).
+**`record` equality is reference equality for collection members.** `TeamWeek`
+and `RosteredPlayer` are records whose list members compare by reference, so two
+identical values are never `==`. Use `BeEquivalentTo` in tests.
 
 ---
+
 
 # In progress · T24 · First deploy shakeout
 
@@ -370,195 +251,7 @@ week continues to come from Sleeper on every request. Two tasks here — the
 password-less database connection and the migration step — are fiddlier than
 their hours suggest, and both fail with error messages that point elsewhere.
 
-## T25 · EF Core model — 3.0 h
-
-**What EF Core is, briefly.** An object-relational mapper: you describe C#
-classes, it generates the SQL and the schema. A *migration* is a generated C#
-file describing one schema change, so a database can be brought to the current
-shape by replaying them in order.
-
-### 1 · Add the packages
-
-`FantasyLeague.Data` is currently empty.
-
-```bash
-dotnet add src/FantasyLeague.Data package Microsoft.EntityFrameworkCore.SqlServer
-```
-
-```bash
-dotnet add src/FantasyLeague.Data package Microsoft.EntityFrameworkCore.Design
-```
-
-`Design` is what the `dotnet ef` tool needs at build time; it is not used at
-runtime.
-
-### 2 · The entities
-
-Four, matching §08 of the design. The one that matters is `WeekScore`:
-
-```csharp
-modelBuilder.Entity<WeekScore>(e =>
-{
-    e.HasKey(x => new { x.LeagueId, x.Season, x.Week, x.RosterId });
-    e.Property(x => x.ActualPts).HasPrecision(9, 2);
-    e.Property(x => x.IdealPts).HasPrecision(9, 2);
-    e.Property(x => x.PlayersPointsJson).HasColumnType("nvarchar(max)");
-});
-
-modelBuilder.Entity<League>(e =>
-{
-    e.HasKey(x => x.LeagueId);
-    e.HasIndex(x => x.Season).IsUnique();      // one league per year
-});
-```
-
-The composite key is what makes the backfill in T30 idempotent — re-running it
-after a solver fix upserts rather than duplicates.
-
-**Use `HasPrecision` on every decimal.** EF's default for `decimal` on SQL Server
-is `decimal(18,2)`, which is fine here, but being explicit stops a later provider
-change from silently rounding fantasy points.
-
-### 3 · Install the tool and create the first migration
-
-```bash
-dotnet tool install --global dotnet-ef
-```
-
-```bash
-dotnet ef migrations add Initial --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Functions
-```
-
-`--project` is where migration files are written; `--startup-project` is where EF
-looks for configuration and the DI container. They are different projects here,
-and omitting either gives an error about not finding a `DbContext` that says
-nothing about which flag was missing.
-
-Commit the generated `Migrations/` folder. It is source, not build output.
-
-**Reference** — [EF Core](https://learn.microsoft.com/ef/core/) ·
-[Migrations](https://learn.microsoft.com/ef/core/managing-schemas/migrations/)
-
-## T26 · Azure SQL and managed identity — 3.0 h  ±
-
-The goal is a database the Function App reaches **with no password anywhere** —
-no connection secret in configuration, nothing to rotate, nothing to leak.
-
-**What a managed identity is.** Azure gives the Function App its own identity in
-Entra (`identity: { type: 'SystemAssigned' }`, already in the bicep, and already
-surfaced as the `functionAppPrincipalId` output). Azure SQL can be told to trust
-that identity directly, so the app authenticates as itself rather than presenting
-a credential.
-
-### 1 · The database, in bicep
-
-Add the server and database to `infra/main.bicep` with `useFreeLimit: true` and
-`freeLimitExhaustionBehavior: 'AutoPause'`. An auto-pause delay is **required**
-on the free offer. The design accepts the resulting cold resume — the first
-request after a pause waits — rather than paying to avoid it.
-
-Deploy the template before continuing; the next steps need the server to exist.
-
-### 2 · Make yourself the server's Entra administrator
-
-You cannot create the app's database user until the server has an Entra admin,
-and that admin has to be you.
-
-```bash
-az sql server ad-admin create -g rg-fantsybosty -s sql-idealpoints --display-name "$(az account show --query user.name -o tsv)" --object-id "$(az ad signed-in-user show --query id -o tsv)"
-```
-
-### 3 · Grant the Function App's identity
-
-Connect to the database **as that admin** — Azure Data Studio, SSMS, or the
-portal query editor — and run the following. The principal name is the Function
-App's *resource name*, not its identity GUID:
-
-```sql
-CREATE USER [func-idealpoints] FROM EXTERNAL PROVIDER;
-ALTER ROLE db_datareader ADD MEMBER [func-idealpoints];
-ALTER ROLE db_datawriter ADD MEMBER [func-idealpoints];
-```
-
-**Watch out — do not grant `db_ddladmin`.** Migrations run from the pipeline
-(T31), so the *deploy* identity needs schema rights and the running app should
-not have them. Handing the app schema-modification rights is a permanent
-capability bought for a once-per-deploy need.
-
-### 4 · The connection string
-
-```
-Server=tcp:sql-idealpoints.database.windows.net,1433;Database=idealpoints;Authentication=Active Directory Default;Encrypt=True;
-```
-
-No password, no secret. `Microsoft.Data.SqlClient` plus `Azure.Identity` resolves
-the managed identity in Azure and your `az login` session locally — the same
-string works in both places.
-
-**Watch out — the failure modes look identical.** A firewall block and a missing
-database user both surface as "cannot connect". Check in that order: is your IP
-allowed on the server, does the contained user exist, does it have the role.
-
-**Reference** — [free offer](https://learn.microsoft.com/azure/azure-sql/database/free-offer) ·
-[serverless and auto-pause](https://learn.microsoft.com/azure/azure-sql/database/serverless-tier-overview) ·
-[Entra authentication](https://learn.microsoft.com/azure/azure-sql/database/authentication-aad-overview)
-
-## T27 · Read path — 2.0 h
-
-Keep SQL off the hot path. On cold start, load every finalized week for the
-requested season once; serve later requests from memory, merging the live current
-week from the T13 cache.
-
-```csharp
-// once per cold start, per season
-var finalized = await db.WeekScores
-    .Where(w => w.Season == season && w.IsFinal)
-    .AsNoTracking()
-    .ToListAsync(ct);
-```
-
-`AsNoTracking` matters: nothing here is written back through the context, and
-EF's change tracker is pure overhead on a read-only path.
-
-A whole season is a few hundred kilobytes, so this is a small dictionary in a
-singleton, invalidated when the finalize timer runs.
-
-**Watch out — this is A12's shape again.** A singleton cache is per-instance, and
-under Flex Consumption every new instance starts empty. That is fine here,
-because the source of truth is SQL rather than a 14 MB download. But the
-invalidation in T28 only clears *the instance that ran the timer* — other
-instances keep stale data until their own restart. Decide deliberately: give the
-cache a short TTL, or accept staleness until the next cold start.
-
-## T28 · Finalize timer — 2.0 h
-
-Tuesday morning, after Monday night football has settled: write the completed
-week to SQL with `IsFinal = true`, recompute sigma, then drop the in-memory
-season so the next request rehydrates.
-
-```csharp
-[Function("FinalizeWeek")]
-public async Task Run([TimerTrigger("0 0 9 * * 2")] TimerInfo timer, CancellationToken ct)
-{
-    // 0 0 9 * * 2  =  09:00:00 UTC every Tuesday
-}
-```
-
-**Watch out — Azure Functions NCRONTAB has six fields, not five.** The first is
-**seconds**. A five-field expression copied from a Linux crontab is read with
-your minutes in the seconds position, and the job runs once a minute instead of
-once a week. This is the single most common Functions timer bug.
-
-Timers run in UTC unless `WEBSITE_TIME_ZONE` is set. Leave it unset and think in
-UTC — the NFL schedule crosses daylight-saving boundaries anyway, so a fixed UTC
-time with an hour of slack beats an exact local one.
-
-`RefreshPlayerMap` (`0 30 9 * * *`, added by A12) is the working example to copy
-from, including why it is deliberately **not** `RunOnStartup`.
-
-**Reference** — [Timer trigger](https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer)
-
-# M4 · The page · 24.0 h
+# M4 · The page · 25.5 h
 
 The first milestone anyone else in the league can look at, and the first that
 will generate opinions. The table is the primary object; the chart is the thing
@@ -633,154 +326,455 @@ now and render nothing.
 deferred. The season picker in T37 must still be built against the list rather
 than hardcoding a year, but expect one option for a long time.
 
-## T32 · Frontend scaffold — 2.0 h
+## What makes this look professional
 
-This task also unblocks three things that are currently stubbed: the `web` job in
-`deploy.yml`, the node steps removed from `ci.yml`, and the
-`AZURE_STATIC_WEB_APPS_API_TOKEN` secret.
+Most of the difference between an amateur page and a professional one comes from
+about six decisions, none of which require taste to execute — only discipline to
+follow. If you do nothing else in T33, do these.
 
-### 1 · Create the app
+**One accent colour, used sparingly.** Everything else is a neutral grey. The
+moment a second accent appears, the eye stops knowing what matters. Your accent
+is for the mean tick, the hovered line, and focus rings. Nothing else.
 
-```bash
-npm create vite@latest web -- --template react-ts
-```
+**Few type sizes, few weights.** Four sizes and two weights is plenty for this
+page. Amateur pages have nine sizes because each element was decided separately.
 
-```bash
-cd web && npm install
-```
+**Space is the design.** Generous, *consistent* space does more for perceived
+quality than any colour or font choice. Every gap on the page should come from
+one scale, never an arbitrary `13px`.
 
-### 2 · Install only the D3 pieces you need
+**Alignment beats decoration.** Numbers right-aligned with tabular figures, text
+left-aligned, one consistent left edge down the page. Borders, shadows and
+background fills are what people reach for when alignment is doing no work.
 
-```bash
-npm i d3-scale d3-shape d3-array
-```
+**Hairlines, not boxes.** One-pixel rules at low contrast separate things
+adequately. Card borders, drop shadows and rounded boxes around everything is the
+Bootstrap look, and it reads as dated.
 
-```bash
-npm i -D @types/d3-scale @types/d3-shape @types/d3-array
-```
+**Restraint in motion.** One or two transitions at 120–180ms. Anything that
+bounces, spins or slides across the page reads as amateur, and R1's reduced-motion
+requirement means you need the no-motion version to look finished anyway.
 
-Install the sub-packages, **not** the `d3` meta-package. You need scales, path
-generators and `extent`. You do not need selections, transitions, geo projections
-or force simulations, and the meta-package drags in the DOM layer you have
-deliberately decided not to use.
-
-### 3 · Lay the files out
-
-```
-web/
-  src/
-    api/
-      types.ts          the interfaces above, by hand
-      client.ts         fetchSeason, fetchSeasons, ETag handling
-    hooks/
-      useSeason.ts      fetch + poll + 304 handling (T39)
-    components/
-      StandingsTable.tsx
-      RangeMark.tsx
-      SeasonChart.tsx
-      ChartControls.tsx
-    theme.css           tokens only, no component styles
-    App.tsx
-  staticwebapp.config.json
-```
-
-Write `types.ts` by hand from the contract above rather than generating it. There
-are five interfaces, they are stable, and a generator is a dependency plus a
-build step to solve a twenty-minute problem once.
-
-### 4 · SPA fallback
-
-`web/staticwebapp.config.json`:
-
-```json
-{ "navigationFallback": { "rewrite": "/index.html" } }
-```
-
-Without it, loading `/2025` directly returns 404 from the static host — it looks
-for a file at that path. Works under the dev server, fails once deployed. The
-classic SPA-on-static-hosting trap.
-
-### 5 · Get past CORS in development
-
-The API allows exactly one origin: the Static Web App hostname. Your Vite dev
-server is a different origin and **will be refused**. Two ways through, and the
-proxy is the better one:
-
-```ts
-// vite.config.ts
-server: {
-  proxy: {
-    '/api': {
-      target: 'https://func-idealpoints.azurewebsites.net',
-      changeOrigin: true,
-    },
-  },
-}
-```
-
-The browser then makes a same-origin request to the dev server, which forwards
-it. No CORS involved, no infrastructure change, and your fetch code uses the
-relative path `/api/season` in both development and production.
-
-The alternative is adding your dev origin to the bicep `devOrigins` parameter,
-which exists for exactly this. It requires an infrastructure deploy to change,
-so prefer the proxy unless you need the real preflight behaviour.
-
-### 6 · Turn the stubs back on
-
-Once `web/package-lock.json` exists, restore the node steps in `ci.yml` and
-replace the `web` job's echo in `deploy.yml` with
-`Azure/static-web-apps-deploy@v1`. Fetch the deploy token first — step 9 of the
-T24 runbook.
+The single biggest trap: **do not install a component library**. A five-row table
+and one chart do not need one, and the result will look like every other
+Tailwind/MUI page. The whole visual identity here is type, space and one accent.
 
 ## T33 · Design system — 3.0 h
 
-Every colour comes from a token on `:root`, redefined under
-`@media (prefers-color-scheme: dark)`. No literal hex outside that block.
+T32 is done: Vite, React, the typed fetch layer, `useSeason`, the dev proxy and
+the CI wiring all exist. `src/index.css` is a bare reset, deliberately, so this
+task starts from nothing.
 
-Design the dark theme rather than inverting the light one. A naive inversion
-gives a muddy accent and unreadable mid-tones.
+Everything on the page pulls from the tokens below. No literal colour, size or
+spacing value appears anywhere else.
 
-**This league has five scoring teams, not twelve.** The design's palette worries
-were written for twelve and are much easier at five. Do not over-engineer a
-categorical scale; pick five that hold up in both themes and check contrast.
+### 1 · Colour
 
-Set `font-variant-numeric: tabular-nums` on every cell containing a figure.
-Points totals that do not line up column-wise are the difference between a table
-you can scan and one you have to read.
+Use **OKLCH**, not hex. It is perceptually uniform, which means lightening a
+colour by 5% actually looks 5% lighter, and a neutral ramp built by varying one
+number stays neutral. Browser support is universal now.
+
+```css
+:root {
+  color-scheme: light dark;
+
+  /* one hue for every neutral: 250 is a barely-blue grey that reads as
+     "considered" where pure grey reads as "unstyled" */
+  --bg:        oklch(99% 0.002 250);
+  --bg-subtle: oklch(96.5% 0.004 250);
+  --fg:        oklch(22% 0.01 250);
+  --fg-muted:  oklch(52% 0.012 250);
+  --rule:      oklch(90% 0.006 250);
+  --rule-soft: oklch(94% 0.005 250);
+
+  /* the one accent */
+  --accent:    oklch(52% 0.13 165);
+  --accent-weak: oklch(52% 0.13 165 / 0.12);
+
+  /* five teams, evenly spaced in hue at constant lightness and chroma, so no
+     line looks louder than another - the usual failure of a hand-picked palette */
+  --team-1: oklch(58% 0.14 25);
+  --team-2: oklch(58% 0.14 95);
+  --team-3: oklch(58% 0.14 165);
+  --team-4: oklch(58% 0.14 245);
+  --team-5: oklch(58% 0.14 315);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        oklch(17% 0.008 250);
+    --bg-subtle: oklch(21% 0.009 250);
+    --fg:        oklch(94% 0.005 250);
+    --fg-muted:  oklch(68% 0.011 250);
+    --rule:      oklch(30% 0.01 250);
+    --rule-soft: oklch(25% 0.009 250);
+
+    --accent:    oklch(72% 0.13 165);
+    --accent-weak: oklch(72% 0.13 165 / 0.16);
+
+    /* lighter and slightly less saturated: the same values on a dark ground
+       look muddy, which is why inverting a light theme never works */
+    --team-1: oklch(70% 0.13 25);
+    --team-2: oklch(70% 0.13 95);
+    --team-3: oklch(70% 0.13 165);
+    --team-4: oklch(70% 0.13 245);
+    --team-5: oklch(70% 0.13 315);
+  }
+}
+```
+
+**Why this works and hand-picking does not.** Every neutral shares one hue, so
+nothing clashes. Every team colour shares one lightness and one chroma, so no
+line dominates. The dark theme raises lightness and drops chroma rather than
+inverting, which is D9's "designed rather than inverted" made concrete.
+
+### 2 · Type
+
+```css
+:root {
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* four sizes. not five, not nine */
+  --text-xs: 0.75rem;    /* column headers, axis labels */
+  --text-sm: 0.875rem;   /* table body, controls */
+  --text-md: 1rem;       /* body copy */
+  --text-lg: 1.375rem;   /* the one page title */
+
+  --weight-normal: 400;
+  --weight-medium: 550;  /* the only emphasis you need */
+}
+```
+
+The system stack costs nothing and looks native. If you want the page to feel
+designed rather than default, one variable font from Google Fonts — **Inter** is
+the safe choice — changes more than any other single decision. Self-host it or
+accept the extra request; do not load six weights when you use two.
+
+**Three type rules that matter more than the typeface:**
+
+```css
+/* every figure, everywhere. non-negotiable for a table of numbers */
+.numeric { font-variant-numeric: tabular-nums; }
+
+/* column headers: small, uppercase, letterspaced, muted. this single treatment
+   is most of what makes a table look professional rather than default */
+th {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* headings do not need to be huge. one step up and a weight change is enough */
+h1 { font-size: var(--text-lg); font-weight: var(--weight-medium); }
+```
+
+Without `tabular-nums`, `167.5` and `111.1` occupy different widths and the
+column visibly wobbles. It is the single most noticeable difference between a
+data table that looks built and one that looks thrown together.
+
+### 3 · Space
+
+One scale, every gap drawn from it. A `13px` anywhere means you guessed.
+
+```css
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+}
+```
+
+**Be more generous than feels right.** The commonest amateur mistake is
+cramming. Section gaps of `--space-12`, table cell padding of `--space-3`
+vertical, and the page breathing inside a `max-width` will look sparse in your
+editor and correct in a browser.
+
+### 4 · The page frame
+
+```css
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--weight-normal) var(--text-md)/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* main is the scroll container; the max-width lives on each panel's inner
+   wrapper instead - see T33b */
+main { display: block; }
+
+.panel-inner {
+  margin-inline: auto;
+  max-width: 64rem;
+  padding: var(--space-8) var(--space-4);
+  width: 100%;
+}
+```
+
+A `max-width` is not optional. Full-bleed text on a wide monitor is the clearest
+possible signal that nobody thought about the layout. With panels it belongs on
+the inner wrapper rather than on `main`, so each panel's background can still run
+edge to edge.
+
+### 5 · Focus, once, globally
+
+```css
+:where(a, button, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+```
+
+`:focus-visible` rather than `:focus` shows the ring for keyboard users and not
+on mouse clicks. Never `outline: none` without a replacement — that is T40's
+requirement and an accessibility failure, not a style choice.
+
+## T33b · Panel layout — 1.5 h
+
+Each visualisation gets its own screen, and you scroll between them. Not for
+fashion: **the chart wants to be big**. Stacked as an ordinary document the table
+takes the top of the viewport and the chart gets whatever is left. One panel each
+gives both the room they need, and M6's radar becomes a natural third.
+
+### What the reference sites actually do
+
+Two sites, two different techniques, and only one is worth copying:
+
+| Site | Technique |
+|---|---|
+| b-egg.farm | `gsap` + `CustomEase` + `lenis` + a `scrolldisable.js` — scroll-jacked with a smooth-scroll library |
+| ellipsus.com | No animation library at all. `position: sticky` with `top: 64px` per section — native scrolling, sections pin as you pass them |
+
+Copy **ellipsus**. It is plain CSS, it does not fight the browser, and it
+degrades to ordinary scrolling when anything goes wrong.
+
+**Do not install Lenis or GSAP.** b-egg needs them because it runs custom
+animation timelines off scroll position. Here they would be roughly 70 KB and a
+scroll hijack to reproduce an effect that is four CSS properties — and
+smooth-scroll libraries are precisely what `prefers-reduced-motion` users turn
+off.
+
+### The panels
+
+```
+1  Standings table      the data, immediately
+2  Season chart         the thing people play with
+3  Positional radar     built now, hidden until M6 fills its data
+```
+
+**Panel one is the table, not a title card.** This is a live scoreboard: during a
+Sunday someone opens it to check one number. Making them scroll past a hero to
+reach the standings is a real cost, and the reason this pattern usually annoys
+people on marketing sites.
+
+### Revealing the radar panel
+
+Build the third panel now and gate it, so the layout is designed for three from
+the start rather than retrofitted. **Derive the gate from the data rather than a
+literal flag** — the payload already says whether the radar has anything to show:
+
+```tsx
+// leagueSlotAverages is an empty object until T48 fills it, deliberately, so
+// that M6 needs no contract change (see "The contract, as it actually responds")
+const radarReady = Object.keys(payload.leagueSlotAverages).length > 0;
+
+// ?radar lets you work on the panel before the API serves the data
+const forced = new URLSearchParams(location.search).has('radar');
+
+const showRadar = radarReady || forced;
+```
+
+Why this rather than `VITE_ENABLE_RADAR`:
+
+- **Nothing to remember.** The panel appears the moment T48 ships, with no second
+  deploy and no checklist item that gets skipped.
+- **Nothing to remove.** A build-time flag leaves dead branches and a cleanup
+  task; this expression stays correct forever and reads as a guard rather than a
+  leftover.
+- **It cannot lie.** A flag can be on while the data is absent, which renders an
+  empty chart. This condition is true exactly when there is something to draw.
+
+The `?radar` escape hatch is what makes it workable during M6: you can build and
+style the panel against hand-written data locally while the deployed API still
+returns `{}`.
+
+**Two panels is thin for this pattern and three is where it earns its keep.** In
+the meantime the page is standings then chart, which still reads fine — the
+sticky stack degrades to an ordinary two-section scroll. Do not add a filler
+panel to pad the count.
+
+### The CSS
+
+```css
+.panels {
+  /* proximity, never mandatory - see below */
+  scroll-snap-type: y proximity;
+}
+
+.panel {
+  position: sticky;
+  top: 0;
+  min-height: 100svh;
+  scroll-snap-align: start;
+  display: grid;
+  align-content: center;
+  background: var(--bg);
+}
+
+.panel > .panel-inner {
+  margin-inline: auto;
+  max-width: 64rem;
+  padding: var(--space-8) var(--space-4);
+  width: 100%;
+}
+```
+
+**`100svh`, not `100vh`.** `svh` is the *small* viewport height, which excludes
+the mobile browser chrome that collapses as you scroll. `100vh` on iOS Safari
+gives a panel taller than the visible area, with content hidden under the
+toolbar. That single unit is the difference between this working on a phone and
+not.
+
+**`proximity`, never `mandatory`.** Mandatory snap traps the user on any panel
+taller than the viewport, breaks find-in-page, and makes keyboard scrolling
+unpredictable. Proximity snaps when you are already close and otherwise leaves
+scrolling alone.
+
+**Each panel needs an opaque `background`.** They overlap as they pin; without a
+background you see the previous panel through the current one.
+
+### The chart panel must not fight the pointer
+
+Scrolling over an interactive chart while trying to hover a line is the classic
+failure of this pattern. Either give the chart panel enough padding that there is
+dead space to scroll through, or size the chart shorter than the panel:
+
+```css
+.panel-chart .chart { max-height: 70svh; }
+```
+
+### Reduced motion turns it back into a document
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .panels { scroll-snap-type: none; }
+  .panel { position: static; min-height: 0; }
+}
+```
+
+R1 requires this anyway, and it doubles as the test that matters: **if the page
+does not look finished in this state, the scrolling was carrying the design
+rather than the design carrying itself.** Check it before calling the milestone
+done.
+
+### Give each panel a heading and an id
+
+```tsx
+<section className="panel" id="standings" aria-labelledby="standings-h">
+  <div className="panel-inner">
+    <h2 id="standings-h">Standings</h2>
+```
+
+Ids make each panel linkable, which fits the query-string state from T37 — a
+paste-able link to a specific view is the social point of the site. Headings keep
+the document navigable for a screen reader, which a set of unlabelled
+full-viewport `div`s is not.
+
 
 ## T34 · Standings table — 3.0 h
 
-Columns: team, points, sigma, ideal. Sorted descending on points, because that
-is what decides the league.
+The primary object on the page. Five rows, five columns, and it has to be
+readable without a single interaction.
+
+### The columns
+
+| Column | Align | Notes |
+|---|---|---|
+| Team | left | the only left-aligned column |
+| Points | right | what decides the league; mark it as the sort |
+| σ | right | em dash below four final weeks |
+| Ideal | right | |
+| Gap | right | signed, muted, em dash for the leader |
+
+### The CSS that does the work
+
+```css
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+/* hairline rules, no zebra striping. striping is the dated look; a 1px rule at
+   low contrast separates rows perfectly well and stays out of the way */
+tbody tr { border-top: 1px solid var(--rule-soft); }
+thead tr { border-bottom: 1px solid var(--rule); }
+
+th, td {
+  padding: var(--space-3) var(--space-3);
+  text-align: right;
+}
+
+th:first-child, td:first-child {
+  text-align: left;
+  font-weight: var(--weight-medium);
+}
+
+td:not(:first-child) { font-variant-numeric: tabular-nums; }
+
+/* the sort column, marked by weight and ground rather than a coloured header */
+th[aria-sort], td.is-sorted { background: var(--bg-subtle); }
+td.is-sorted { font-weight: var(--weight-medium); }
+
+tbody tr:hover { background: var(--bg-subtle); }
+
+.muted { color: var(--fg-muted); }
+```
+
+**Mark the sort column with `aria-sort`, not just colour.** It is the semantic
+attribute a screen reader announces, and it gives you a free CSS hook:
+
+```tsx
+<th scope="col" aria-sort="descending">Points</th>
+```
+
+### Details that separate this from a default table
+
+- **No vertical rules.** Column separators are almost never needed; alignment
+  already separates the columns.
+- **No borders around the table.** The header rule and row rules are enough.
+- **Right-align every number including the header.** A right-aligned column with
+  a left-aligned header looks broken.
+- **The em dash is `—` (U+2014), not a hyphen.** Render it muted. A blank cell
+  reads as a bug; a dash reads as "not yet".
+- **The gap column is signed and muted:** `−17.3`, using a real minus sign
+  (U+2212) rather than a hyphen so it aligns with the digits.
+- **Do not colour the leader row.** Weight on the points cell is enough.
 
 ```tsx
 const ranked = [...payload.teams].sort((a, b) => b.totals.actual - a.totals.actual);
 const leader = ranked[0]?.totals.actual ?? 0;
+
+const gap = (v: number) =>
+  v === leader ? '—' : `\u2212${(leader - v).toFixed(1)}`;
 ```
 
-Requirements, each of which is a decision already made:
-
-- **Mark the sort column.** It is not obvious that points decide this league
-  rather than a win-loss record.
-- **Show the gap to first.** `team.totals.actual - leader`, rendered as a signed
-  figure. A standings table whose story requires arithmetic is not finished.
-- **Sigma is an em dash below four final weeks**, and its header carries the week
-  range: `sigma - through wk {finalThroughWeek}` while the points column already
-  includes `currentWeek`. Both numbers are in the payload; use them rather than
-  inferring.
-- **Do not give sigma the same bar or heat encoding as the point columns.** Lower
-  is better there, and a shared encoding reads backwards.
-
-Use a real `<table>` with `<th scope="col">`, inside a container with
-`overflow-x: auto`. Screen readers and narrow phones both benefit, and neither is
-served by a grid of divs.
+### The header carries the week range
 
 ```tsx
-const hasConsistency = team.totals.sigma !== null;
+<th scope="col">σ · through wk {payload.finalThroughWeek}</th>
 ```
 
-One guard, not five. The five consistency fields are null together.
+Points already include `currentWeek`; sigma does not (R1). Saying so in the
+header is what stops the column looking wrong during a live Sunday.
 
 ## T35 · Inline range mark — 2.5 h
 
@@ -811,139 +805,216 @@ Per-team scales make every row look identical, which defeats the only purpose th
 mark has. Render nothing when `sigma` is null — a degenerate mark is worse than
 no mark.
 
+
 ## T36 · D3 line chart — 4.0 h  ±
 
-**The mental model, because this is where the milestone gets its soft estimate.**
-D3 is usually taught as a library that manipulates the DOM for you — `select`,
-`append`, `enter`, `exit`. Use none of that. Use D3 as a **maths library**: it
-turns data into numbers and path strings, and React renders every element.
-Everything afterwards — hover, filtering, mode switching — is then ordinary React
-state rather than a second rendering system fighting the first.
+The chart's visual craft matters as much as the maths. A correct chart that looks
+like a tutorial screenshot undoes the table's work.
 
-```tsx
-import { scaleLinear } from "d3-scale";
-import { line } from "d3-shape";
+### What restraint looks like here
 
-const m = { top: 16, right: 20, bottom: 28, left: 44 };
-const x = scaleLinear().domain([1, maxWeek]).range([m.left, width - m.right]);
-const y = scaleLinear().domain([0, maxValue]).nice().range([height - m.bottom, m.top]);
+- **No chart border, no plot-area background fill.** The page ground is the
+  chart ground.
+- **Horizontal gridlines only, and barely visible** — `--rule-soft`. Vertical
+  gridlines almost never earn their place on a time axis.
+- **No axis lines.** Tick labels alone imply the axis. If you keep one, keep the
+  bottom and drop the left.
+- **Line weight 1.75–2px.** Thinner reads as weak, thicker as clumsy.
+- **`stroke-linecap: round` and `stroke-linejoin: round`.** A one-line change
+  that makes every path look considered.
+- **No dots on data points** unless there are few enough to be meaningful. At 18
+  weeks, dots become noise.
+- **Direct labels beat a legend.** With five teams you can put the team name at
+  the right end of its own line, coloured to match. A reader never has to
+  cross-reference. This is the single biggest upgrade over a default chart.
 
-const path = line<Point>().x(d => x(d.week)).y(d => y(d.value));
-
-return (
-  <svg viewBox={`0 0 ${width} ${height}`}>
-    {series.map(s => (
-      <path key={s.rosterId} d={path(s.points) ?? ""}
-            fill="none" stroke={s.color} strokeWidth={1.75} />
-    ))}
-  </svg>
-);
+```css
+.chart .grid line { stroke: var(--rule-soft); }
+.chart .tick text { fill: var(--fg-muted); font-size: var(--text-xs); }
+.chart path.series {
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 ```
 
-A scale is a function from data space to pixel space. The `y` range is inverted —
-`height - m.bottom` first — because the SVG y axis points down and charts point up.
+### Inside a panel
 
-**Axes without a ref.** `axisBottom` wants a DOM node; do not give it one. Call
-`x.ticks()`, get values back, map them to your own elements:
+T33b gives the chart its own screen. Keep it shorter than the panel so there is
+dead space to scroll through — `max-height: 70svh` — or scrolling over the chart
+while trying to hover a line fights the reader.
+
+### Margins are for labels, not decoration
 
 ```tsx
-{x.ticks(maxWeek).map(t => (
-  <g key={t} transform={`translate(${x(t)},${height - m.bottom})`}>
-    <line y2={4} stroke="var(--rule)" />
-    <text y={16} textAnchor="middle" fontSize={11}>{t}</text>
-  </g>
-))}
+const m = { top: 16, right: 84, bottom: 28, left: 44 };
 ```
 
-A dozen lines, and every node stays under React's control.
+`right: 84` is space for the direct labels; `left: 44` is space for y-axis
+numbers. A label at the edge of the drawing area is clipped by the SVG boundary —
+the scale's range starts at `m.left`, not at zero, for exactly this reason.
 
-**Watch out — leave room in the viewBox for the outermost tick labels.** A label
-at the left edge is clipped by the SVG boundary. That is what the margin object
-is for: the scale range starts at `m.left`, not at zero.
+### Make it responsive without a library
+
+```tsx
+const ref = useRef<HTMLDivElement>(null);
+const [width, setWidth] = useState(720);
+
+useEffect(() => {
+  if (!ref.current) return;
+  const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+  observer.observe(ref.current);
+  return () => observer.disconnect();
+}, []);
+```
+
+Then draw at that width with a fixed aspect. `ResizeObserver` is a dozen lines and
+removes any reason to reach for a charting library.
 
 ## T37 · Chart controls — 3.0 h
 
-- **Season** — populated from `/api/seasons`, never a hardcoded list. It returns
-  `{"current":2026,"available":[2026]}` today and will until T29 runs, but build
-  against the list so a new year appears the day it is found.
-- **Teams** — multi-select, all on by default, colour-coded to match the lines.
-- **Metric** — single-select: cumulative points, cumulative ideal, or expanding
-  sigma. Single rather than multi because sigma (roughly 25) and cumulative points
-  (roughly 800) cannot share a y-axis without sigma flattening along the bottom.
-  Switching metric switches the axis.
-- **Display mode** — cumulative, per-week, or vs league median, for the two point
-  metrics.
+Controls are where pages most often start looking cheap. Three rules:
 
-**Keep control state in the query string.** It costs almost nothing and makes
-"look at what happened to me in week 9" a link someone can paste into the league
-chat, which is the whole social point of the site.
+**Use a segmented control for small exclusive choices**, not a dropdown. Metric
+and display mode have three or four options each — showing them is faster to
+read and to click than hiding them behind a select.
+
+```css
+.segmented {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  background: var(--bg-subtle);
+  border-radius: 6px;
+}
+
+.segmented button {
+  border: 0;
+  background: transparent;
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.08);
+}
+```
+
+That single soft shadow on the *selected* segment only is the whole effect. Do
+not add shadows anywhere else on the page.
+
+**Team toggles carry their colour.** A small swatch in each toggle, matching the
+line. Deselected goes to `--fg-muted` with the swatch outlined rather than filled.
+
+**Radius: 4–6px, everywhere or nowhere.** Mixing 4, 8 and 12 across a page is a
+tell. One value, used consistently.
+
+**State in the query string** (D6, and the social point of the site): reading and
+writing `?season=&teams=&metric=` makes any view a link someone can paste into
+the league chat.
 
 ## T38 · Hover interaction — 2.0 h
 
-Hovering a team — in the chart, the legend, or the table — raises that line and
-mutes the rest. One piece of state drives all three:
+One state, three surfaces, concrete values:
+
+```css
+.chart path.series { transition: opacity 140ms ease, stroke-width 140ms ease; }
+.chart path.series[data-muted='true'] { opacity: 0.18; }
+.chart path.series[data-raised='true'] { stroke-width: 2.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chart path.series { transition: none; }
+}
+```
+
+**0.18, not 0.5.** A timid mute does not separate the raised line from the rest;
+the point is that one line becomes obvious. **140ms, not 300ms** — long enough to
+read as a transition, short enough not to feel sluggish while moving across rows.
+
+**Sort the hovered series last rather than manipulating the DOM.** SVG has no
+z-index; paint order is document order.
 
 ```tsx
-const [hovered, setHovered] = useState<number | null>(null);
 const ordered = hovered === null
   ? series
   : [...series.filter(s => s.rosterId !== hovered),
      ...series.filter(s => s.rosterId === hovered)];
 ```
 
-**Sort the hovered series last rather than manipulating the DOM.** SVG has no
-z-index; paint order is document order. Reordering the array is how you raise a
-path in React.
-
-Provide a keyboard equivalent — arrow keys through the legend with the same
-highlight on focus — or the interaction only exists for mouse users.
+Hovering a **table row** should raise the same line. Same state, set from
+`onMouseEnter` on `<tr>`, and a keyboard equivalent on the legend so the feature
+exists for more than mouse users.
 
 ## T39 · Polling — 2.0 h
 
-```tsx
-useEffect(() => {
-  if (!isCurrentSeason) return;              // a finished season never changes
+The UI question is what a refresh *looks* like. The answer is: almost nothing.
 
-  const tick = () => {
-    if (document.visibilityState === "visible" && inGameWindow()) refetch();
-  };
-  const id = setInterval(tick, 30_000);
-  document.addEventListener("visibilitychange", tick);
-  return () => {
-    clearInterval(id);
-    document.removeEventListener("visibilitychange", tick);
-  };
-}, [isCurrentSeason]);
+**Never return to a spinner on a poll.** `loading` is already derived so it is
+true only before the first response — a poll replaces data in place. A page that
+flashes a skeleton every thirty seconds is worse than a static one.
+
+**A quiet freshness indicator instead.** One muted line, updated from `asOfUtc`:
+
+```tsx
+<p className="muted">Updated {formatRelative(payload.asOfUtc)}</p>
 ```
 
-Firing `tick` on `visibilitychange` as well as on the interval means returning to
-the tab refreshes immediately rather than waiting up to thirty seconds — the
-difference between a page that feels live and one that feels stale.
+If you want to signal the moment of update, a 400ms background fade on changed
+rows is the ceiling. Anything more is distracting during a live Sunday, which is
+precisely when people are watching.
 
-**Send `If-None-Match` with the stored ETag.** The server returns **304** with no
-body when nothing has moved. The `isCurrent` flag in the payload is what tells
-you whether to poll at all.
-
-**Watch out — `Cache-Control` is `max-age=5`, not 30.** The browser may serve its
-own cached copy for five seconds; the 30-second interval is the real polling
-rate. Do **not** add a cache-busting query parameter — it would defeat the ETag,
-which is the thing making the poll nearly free.
+The mechanics — `If-None-Match`, visibility gating, `max-age=5` and why no
+cache-busting parameter — are already implemented in `useSeason`.
 
 ## T40 · Responsive and accessibility — 2.5 h
 
-- The table scrolls horizontally in its own container; the page body never
-  scrolls sideways.
-- Every interactive control has a visible `:focus-visible` state and is reachable
-  by keyboard.
-- The chart carries `role="img"` and an `aria-label` summarising what it shows —
-  an SVG of five paths is otherwise silent to a screen reader.
-- Respect `prefers-reduced-motion` for any line transitions.
-- Check contrast for the team palette in both themes.
+**One breakpoint is enough.** This page is a table and a chart.
 
-**Reference** — [ARIA authoring practices](https://www.w3.org/WAI/ARIA/apg/) ·
-[Vite guide](https://vite.dev/guide/) ·
-[SWA configuration](https://learn.microsoft.com/azure/static-web-apps/configuration) ·
-[d3-scale](https://d3js.org/d3-scale) · [d3-shape](https://d3js.org/d3-shape)
+```css
+@media (max-width: 40rem) {
+  main { padding-inline: var(--space-3); }
+  th, td { padding: var(--space-2); }
+  /* drop the least important column rather than shrinking everything */
+  .col-ideal { display: none; }
+}
+```
+
+**The table scrolls in its own container**, and the page body never scrolls
+sideways:
+
+```css
+.table-wrap { overflow-x: auto; }
+```
+
+**The chart needs a text equivalent.** An SVG of five paths is silent to a screen
+reader:
+
+```tsx
+<svg role="img" aria-label={`Cumulative points by week for ${names.join(', ')}, weeks 1 to ${maxWeek}`}>
+```
+
+**Check contrast in both themes.** `--fg-muted` against `--bg` is the pair most
+likely to fail. Target 4.5:1 for body text, 3:1 for large text and UI borders.
+
+**Respect `prefers-reduced-motion`** for every transition, not just the chart —
+that is R1, and the reduced-motion version has to look finished on its own.
+
+### A finishing pass worth 20 minutes
+
+- A real `<title>` — "Ideal Points" beats Vite's default `web`.
+- A favicon that is not the Vite logo.
+- `<meta name="theme-color">` for both schemes.
+- `::selection` using `--accent-weak`.
+- Check the page at 200% zoom; nothing should overlap.
+
 
 ---
 
@@ -1082,6 +1153,11 @@ var slotOrder = startableSlots.Select(x => x.Code).Distinct().ToList();
 ```
 
 LINQ’s `Distinct()` preserves first-occurrence order over in-memory sequences, which is what you want — the league’s own lineup order is the only non-arbitrary axis order available, and per R2 it must never be re-sorted.
+
+**This task is what reveals the radar panel.** T33b gates panel three on
+`leagueSlotAverages` being non-empty, so shipping this payload turns the panel on
+with no second deploy and no flag to flip. Until then the panel is reachable
+locally with `?radar`.
 
 Send raw averages rather than pre-computed ratios. The client can divide, and shipping both numbers means a tooltip can say “21.2 against a league average of 18.4” instead of only “1.15×”.
 
