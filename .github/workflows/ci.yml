@@ -47,6 +47,11 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit -p tsconfig.app.json
       - run: npm run build
+      - name: The bundle is built, not source
+        run: |
+          grep -q "/assets/" dist/index.html
+          ! grep -q "/src/" dist/index.html
+          test -f dist/staticwebapp.config.json
   infra:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
