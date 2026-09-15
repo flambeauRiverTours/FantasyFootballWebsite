@@ -1,11 +1,15 @@
 import type { SeasonPayload, SeasonsPayload } from './types';
 
 /**
- * Relative paths in both environments: the Vite dev server proxies /api to the
- * deployed Function App, and in production the Static Web App and the API share
- * an origin. Nothing here needs to know which it is talking to.
+ * Where the API lives, from the browser's point of view.
+ *
+ * Empty in development, so paths stay relative and the Vite dev proxy forwards
+ * them with no CORS involved. Set to the Function App's origin at build time for
+ * production: the Static Web App has no linked backend (D5 declined the $9/month
+ * Standard tier that provides one), so a relative /api path there is caught by
+ * the SPA fallback and answered with index.html.
  */
-const base = '/api';
+const base = `${import.meta.env.VITE_API_ORIGIN ?? ''}/api`;
 
 /** A response, plus the tag to send back next time. */
 export interface Fetched<T> {
