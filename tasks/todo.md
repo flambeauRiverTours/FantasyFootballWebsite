@@ -39,22 +39,22 @@ console harness that asserts both invariants against the live league.
 requests, a Flex Consumption Function App and Static Web App in bicep, OIDC from
 GitHub to Entra with no secret in the repo, and three workflows.
 
-| | Task | State |
-|---|---|---|
-| T01–T03 | Scaffold, recon, domain types | done |
-| T04 | Slot parsing and eligibility | done — **A3's unknown-slot guard still missing**, its test sits skipped |
-| T05 | Bitmask DP solver | done |
-| T06 | Solver fixtures and tests | **blocked on data** — B1–B4 |
-| T07–T08 | Consistency maths and edge cases | done — F1, F2 open |
-| T09–T13 | DTOs, client, rate limit, resilience, cache | done — F4 open |
-| T14 | Player dump job | done, **and extended**: blob-backed store and daily timer (A12) |
-| T15–T16 | Season assembly, console harness | done |
-| T17–T19 | Functions host, endpoints, caching semantics | done |
-| T20 | Bicep template | done — Flex Consumption, not the design's Consumption plan |
-| T21 | GitHub to Entra OIDC | done — needed immutable-ID subjects |
-| T22 | `ci.yml` | done — build, test, format, vulnerable packages, plus a bicep what-if job. No vite build; `web/` arrives at T32 |
-| T23 | `deploy.yml` | done — infra, then functions with SBOM and scan, then a smoke test. `web` job stubbed until T32 |
-| T24 | CORS and first deploy shakeout | **in progress** |
+|         | Task                                         | State                                                                                                           |
+| ------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| T01–T03 | Scaffold, recon, domain types                | done                                                                                                            |
+| T04     | Slot parsing and eligibility                 | done — **A3's unknown-slot guard still missing**, its test sits skipped                                         |
+| T05     | Bitmask DP solver                            | done                                                                                                            |
+| T06     | Solver fixtures and tests                    | **blocked on data** — B1–B4                                                                                     |
+| T07–T08 | Consistency maths and edge cases             | done — F1, F2 open                                                                                              |
+| T09–T13 | DTOs, client, rate limit, resilience, cache  | done — F4 open                                                                                                  |
+| T14     | Player dump job                              | done, **and extended**: blob-backed store and daily timer (A12)                                                 |
+| T15–T16 | Season assembly, console harness             | done                                                                                                            |
+| T17–T19 | Functions host, endpoints, caching semantics | done                                                                                                            |
+| T20     | Bicep template                               | done — Flex Consumption, not the design's Consumption plan                                                      |
+| T21     | GitHub to Entra OIDC                         | done — needed immutable-ID subjects                                                                             |
+| T22     | `ci.yml`                                     | done — build, test, format, vulnerable packages, plus a bicep what-if job. No vite build; `web/` arrives at T32 |
+| T23     | `deploy.yml`                                 | done — infra, then functions with SBOM and scan, then a smoke test. `web` job stubbed until T32                 |
+| T24     | CORS and first deploy shakeout               | **in progress**                                                                                                 |
 
 ### T24 · what is left
 
@@ -90,10 +90,10 @@ applied, and the read and write paths both exist.
       `FinalizeWeek`, Tuesdays 12:00 UTC. Writes **every** finalized week, not just
       the last, so the current season backfills itself.
 
-**The remaining three are deferred to the end** — see *Deferred* below. None is
+**The remaining three are deferred to the end** — see _Deferred_ below. None is
 blocked on effort; each is waiting on something that does not exist yet.
 
-## M4 · The page — 25.5 h
+## M4 · The page — 24.5 h
 
 First milestone anyone else in the league can look at, and the first that will
 generate opinions.
@@ -123,16 +123,18 @@ What remains is the chart and everything that hangs off it.
 - [x] **T35** Inline range mark — 2.5 h
       Min-to-max rule, mean tick and one-sigma band, on a single league-wide
       scale built by `rangeScale`. Returns `null` when no team is consistent, so
-      holding the scale *is* the fact that there is a column to draw.
-- [ ] **T36** D3 line chart — 4 h `±`
+      holding the scale _is_ the fact that there is a column to draw.
+- [x] **T36** D3 line chart — 4 h `±`
       Scales, axes and path generators; React renders every node.
-- [ ] **T37** Chart controls — 3 h
+- [x] **T37** Chart controls — 3 h
       Season, team multi-select, metric, display mode. State in the query string.
-- [ ] **T38** Hover interaction — 2 h
-      Raise one team, mute the rest, with a keyboard equivalent.
-- [ ] **T39** Polling — 2 h
+- [x] **T38** Hover interaction — 1 h
+      Raise the nearest line, mute the rest, with focus on T37's chips as the
+      keyboard equivalent. **Chart panel only** — the panels are never on screen
+      together, so `hovered` stays in `ChartPanel` and the table is not involved.
+- [x] **T39** Polling — 2 h
       Gated on tab visibility and game windows; stops on a past season.
-- [ ] **T40** Responsive and a11y — 2.5 h
+- [x] **T40** Responsive and a11y — 2.5 h
       Keyboard paths, focus states, table that scrolls in its own container.
 
 ## M5 · Modes, ops and docs — 9.5 h
@@ -168,6 +170,22 @@ that cutting it is a decision rather than an omission.
 
 ---
 
+## Deferred · season picker — 1 h
+
+- [ ] **T56** Season picker in the masthead — 1 h · **waiting on August 2027**
+      The masthead already prints the season; make that text the control. A
+      `<select>` populated from `/api/seasons`, not a hardcoded list, so a new
+      year appears the day T29 finds it. Season state lives in `App` because it
+      is the argument to `useSeason`, which already takes it and is passed
+      `null` today; `fetchSeasons` is already written and never called.
+      Mirrored to `?season=`. Selecting a past season stops the poll with no new
+      code — `useSeason` returns early when `payload.isCurrent` is false — but
+      the page should also visibly settle: the "as of" line gives way to the
+      final week, and the live affordances disappear.
+      **`available` is `[2026]` until T29 runs, so this control has one option
+      and changes nothing until the 2027 rollover.** Deliberately not part of
+      T37.
+
 ## Deferred · the rest of M3 — 7 h
 
 Moved behind M4 on 2026-09-14. Each was written into the plan before it was
@@ -178,7 +196,7 @@ clear what would and would not have input.
       a `League` row per hop, and is what would populate `available` on
       `/api/seasons`. 2026 is the first season (**A4**), so the chain is one hop
       and the loop runs exactly once. It also cannot discover a new season on its
-      own — the walk runs *backwards* from `League__CurrentLeagueId`, so nothing
+      own — the walk runs _backwards_ from `League__CurrentLeagueId`, so nothing
       changes until that app setting is updated at rollover (T45's checklist).
       Needs a `Core` record for a league season before `ILeagueStore` can be
       defined the way `IFinalizedWeekStore` was, and a `SeasonOverrides` property
@@ -194,7 +212,7 @@ clear what would and would not have input.
       by default.
 - [ ] **T31** Migrations in the pipeline — 2.5 h `±` · **nothing to migrate yet**
       Not blocked, just not yet earning its keep: there is one migration and it is
-      applied. The risk of deferring is that the *next* schema change gets applied
+      applied. The risk of deferring is that the _next_ schema change gets applied
       by hand and the step is never built. Worth doing the moment a second
       migration exists — which M6 does not require, since the radar adds no
       columns (§08).
@@ -240,12 +258,12 @@ F3 (the client timeout) was resolved and is recorded in `amendments.md`.
 Written, understood, waiting for games. Dates are the Tuesday each NFL week
 finalizes, so the data is settled by then.
 
-| | Take on | What | Why it has to wait |
-|---|---|---|---|
-| **B1** | **2026-09-15** | Re-capture week 1 | The committed fixture is mid-week-1: only the Thursday game had been played, and four of six rosters sit on 0.00. Three of the six `ideal >= actual` assertions are currently `0 >= 0`. |
-| **B2** | **2026-09-29** | Capture weeks 2 and 3 | T06 asks for two or three real weeks. Also the first point at which waivers will have moved players, which is what `player-positions.json` staleness protection exists for. |
-| **B3** | **2026-10-06** | First non-null sigma | D1 returns null below four finalized weeks, so T07/T08's boundary case cannot be exercised against real data until week 4 is in. |
-| **B4** | **week 5 or 6** — finalize dates 2026-10-13 and 2026-10-20 | Capture a bye week | The only way to exercise a `players_points` entry being genuinely absent (the `0m` default) against real data. Week 1 has neither. |
+|        | Take on                                                    | What                  | Why it has to wait                                                                                                                                                                      |
+| ------ | ---------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **B1** | **2026-09-15**                                             | Re-capture week 1     | The committed fixture is mid-week-1: only the Thursday game had been played, and four of six rosters sit on 0.00. Three of the six `ideal >= actual` assertions are currently `0 >= 0`. |
+| **B2** | **2026-09-29**                                             | Capture weeks 2 and 3 | T06 asks for two or three real weeks. Also the first point at which waivers will have moved players, which is what `player-positions.json` staleness protection exists for.             |
+| **B3** | **2026-10-06**                                             | First non-null sigma  | D1 returns null below four finalized weeks, so T07/T08's boundary case cannot be exercised against real data until week 4 is in.                                                        |
+| **B4** | **week 5 or 6** — finalize dates 2026-10-13 and 2026-10-20 | Capture a bye week    | The only way to exercise a `players_points` entry being genuinely absent (the `0m` default) against real data. Week 1 has neither.                                                      |
 
 Each is one command once the date passes:
 
@@ -279,23 +297,23 @@ answers are in [`docs/amendments.md`](../docs/amendments.md).
 Recorded in [`docs/amendments.md`](../docs/amendments.md), with the reasoning.
 Listed here only so their implementation state is visible in one place.
 
-| | What | State |
-|---|---|---|
-| **A1** | Exclude "POON SQUAD" from every metric, matched on owner `user_id` | done — filtered at the read boundary, verified in Azure |
-| **A2** | League and user IDs stay out of the repo | done — see F7 for the one mismatch |
-| **A3** | Keep the slot eligibility map general, not pruned to 2026 | **partly** — the map is general, the unknown-slot guard is still missing |
-| **A4** | No season chain to walk yet | done — first exercised August 2027 |
-| **A5** | The `starters` alignment holds, verified not assumed | done |
-| **A6** | An unset team name is absent, not an empty string | done |
-| **A7** | A commissioner override wins over scored points | done |
-| **A8** | An unresolved player is reported, never dropped | done |
-| **A9** | Both invariants compare against Sleeper's scored points | done |
-| **A10** | Excluded owners are a list, carried as one comma-separated secret | done — proven on the deployed app |
-| **A11** | The storage firewall stays open, exception expires 2027-03-01 | done — see F6 |
-| **A12** | The player map is stored in blob, because instance memory is not storage | done |
-| **A13** | No commissioner overrides; `WeekScore` stores the actual only | decided — T25 |
-| **A14** | The stored key leads on `Season`, not `LeagueId` | decided — T25 |
-| **A15** | Two Microsoft natives exempt from the licence allowlist | done |
+|         | What                                                                     | State                                                                    |
+| ------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| **A1**  | Exclude "POON SQUAD" from every metric, matched on owner `user_id`       | done — filtered at the read boundary, verified in Azure                  |
+| **A2**  | League and user IDs stay out of the repo                                 | done — see F7 for the one mismatch                                       |
+| **A3**  | Keep the slot eligibility map general, not pruned to 2026                | **partly** — the map is general, the unknown-slot guard is still missing |
+| **A4**  | No season chain to walk yet                                              | done — first exercised August 2027                                       |
+| **A5**  | The `starters` alignment holds, verified not assumed                     | done                                                                     |
+| **A6**  | An unset team name is absent, not an empty string                        | done                                                                     |
+| **A7**  | A commissioner override wins over scored points                          | done                                                                     |
+| **A8**  | An unresolved player is reported, never dropped                          | done                                                                     |
+| **A9**  | Both invariants compare against Sleeper's scored points                  | done                                                                     |
+| **A10** | Excluded owners are a list, carried as one comma-separated secret        | done — proven on the deployed app                                        |
+| **A11** | The storage firewall stays open, exception expires 2027-03-01            | done — see F6                                                            |
+| **A12** | The player map is stored in blob, because instance memory is not storage | done                                                                     |
+| **A13** | No commissioner overrides; `WeekScore` stores the actual only            | decided — T25                                                            |
+| **A14** | The stored key leads on `Season`, not `LeagueId`                         | decided — T25                                                            |
+| **A15** | Two Microsoft natives exempt from the licence allowlist                  | done                                                                     |
 
 ---
 
@@ -385,3 +403,4 @@ and 4,623 duplicate lineups. Replaced with a chosen-set bitmask.
 
 The repo moved into `FantasyFootballWebsite`, the open questions were answered,
 the secrets policy was set (**A2**), and the docs were synced from design v6.
+

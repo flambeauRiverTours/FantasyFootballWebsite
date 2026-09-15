@@ -68,20 +68,50 @@ export function useSeason(season: number | null): SeasonState {
   useEffect(() => {
     if (payload !== null && !payload.isCurrent) return;
 
-    const tick = () => {
+    const poll = () => {
+      if (document.visibilityState === 'visible' && isGameWindow(new Date())) void load(); //only reload if in game window
+    };
+
+    // returning to the tab refreshes immediately, whatever day it is
+    const onVisible = () => {
       if (document.visibilityState === 'visible') void load();
     };
 
-    const id = window.setInterval(tick, PollIntervalMs);
-
-    // returning to the tab refreshes immediately
-    document.addEventListener('visibilitychange', tick);
+    const id = window.setInterval(poll, PollIntervalMs);
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       window.clearInterval(id);
-      document.removeEventListener('visibilitychange', tick);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [load, payload]);
 
   return { payload, error, loading, refetch: () => void load() };
+}
+
+/*
+ * determines if we're in a window where a game may be happening 
+ * @param at Current date
+ * @returns True if we're in a game window, otherwise false
+ */
+function isGameWindow(at: Date): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    month: 'short',
+    hour: 'numeric',
+    hour12: false,
+  }).formatToParts(at);
+
+  const day = parts.find((p) => p.type === 'weekday')!.value;
+  const month = parts.find((p) => p.type === 'month')!.value;
+  const hour = Number(parts.find((p) => p.type === 'hour')!.value);
+  if (month === 'Nov' && day === 'Wed') return hour >= 17; //wednesday night games before turkey day
+  if (month === 'Nov' && day === 'Thu') return hour >= 12; //thursday turkey day games
+  if (day === 'Thu') return hour >= 20;
+  if (day === 'Fri') return hour < 1;
+  if (day === 'Sun') return hour >= 13;
+  if (day === 'Mon') return hour >= 20 || hour < 1;
+  if (day === 'Tue') return hour < 9; //FinalizeWeek runs 12:00 UTC, 07:00/08:00 in New York
+  return false;
 }
