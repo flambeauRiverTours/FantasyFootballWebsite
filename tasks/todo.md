@@ -93,7 +93,7 @@ applied, and the read and write paths both exist.
 **The remaining three are deferred to the end** — see *Deferred* below. None is
 blocked on effort; each is waiting on something that does not exist yet.
 
-## M4 · The page — 24 h
+## M4 · The page — 25.5 h
 
 First milestone anyone else in the league can look at, and the first that will
 generate opinions.
@@ -103,7 +103,13 @@ generate opinions.
       fetch layer, `useSeason` with visibility-gated polling, dev proxy past CORS.
       `web` jobs restored in ci.yml and wired to SWA in deploy.yml.
 - [ ] **T33** Design system — 3 h
-      Tokens, type scale, light and dark, both designed rather than inverted.
+      OKLCH tokens, four type sizes, one spacing scale, dark designed rather than inverted.
+- [ ] **T33b** Panel layout — 1.5 h
+      One visualisation per screen, sticky-stacked like ellipsus.com. Native CSS,
+      no scroll-jacking library. `100svh`, `proximity` snap, and it must still
+      read as a plain document under `prefers-reduced-motion`. **Three panels
+      built, the radar hidden** until T48 fills `leagueSlotAverages` — the gate is
+      derived from the payload, so there is no flag to flip later.
 - [ ] **T34** Standings table — 3 h
       Sort on points, tabular figures, sigma em-dash, week-range column header.
 - [ ] **T35** Inline range mark — 2.5 h
@@ -135,7 +141,7 @@ Improves most with a full season to look at.
 
 - [ ] **T46** Slot attribution — 2.5 h · `starters[i]` maps to slot `i`, plus the mid-season rules-change guard
 - [ ] **T47** League reference and ratios — 1.5 h · average first, divide second
-- [ ] **T48** Slot block in the API — 1 h · fills the two empty objects §09 already reserves
+- [ ] **T48** Slot block in the API — 1 h · fills the two empty objects §09 already reserves, **and thereby reveals the radar panel**
 - [ ] **T49** Radar chart — 3.5 h `±` · axis order fixed and never re-sorted
 - [ ] **T50** Diverging bar alternative — 1.5 h · the same data on a linear axis
 
