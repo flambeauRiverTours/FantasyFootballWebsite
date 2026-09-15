@@ -33,6 +33,7 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
       {ranked.length === 0 ? (
         <p className="muted">No teams to show yet.</p>
       ) : (
+      <div className="table-wrap">
         <table>
           <thead>
             <tr>
@@ -44,7 +45,7 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
                   <span className="th-note">through wk {finalThroughWeek}</span>
                 </th>
               ) : null}
-              <th scope="col">Ideal</th>
+              <th scope="col" className="col-ideal">Ideal</th>
               <th scope="col">Gap</th>
             </tr>
           </thead>
@@ -62,7 +63,7 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
                     )}
                   </td>
                 ) : null}
-                <td>{team.totals.ideal.toFixed(1)}</td>
+                <td className="col-ideal">{team.totals.ideal.toFixed(1)}</td>
                 <td className="muted">
                   {team.totals.actual === leader
                     ? '—'
@@ -72,6 +73,7 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
             ))}
           </tbody>
         </table>
+      </div>
       )}
     </Panel>
   );
