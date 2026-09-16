@@ -148,13 +148,16 @@ Deliberately last: cheap, taste-driven, easier to judge against real data.
 - [x] **T43** Loading and error states — 2 h · including the SQL cold resume
 - [x] **T44** Cost guardrails — 2 h · ingest cap, budget alert, SQL pause verified
 - [x] **T45** README and runbook — 1.5 h · chiefly the August rollover checklist
-- [ ] **T57** Custom domain — 1 h · a subdomain of a domain already owned · **needs DNS**
-      One GoDaddy `CNAME`, one `az staticwebapp hostname set`, and the free
-      managed certificate. **No cost and no tier change**, so the $0.00/month
-      claim stands. The trap is `main.bicep`: the Function App's CORS list is the
-      SWA's *default* hostname only, so the site will load and every API call
-      will fail until `customDomain` is a parameter and the bicep is redeployed.
-      The apex is a live GitHub Pages site and is untouched.
+- [x] **T57** Custom domain — 1 h · `ff.jacktreadwell.com` · **not deployed yet**
+      DNS, the SWA hostname and the managed certificate are done; the domain
+      serves over https with a valid certificate. `customDomain` is wired through
+      `main.bicep`, `deploy.yml` and the `ci.yml` what-if, and
+      `CUSTOM_DOMAIN_NAME` is a repository variable. **The bicep change is not
+      committed**, so the API still refuses the origin and the page loads with
+      "Could not load the season". Commit and push. Run 28 failed on a transient
+      `ConflictingDatabaseOperation` and may need one retry.
+      No cost and no tier change, so the $0.00/month claim stands, and the apex
+      GitHub Pages site is untouched.
 
 ## M6 · Positional radar — 10 h
 

@@ -39,6 +39,7 @@ jobs:
           RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
           SQL_ADMIN_ID: ${{ secrets.AZ_SQL_ADMIN_OBJECT_ID }}
           SQL_ADMIN_NAME: ${{ secrets.AZ_SQL_DB_ADMIN_NAME }}
+          CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
         run: |
           set -u
           : "${LEAGUE_ID:?}" "${RESOURCE_GROUP:?}" "${SQL_ADMIN_ID:?}" "${SQL_ADMIN_NAME:?}"
@@ -48,7 +49,7 @@ jobs:
             --template-file infra/main.bicep \
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
             budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
-            sqlAdminLogin="$SQL_ADMIN_NAME" \
+            sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
             -o json > out.json
           for k in functionAppName functionAppUrl staticWebAppName staticWebAppUrl; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
@@ -122,8 +123,21 @@ jobs:
         env:
           SITE: ${{ needs.infra.outputs.staticWebAppUrl }}
           API: ${{ needs.infra.outputs.functionAppUrl }}
+          CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
         run: |
           set -euo pipefail
+          # the custom domain is refused by the api until the bicep carries it.
+          # curl does not enforce cors so the header has to be asked for
+          domain="${CUSTOM_DOMAIN_NAME:-}"
+          if [ -n "$domain" ]; then
+            allowed=$(curl -fsS -D - -o /dev/null -H "Origin: https://$domain" \
+              "$API/api/season" | grep -i '^access-control-allow-origin:' || true)
+            if [ -z "$allowed" ]; then
+              echo "::error::$API refuses https://$domain. Is customDomain in the bicep deploy?"
+              exit 1
+            fi
+          fi
+
           # SWA takes a little while to swap the upload in
           curl -fsS --retry 10 --retry-all-errors --retry-delay 6 "$SITE" -o index.html
           grep -q "/assets/" index.html
