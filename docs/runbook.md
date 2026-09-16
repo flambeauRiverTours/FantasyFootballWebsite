@@ -226,6 +226,59 @@ Then push again so the page deploys with the key in place.
 
 ---
 
+## Step 7. Use your own web address (optional)
+
+The site works fine on its `*.azurestaticapps.net` address. A shorter one is
+nicer to paste into a group chat.
+
+You need a domain you already own. A **subdomain** of it is far easier than the
+bare name, so use something like `ff.example.com`.
+
+### The DNS record
+
+At your registrar, add one record. Not an `A` or `AAAA` record: those point at a
+fixed address, and this host does not have one.
+
+| Field | Value |
+|---|---|
+| Type | `CNAME` |
+| Name | `ff` |
+| Value | the address from Step 6 |
+| TTL | 600 while you set it up |
+
+Enter only the first part in the Name field. GoDaddy adds the rest of your domain
+itself, so typing the full name gives you `ff.example.com.example.com`.
+
+### Tell Azure
+
+```bash
+SWA=$(az staticwebapp list -g rg-myleague --query "[0].name" -o tsv | tr -d '\r')
+az staticwebapp hostname set -n "$SWA" -g rg-myleague --hostname ff.example.com
+az staticwebapp hostname list -n "$SWA" -g rg-myleague -o table
+```
+
+Wait for `Ready` rather than `Validating`. The certificate is issued and renewed
+for you.
+
+### Tell the data side, or nothing will load
+
+This is the step people miss. The page and the data live at two addresses, and
+the data side keeps a list of who may ask it. Your new address is not on that
+list yet, so the page will load and stay empty.
+
+Store the address and deploy again:
+
+```bash
+gh variable set CUSTOM_DOMAIN_NAME --body "ff.example.com"
+git commit --allow-empty -m "use the custom domain"
+git push
+```
+
+The deploy adds the address to the allowed list and checks it worked. If you skip
+this, the browser console says `blocked by CORS policy`.
+
+---
+
 ## What it costs
 
 **Nothing, in normal use.** Every piece runs on a free allowance.
@@ -258,8 +311,9 @@ Run it after any change to the Azure setup. Settings you click into the Azure
 website get overwritten the next time the code deploys. The script reads the live
 values, so it tells you what is actually true.
 
-The one thing that does cost money is a custom web address. A domain name runs
-about fifteen dollars a year. The site works fine without one.
+The one thing that does cost money is a domain name, about fifteen dollars a
+year. Step 7 is optional and the site works fine without it. A subdomain of a
+domain you already own costs nothing extra.
 
 ---
 
@@ -287,8 +341,8 @@ az functionapp config appsettings set -n "$FUNC" -g rg-myleague \
 4. Check the new year shows up:
 
 ```bash
-curl -s "https://$(az functionapp show -n "$FUNC" -g rg-myleague \
-  --query defaultHostName -o tsv | tr -d '\r')/api/seasons"
+curl -s "https://$(az functionapp list -g rg-myleague \
+  --query "[0].defaultHostName" -o tsv | tr -d '\r')/api/seasons"
 ```
 
 The site looks backwards from whatever league you point it at. It will never find
@@ -320,6 +374,18 @@ browser console will say so.
 FUNC=$(az functionapp list -g rg-myleague --query "[0].name" -o tsv | tr -d '\r')
 az functionapp cors show -n "$FUNC" -g rg-myleague
 ```
+
+Almost always this is Step 7. Either `CUSTOM_DOMAIN_NAME` is not set, or it is
+set but nothing has deployed since. Ask the data side directly:
+
+```bash
+curl -fsS -D - -o /dev/null -H "Origin: https://ff.example.com" \
+  "https://$(az functionapp list -g rg-myleague \
+  --query "[0].defaultHostName" -o tsv | tr -d '\r')/api/season" \
+  | grep -i access-control-allow-origin
+```
+
+No line back means the address is not allowed. Push a deploy.
 
 ### It is very slow the first time each day
 

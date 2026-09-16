@@ -24,9 +24,9 @@ somewhere unhelpful, that is called out.
 
 - Shell blocks are **bash**. On Windows use **Git Bash**, not `cmd` or
   PowerShell — `find`, `grep` and `$VAR` all mean different things there.
-- `rg-fantsybosty` is the resource group. The design and the original artifact
-  say `rg-fantsybosty`; that name was never used. Resource *names* inside it
-  (`func-idealpoints`, `stapp-idealpoints`) do use the `idealpoints` prefix.
+- **No resource name appears in this file.** Set `RG` to your resource group
+  once and every block below discovers the rest from it. The repository is
+  going public and a name is an identifier (**A2**).
 - `±` marks a soft estimate that could run double.
 - Anything marked **Watch out** has already cost someone a day.
 
@@ -116,10 +116,23 @@ needs from `az`. This repository is intended to go public, and a workspace ID
 plus a token is enough to read your telemetry. A2's spirit is not just "no
 credentials" but "no identifiers tying a public repo to your infrastructure".
 
-### Set the two hostnames once
+### Set the names once
+
+Everything after this reads from these. `tr -d` strips the carriage return
+`az` adds on Windows.
+
+**The hostname comes from `list`, not `show`.** `az functionapp show --query
+defaultHostName` returns `null`: on that command the field lives under
+`properties.defaultHostName`, and the list form flattens it. Static Web Apps
+has no such inconsistency, which is what makes this easy to miss.
 
 ```bash
-API=$(az functionapp show -n func-idealpoints -g rg-fantsybosty --query defaultHostName -o tsv) && SWA=$(az staticwebapp show -n stapp-idealpoints -g rg-fantsybosty --query defaultHostname -o tsv) && echo "$API / $SWA"
+RG=<your resource group>
+FUNC=$(az functionapp list -g "$RG" --query "[0].name" -o tsv | tr -d '\r')
+STAPP=$(az staticwebapp list -g "$RG" --query "[0].name" -o tsv | tr -d '\r')
+API=$(az functionapp list -g "$RG" --query "[0].defaultHostName" -o tsv | tr -d '\r')
+SWA=$(az staticwebapp show -n "$STAPP" -g "$RG" --query defaultHostname -o tsv | tr -d '\r')
+echo "$API / $SWA"
 ```
 
 ### 1 · The API answers
@@ -164,7 +177,7 @@ curl -sS -D - -o /dev/null -X OPTIONS -H "Origin: https://not-your-site.example"
 ### 6 · The player map was stored
 
 ```bash
-ST=$(az storage account list -g rg-fantsybosty --query "[0].name" -o tsv) && KEY=$(az storage account keys list -g rg-fantsybosty -n "$ST" --query "[0].value" -o tsv) && az storage blob show --account-name "$ST" --account-key "$KEY" --container-name player-map --name players.json --query "{bytes:properties.contentLength, modified:properties.lastModified}" -o json
+ST=$(az storage account list -g "$RG" --query "[0].name" -o tsv | tr -d '\r') && KEY=$(az storage account keys list -g "$RG" -n "$ST" --query "[0].value" -o tsv | tr -d '\r') && az storage blob show --account-name "$ST" --account-key "$KEY" --container-name player-map --name players.json --query "{bytes:properties.contentLength, modified:properties.lastModified}" -o json
 ```
 
 Expect roughly 840 KB. Megabytes would mean the projection is not trimming.
@@ -174,7 +187,7 @@ Expect roughly 840 KB. Megabytes would mean the projection is not trimming.
 This is the only evidence A12 solved the problem. Force a cold start:
 
 ```bash
-az functionapp restart -g rg-fantsybosty -n func-idealpoints
+az functionapp restart -g "$RG" -n "$FUNC"
 ```
 
 ```bash
@@ -185,7 +198,7 @@ Then read the log. There is no App Insights CLI extension installed, so query th
 Log Analytics REST API directly:
 
 ```bash
-WS=$(az monitor log-analytics workspace show -g rg-fantsybosty -n log-idealpoints --query customerId -o tsv) && TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/$WS/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppTraces | where TimeGenerated > ago(20m) | where Message has \"player map\" | project TimeGenerated, Message | order by TimeGenerated desc | take 10"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];[print(r[0][:19], r[1][:120]) for r in t['rows']]"
+WS=$(az monitor log-analytics workspace list -g "$RG" --query "[0].customerId" -o tsv | tr -d '\r') && TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/$WS/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppTraces | where TimeGenerated > ago(20m) | where Message has \"player map\" | project TimeGenerated, Message | order by TimeGenerated desc | take 10"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];[print(r[0][:19], r[1][:120]) for r in t['rows']]"
 ```
 
 **"Adopted the stored player map"** is success. "Refreshing player map from
@@ -197,7 +210,7 @@ log-analytics` once gives you `az monitor log-analytics query` instead.
 ### 8 · Nothing is throwing
 
 ```bash
-WS=$(az monitor log-analytics workspace show -g rg-fantsybosty -n log-idealpoints --query customerId -o tsv) && TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/$WS/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppExceptions | where TimeGenerated > ago(1h) | summarize n=count() by ExceptionType"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];print('exceptions:', t['rows'] or 'none')"
+WS=$(az monitor log-analytics workspace list -g "$RG" --query "[0].customerId" -o tsv | tr -d '\r') && TOKEN=$(az account get-access-token --resource https://api.loganalytics.io --query accessToken -o tsv) && curl -sS -X POST "https://api.loganalytics.io/v1/workspaces/$WS/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"query":"AppExceptions | where TimeGenerated > ago(1h) | summarize n=count() by ExceptionType"}' | python -c "import sys,json;t=json.load(sys.stdin)['tables'][0];print('exceptions:', t['rows'] or 'none')"
 ```
 
 ### 9 · The Static Web Apps deploy token
@@ -212,7 +225,7 @@ silent, and the value reaches `gh` over stdin rather than through `--body`, whic
 removes a layer of quoting.
 
 ```bash
-TOKEN=$(az staticwebapp secrets list -n stapp-idealpoints -g rg-fantsybosty --query 'properties.apiKey' -o tsv | tr -d '
+TOKEN=$(az staticwebapp secrets list -n "$STAPP" -g "$RG" --query 'properties.apiKey' -o tsv | tr -d '
 
 ') && echo "captured ${#TOKEN} chars" && [ "${#TOKEN}" -ge 100 ] && printf %s "$TOKEN" | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN && echo set
 ```
@@ -226,7 +239,7 @@ token rather than the whitespace.
 
 ### 10 · Cost
 
-Check Cost Analysis on `rg-fantsybosty` in the portal after 24 h rather than by
+Check Cost Analysis on the resource group in the portal after 24 h rather than by
 CLI — usage records lag and the CLI view is fiddlier than it is worth. Expect
 zero. `BUDGET_ALERT_EMAIL` is set, so the budget resource deploys and will tell
 you first.
@@ -940,8 +953,12 @@ allowedOrigins: concat(
 )
 ```
 
-Pass it from `deploy.yml` beside the existing parameters. **A repository
-variable, not a secret** — `vars.CUSTOM_DOMAIN` — because a custom domain is
+Pass it from `deploy.yml` beside the existing parameters as
+`customDomain="${CUSTOM_DOMAIN_NAME:-}"`. **The `:-` is not optional**: `set -u`
+is on, so an unguarded reference fails the whole deploy for any fork that has not
+set the variable, rather than deploying without a custom domain.
+
+**A repository variable, not a secret** — `vars.CUSTOM_DOMAIN_NAME` — because a custom domain is
 public by definition; it is the address people type. It is the one value in that
 parameter list that is not sensitive, and treating it as a secret would only make
 the workflow harder to read.
@@ -962,9 +979,17 @@ curl -s -o /dev/null -w '%{http_code}\n' "$SITE/api/season"    # 404, not 200
 ```
 
 Those prove the bundle is served and knows its API origin. They do **not** prove
-CORS, because `curl` does not enforce it — only a browser does. Open the site and
-watch the network tab: a `200` on `/api/season` from the custom origin, with
-standings on screen, is the only real confirmation.
+CORS on their own, because `curl` does not enforce it. You have to *ask* for the
+header with the custom origin, which is what `deploy.yml` now does:
+
+```bash
+curl -fsS -D - -o /dev/null -H "Origin: https://$domain" "$API/api/season" \
+  | grep -i '^access-control-allow-origin:'
+```
+
+No line back means the API refuses the domain. That check was added after the
+first attempt shipped a working page with an empty table — DNS resolved, the
+certificate was valid, and every existing gate stayed green.
 
 ### Done when
 
@@ -1617,14 +1642,17 @@ opened for it and closed again — including when the migration fails.
 - name: Open firewall for runner
   run: |
     IP=$(curl -s https://api.ipify.org)
-    az sql server firewall-rule create -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
+    SQL_SERVER=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].name" -o tsv | tr -d '
+')
+    echo "SQL_SERVER=$SQL_SERVER" >> "$GITHUB_ENV"
+    az sql server firewall-rule create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
 
 - name: Apply migrations
   run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Functions
 
 - name: Close firewall
   if: always()
-  run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s sql-idealpoints -n "gh-${{ github.run_id }}"
+  run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "gh-${{ github.run_id }}"
 ```
 
 **Watch out — `if: always()` on the close step is the whole point.** Without it,
