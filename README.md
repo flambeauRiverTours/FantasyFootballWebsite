@@ -16,7 +16,7 @@ no head-to-head views.
 | Hosting | Static Web Apps (Free) + Functions (Consumption) |
 | Steady-state cost | $0.00 / month |
 | Sleeper request budget | ≤ 2.3 req/min regardless of viewer count |
-| Status | T01 done, T02 next — 49 tasks remaining (+5 optional) |
+| Status | M0-M4 built and deployed. M5 in progress, M6 (radar) next |
 
 ## The three metrics
 
@@ -37,6 +37,7 @@ they can be approximate where the actual column cannot.
 | [`docs/field-manual.md`](docs/field-manual.md) | Step-by-step implementation instructions for all 55 tasks, in build order, with code and reference links. |
 | [`docs/amendments.md`](docs/amendments.md) | Decisions made after v6 and the answers to Q1–Q8. Survives an artifact re-sync; where it disagrees with the design, it wins. |
 | [`tasks/todo.md`](tasks/todo.md) | The task list — 50 tasks over 7 milestones, 108 h estimated, plus 5 optional. |
+| [`docs/runbook.md`](docs/runbook.md) | Operating procedures. The August rollover, the cost checks, what to do when something breaks. |
 | [`tasks/lessons.md`](tasks/lessons.md) | Rules written after corrections. |
 | [`CLAUDE.md`](CLAUDE.md) | How Claude works in this repo. |
 
@@ -109,18 +110,38 @@ radar are all built against what Sleeper actually returns.
 
 ## Getting started
 
-T01 is done — five projects, `FantasyLeague.slnx` and `Directory.Build.props`
-are in place. **T02 (Sleeper recon) is next**, and needs `jq`
-(`winget install jqlang.jq`).
-
-Prerequisites, per the field manual:
+Prerequisites:
 
 ```bash
-dotnet --version    # 9.x
-node --version      # 20+
+dotnet --version    # 10.x
+node --version      # 24+
 az --version
 func --version      # Azure Functions Core Tools v4
 ```
+
+### The front end on its own
+
+The dev server proxies `/api` to the deployed Function App, so **no local
+backend is needed** and there is nothing to configure:
+
+```bash
+cd web
+npm ci
+npm run dev
+```
+
+`npm test` runs the Vitest suite. `npm run lint` runs oxlint. Both run in CI on
+every pull request, along with `tsc --noEmit` and a check that the built bundle
+references `/assets/` rather than source.
+
+To point the proxy somewhere else, set `VITE_DEV_PROXY_TARGET`. It is
+deliberately not called `VITE_API_ORIGIN`: anything prefixed `VITE_` is inlined
+into the bundle, and a browser given an absolute origin would bypass the proxy
+and meet CORS.
+
+### The API locally
+
+Needs the league ID in Secret Manager and Azurite for the timer triggers.
 
 Find the league ID by opening the league on the Sleeper web app — the URL is
 `sleeper.com/leagues/<league_id>/…` and the numeric segment is what every API
