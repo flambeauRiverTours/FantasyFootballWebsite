@@ -1,139 +1,219 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
 import type { CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
 import type { SeasonPayload, TeamPayload, WeekPayload } from '../api/types';
+import type { Metric, Point } from '../api/pointCalculation';
+import {
+  cumulative,
+  perWeek,
+  sigmaSeries,
+  vsMedian,
+  weeklyMedians,
+} from '../api/pointCalculation';
+import { useEnumQuery } from '../hooks/useEnumQuery';
+import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
+import { useTeamFilter } from '../hooks/useTeamFilter';
 import Chart from './Chart';
-import type { Point, Series } from './Chart';
+import type { Series } from './Chart';
 import Panel from './Panel';
-import { useQueryState } from '../hooks/useQueryState';
+import SegmentedRow from './SegmentedRow';
 
 interface ChartPanelProps {
   payload: SeasonPayload;
 }
 
+type Mode = 'cumulative' | 'perWeek' | 'vsMedian';
+type SigmaWindow = 'expanding' | 'rolling';
+type Scale = 'sigma' | 'cv';
+
 const AspectRatio = 0.5;
+const Sigma = 'σ';
 
-/*
- * Calculates the cumulative season points each week.
- * Deliberately acts on non-final weeks so data updates live-ish
- * @param weeks WeekPayloads to sum
- * @returns Series of point values representing the cumulative season points at each week of the season
- */
-function cumulative(weeks: WeekPayload[], useIdeal: boolean = false): Point[] {
-  let total = 0;
-  return [...weeks] //copy - sort is in-place
-    .sort((a, b) => a.week - b.week)
-    .map((w) => ({ week: w.week, value: useIdeal ? (total += w.ideal) : (total += w.actual)}));
-}
+// options. first is the default and is dropped from the url
+const Metrics = [
+  ['actual', 'Points'],
+  ['ideal', 'Ideal'],
+  ['sigma', Sigma],
+] as const satisfies readonly (readonly [Metric, string])[];
 
-/*
- * Translates team payloads into data series for charts
- * @param teams List of team payloads
- * @param useIdeal whether to use the ideal points to populate the series
- * @returns Series data objects representing team data weekly
- */
-function toSeries(teams: TeamPayload[], useIdeal: boolean = false): Series[] {
+const Modes = [
+  ['cumulative', 'Total'],
+  ['perWeek', 'Per week'],
+  ['vsMedian', 'vs median'],
+] as const satisfies readonly (readonly [Mode, string])[];
+
+const Windows = [
+  ['expanding', 'Expanding'],
+  ['rolling', 'Rolling 4'],
+] as const satisfies readonly (readonly [SigmaWindow, string])[];
+
+const Scales = [
+  ['sigma', Sigma],
+  ['cv', 'CV'],
+] as const satisfies readonly (readonly [Scale, string])[];
+
+const ModeWords: Record<Mode, string> = {
+  cumulative: 'Cumulative',
+  perWeek: 'Weekly',
+  vsMedian: 'Cumulative points above the league median for',
+};
+
+// series building
+
+function toSeries(teams: TeamPayload[], points: (weeks: WeekPayload[]) => Point[]): Series[] {
   return [...teams]
     .sort((a, b) => b.totals.actual - a.totals.actual)
     .map((team, i) => ({
       rosterId: team.rosterId,
       name: team.name,
       colour: `var(--team-${i + 1})`,
-      points: cumulative(team.weeks, useIdeal),
+      points: points(team.weeks),
     }));
 }
 
-/*
- * Determines whether a series is plottable 
- * @param series Series of data to analyze
- * @returns True if the series can be plotted, otherwise false
- */
+function pointsFor(
+  mode: Mode,
+  metric: Metric,
+  weeks: WeekPayload[],
+  medians: Map<number, number>,
+): Point[] {
+  switch (mode) {
+    case 'perWeek':
+      return perWeek(weeks, metric);
+    case 'vsMedian':
+      return vsMedian(weeks, medians, metric);
+    default:
+      return cumulative(weeks, metric);
+  }
+}
+
+/** One point draws nothing. */
 function isPlottable(series: Series[]): boolean {
-  return series.some(
-    //(s) => s.points.length >= 2 && s.points.some((p) => p.value !== s.points[0].value),
-    (s) => (s.points.length > 1)
-  );
+  return series.some((s) => s.points.length > 1);
 }
 
-/*
- * Filters a set of ids down to only those present in valid
- * @param param Ids, in a comma-delimited string
- * @param valid Set of valid ids
- * @returns Ids in the set
- */
-function toShown(param: string, valid: number[]): Set<number> {
-  const ids = param.split(',').map(Number).filter((id) => valid.includes(id));
-  return new Set(ids.length > 0 ? ids : valid);
+/** aria spoken description */
+function describe(
+  metric: Metric,
+  mode: Mode,
+  sigmaWindow: SigmaWindow,
+  scale: Scale,
+  names: string,
+): string {
+  if (metric === 'sigma') {
+    const what = scale === 'cv' ? 'Coefficient of variation' : 'Consistency sigma';
+    return `${what}, ${sigmaWindow} window, by week for ${names}`;
+  }
+
+  return `${ModeWords[mode]} ${metric === 'ideal' ? 'ideal points' : 'points'} by week for ${names}`;
 }
 
-/*
- * Gets the react fragement for the chart panel (wrapper around the chart)
- * @param param0 ChartPanelProps - data for chart and state info
- * @returns react fragement for the chart panel
- */
 export default function ChartPanel({ payload }: ChartPanelProps) {
-  const wrapper = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
+  // controls
+  const [metric, setMetric] = useEnumQuery('metric', Metrics);
+  const [mode, setMode] = useEnumQuery('mode', Modes);
+  const [sigmaWindow, setWindow] = useEnumQuery('window', Windows);
+  const [scale, setScale] = useEnumQuery('scale', Scales);
+  const { shown, toggle } = useTeamFilter(payload.teams);
+
+  // chart state
+  const [wrapper, width] = useMeasuredWidth<HTMLDivElement>();
   const [hovered, setHovered] = useState<number | null>(null);
-  const [rawMetric, setMetric] = useQueryState('metric', 'actual');
-  const metric = rawMetric === 'ideal' ? 'ideal' : 'actual';
-  //responds to resive events
-  useEffect(() => {
-    const element = wrapper.current;
-    if (!element) return;
 
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+  // sigma replaces the modes rather than composing with them
+  const showSigma = metric === 'sigma';
+  const zeroBased = !showSigma && mode !== 'vsMedian';
 
-  const series = toSeries(payload.teams, metric === 'ideal');
-  const [teamsParam, setTeamsParam] = useQueryState('teams', '');
-
-  const validIds = useMemo(() => payload.teams.map((t) => t.rosterId), [payload.teams]);
-  const shown = useMemo(() => toShown(teamsParam, validIds), [teamsParam, validIds]);
-
-  //Handle team chip toggles. Do not allow all to be deselected
-  const toggle = (id: number) => {
-    setTeamsParam((prev) => {
-      const current = toShown(prev, validIds);
-      if (current.has(id) && current.size === 1) return prev;
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      return next.size === validIds.length ? '' : [...next].sort((a, b) => a - b).join(',');
-    });
-  };
-
-  //get the teams to show
+  // data
+  const medians = useMemo(() => weeklyMedians(payload.teams, metric), [payload.teams, metric]);
+  const series = toSeries(payload.teams, (weeks) =>
+    showSigma
+      ? sigmaSeries(weeks, sigmaWindow === 'rolling', scale === 'cv')
+      : pointsFor(mode, metric, weeks, medians),
+  );
   const visible = series.filter((s) => shown.has(s.rosterId));
 
   return (
     <Panel id="chart" title="Season Movement">
-      <div className="chips" role="group" aria-label="Teams shown">
-        {series.map((s) => (
-          <button key={s.rosterId} type="button" className="chip"
-          aria-pressed={shown.has(s.rosterId)} style={{ '--chip': s.colour } as CSSProperties}
-          onClick={() => toggle(s.rosterId)}
-          onFocus={() => setHovered(s.rosterId)} onBlur={() => setHovered(null)}>
-          <span className="swatch" aria-hidden="true" />
-          {s.name}
-          </button>
-        ))}
+      <SegmentedRow
+        name="metric"
+        label="Metric"
+        options={Metrics}
+        value={metric}
+        onChange={setMetric}
+      />
+
+      {showSigma ? (
+        <>
+          <SegmentedRow
+            name="window"
+            label="Window"
+            options={Windows}
+            value={sigmaWindow}
+            onChange={setWindow}
+          />
+          <SegmentedRow
+            name="scale"
+            label="Scale"
+            options={Scales}
+            value={scale}
+            onChange={setScale}
+          />
+        </>
+      ) : (
+        <SegmentedRow name="mode" label="Mode" options={Modes} value={mode} onChange={setMode} />
+      )}
+
+      {/* teams */}
+      <div className="control-row">
+        <span className="control-label" id="teams-label">
+          Teams
+        </span>
+        <div className="chips" role="group" aria-labelledby="teams-label">
+          {series.map((s) => (
+            <button
+              key={s.rosterId}
+              type="button"
+              className="chip"
+              aria-pressed={shown.has(s.rosterId)}
+              style={{ '--chip': s.colour } as CSSProperties}
+              onClick={() => toggle(s.rosterId)}
+              onFocus={() => setHovered(s.rosterId)}
+              onBlur={() => setHovered(null)}
+            >
+              <span className="swatch" aria-hidden="true" />
+              {s.name}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="segmented" role="group" aria-label="Metric">
-        {(['actual', 'ideal'] as const).map((m) => (
-          <button key={m} type="button" aria-pressed={metric === m} onClick={() => setMetric(m)}>
-          {m === 'actual' ? 'Points' : 'Ideal'}
-          </button>
-        ))}
-      </div>
+
+      {/* chart. the wrapper always mounts so the observer has something to watch */}
       <div className="chart-wrap" ref={wrapper}>
-        {/* the wrapper always mounts so the ResizeObserver has something to observe */}
         {isPlottable(visible) ? (
-          <Chart series={visible} width={width} height={Math.round(width * AspectRatio)} hovered={hovered} onHover={setHovered}/>
+          <Chart
+            series={visible}
+            width={width}
+            height={Math.round(width * AspectRatio)}
+            hovered={hovered}
+            onHover={setHovered}
+            zeroBased={zeroBased}
+            label={describe(
+              metric,
+              mode,
+              sigmaWindow,
+              scale,
+              visible.map((s) => s.name).join(', '),
+            )}
+            yTitle={showSigma ? (scale === 'cv' ? 'CV' : Sigma) : ''}
+          />
         ) : (
-          <p className="muted">Point chart will appear here once multiple weeks are final. Stay tuned!</p>
+          <p className="muted">
+            {showSigma
+              ? 'Available with four weeks of data. Stay tuned!'
+              : 'Point chart will appear here once multiple weeks are final. Stay tuned!'}
+          </p>
         )}
-      </div> 
+      </div>
     </Panel>
   );
 }

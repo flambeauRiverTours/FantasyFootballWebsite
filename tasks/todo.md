@@ -66,8 +66,9 @@ the deployed API when T32 needs it.
 
 - [ ] Run the full verification pass after the next green deploy. The runbook is
       in the field manual under **T24**.
-- [ ] `AZURE_STATIC_WEB_APPS_API_TOKEN` is still not set. One command, and it
-      only matters once T32 gives the `web` job something to deploy.
+- [x] `AZURE_STATIC_WEB_APPS_API_TOKEN` is set and the `web` job deploys with
+      it. The first value stored was the literal `$(az ...)` command string,
+      because `$( )` is not substitution in cmd.
 - [ ] Confirm on a **second** cold start that the log says "Adopted the stored
       player map" rather than "Refreshing player map from Sleeper API". This is
       the only evidence A12 solved the problem rather than moving it.
@@ -93,14 +94,15 @@ applied, and the read and write paths both exist.
 **The remaining three are deferred to the end** — see _Deferred_ below. None is
 blocked on effort; each is waiting on something that does not exist yet.
 
-## M4 · The page — 24.5 h
+## M4 · The page — 24.5 h · built
 
 First milestone anyone else in the league can look at, and the first that will
 generate opinions.
 
-**T32 to T35 are built.** The page renders the real standings from the live API,
-in three panels, in both themes, without a horizontal scrollbar at 375 px.
-What remains is the chart and everything that hangs off it.
+**M4 is built.** The page renders the live standings, an interactive chart and a
+gated radar panel, in both themes, with no horizontal scrollbar at 375 px and 22
+passing tests. The field manual's M4 section is now a built reference rather than
+instructions.
 
 - [x] **T32** Frontend scaffold — 2 h
       Vite 8, React 19, TypeScript. Types written from the live response, ETag-aware
@@ -137,15 +139,22 @@ What remains is the chart and everything that hangs off it.
 - [x] **T40** Responsive and a11y — 2.5 h
       Keyboard paths, focus states, table that scrolls in its own container.
 
-## M5 · Modes, ops and docs — 9.5 h
+## M5 · Modes, ops and docs — 10.5 h · 1 h remaining
 
 Deliberately last: cheap, taste-driven, easier to judge against real data.
 
-- [ ] **T41** Display modes — 2 h · per-week and vs-league-median
-- [ ] **T42** Sigma variants — 2 h · expanding vs rolling window, sigma vs CV
-- [ ] **T43** Loading and error states — 2 h · including the SQL cold resume
-- [ ] **T44** Cost guardrails — 2 h · ingest cap, budget alert, SQL pause verified
-- [ ] **T45** README and runbook — 1.5 h · chiefly the August rollover checklist
+- [x] **T41** Display modes — 2 h · per-week and vs-league-median
+- [x] **T42** Sigma variants — 2 h · expanding vs rolling window, sigma vs CV
+- [x] **T43** Loading and error states — 2 h · including the SQL cold resume
+- [x] **T44** Cost guardrails — 2 h · ingest cap, budget alert, SQL pause verified
+- [x] **T45** README and runbook — 1.5 h · chiefly the August rollover checklist
+- [ ] **T57** Custom domain — 1 h · a subdomain of a domain already owned · **needs DNS**
+      One GoDaddy `CNAME`, one `az staticwebapp hostname set`, and the free
+      managed certificate. **No cost and no tier change**, so the $0.00/month
+      claim stands. The trap is `main.bicep`: the Function App's CORS list is the
+      SWA's *default* hostname only, so the site will load and every API call
+      will fail until `customDomain` is a parameter and the bicep is redeployed.
+      The apex is a live GitHub Pages site and is untouched.
 
 ## M6 · Positional radar — 10 h
 
@@ -288,9 +297,12 @@ answers are in [`docs/amendments.md`](../docs/amendments.md).
 
 - [ ] **Q4** Regular season only, or through the playoffs? —
       `settings.playoff_week_start` is `0`, i.e. unset. Check league settings.
-- [ ] **Q5** Minimum weeks before sigma appears — four, or five? (Assumed: four.)
-- [ ] **Q6** Should the table show sigma or CV? Revisit once real spread is
-      visible after B3.
+- [x] **Q5** Minimum weeks before sigma appears — **four**, per D1, and
+      implemented that way in `populationSigma`. Below four every consistency
+      figure is null rather than zero.
+- [x] **Q6** **Both, in different places.** The table keeps σ because it is the
+      number people say out loud; T42 gives the chart a σ/CV toggle. σ is
+      scale-dependent, so CV is the fair comparison across teams.
 
 ## Amendments
 
@@ -322,6 +334,39 @@ Listed here only so their implementation state is visible in one place.
 _One entry per work session: what changed, what was verified, what is still
 open. Detail that outlived the session has moved to `amendments.md` or
 `lessons.md`; these are pointers, not a transcript._
+
+### 2026-09-16 — M4 built, M5 built bar the domain
+
+The page is real. Standings, an interactive chart, hover, four control rows and a
+gated radar panel, in both themes, with no horizontal scrollbar at 375 px.
+
+**M4 closed.** T36 to T40 landed on top of the design system: a D3 line chart
+with React owning every node (D9), chips and segmented controls mirrored to the
+query string, hover scoped to the chart panel, and the responsive and
+accessibility pass. The manual's M4 section is now a built reference; the traps
+it cost are recorded there rather than in the tasks.
+
+**M5 closed bar T57.** T41's three display modes and T42's σ variants share one
+pure module, `pointCalculation.ts`. T43 replaced the bare loading and error text
+with `Skeleton`, `LoadFailed` and `StaleBanner`, and fixed an ordering bug in
+`App` that let one failed poll wipe a live page. T44 shipped
+`scripts/verify-cost.sh`, which found that the telemetry cap lives on the Log
+Analytics workspace rather than the App Insights component. T45 rewrote the
+runbook as a setup guide someone else could follow.
+
+**Tests went from 22 to 106**, covering every hook, the fetch layer, the pure
+maths and four components. Each new suite was mutation-tested: removing the
+drop-at-default rule, the never-zero guard, the enum validation, the non-JSON
+guard, or reversing the chart's paint order all fail the suite.
+
+**Two bugs were structural rather than typos.** `App` called `useRelativeTime`
+below a conditional return, which blanks the page under the Rules of Hooks. And
+`Skeleton` reproduced part of `Panel` instead of using it, so the title and table
+moved when data arrived — three separate causes, found only by measuring in a
+browser rather than reading the CSS.
+
+**T57 needs DNS**, not code. A subdomain of a domain already owned, so the
+$0.00/month claim survives.
 
 ### 2026-09-14 — M3 built, then deliberately cut short
 
