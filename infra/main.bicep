@@ -71,6 +71,10 @@ param sqlAdminLogin string = ''
 @description('Minutes of inactivity before the database pauses. Required on the free offer; 60 is the minimum.')
 param sqlAutoPauseDelayMinutes int = 60
 
+@description('Custom domain serving the site, without a scheme. Empty until T57.')
+param customDomain string = ''
+
+
 var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
 
 var excludedOwnerSettings = [
@@ -208,9 +212,8 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
       http20Enabled: true
       cors: {
         allowedOrigins: concat(
-          [
-            'https://${site.properties.defaultHostname}'
-          ],
+          ['https://${site.properties.defaultHostname}'],
+          empty(customDomain) ? [] : ['https://${customDomain}'],
           devOrigins
         )
       }
