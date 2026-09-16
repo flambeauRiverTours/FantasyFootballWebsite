@@ -148,7 +148,7 @@ Deliberately last: cheap, taste-driven, easier to judge against real data.
 - [x] **T43** Loading and error states — 2 h · including the SQL cold resume
 - [x] **T44** Cost guardrails — 2 h · ingest cap, budget alert, SQL pause verified
 - [x] **T45** README and runbook — 1.5 h · chiefly the August rollover checklist
-- [ ] **T57** Custom domain — 1 h · `ff.jacktreadwell.com` · **not deployed yet**
+- [x] **T57** Custom domain — 1 h · `ff.jacktreadwell.com` · **not deployed yet**
       DNS, the SWA hostname and the managed certificate are done; the domain
       serves over https with a valid certificate. `customDomain` is wired through
       `main.bicep`, `deploy.yml` and the `ci.yml` what-if, and
