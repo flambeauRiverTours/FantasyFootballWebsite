@@ -370,3 +370,21 @@ Before changing any of those, read the intended subject out of the workflow log 
 `azure/login` prints it under "Federated token details" — and check it against
 `az ad app federated-credential list` rather than assuming the existing one
 covers it.
+
+## Workspace-based App Insights caps on the workspace
+
+**What happened:** A cost check read `properties.DailyCapGb` off the Application
+Insights component and got `100`, which looked like the 0.16 GB cap had never
+been applied. The bicep was correct: a workspace-based component ingests through
+Log Analytics, so the cap is `workspaceCapping.dailyQuotaGb` on the workspace.
+The component's own `DailyCapGb` is the classic-mode default and controls
+nothing.
+
+**Rule:** For any Azure setting that exists on two resources in a chain, verify
+on the resource that actually enforces it, not the one that names it. Reading the
+value back is not proof unless you read it from the right place.
+
+**Corollary:** `az ... -o tsv` lowercases booleans and emits CRLF on Windows.
+`useFreeLimit` comes back as `true\r`, so a comparison against `True` fails
+against a correctly configured resource. Pipe through `tr -d '\r'` and compare
+case-insensitively.

@@ -20,11 +20,14 @@ export interface Fetched<T> {
 
 export class ApiError extends Error {
   readonly status: number;
+  /** Seasons the API says it does have. Only a 404 carries them. */
+  readonly available: number[] | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, available: number[] | null = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.available = available;
   }
 }
 
@@ -35,7 +38,7 @@ export class ApiError extends Error {
  * which is what makes the 30 second poll nearly free. No cache-busting
  * parameter: it would defeat the ETag, which is the point.
  */
-export async function fetchSeason(season: number | null, etag: string | null,signal?: AbortSignal): Promise<Fetched<SeasonPayload>> {
+export async function fetchSeason(season: number | null, etag: string | null, signal?: AbortSignal): Promise<Fetched<SeasonPayload>> {
   const query = season === null ? '' : `?season=${season}`;
 
   const response = await fetch(`${base}/season${query}`, {
@@ -48,7 +51,13 @@ export async function fetchSeason(season: number | null, etag: string | null,sig
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status, `GET /api/season${query} returned ${response.status}`);
+    //a platform 500 is html
+    const body = (await response.json().catch(() => null)) as { available?: unknown } | null;
+    throw new ApiError(
+      response.status,
+      `GET /api/season${query} returned ${response.status}`,
+      Array.isArray(body?.available) ? (body.available as number[]) : null,
+    );
   }
 
   return {
@@ -67,3 +76,5 @@ export async function fetchSeasons(signal?: AbortSignal): Promise<SeasonsPayload
 
   return (await response.json()) as SeasonsPayload;
 }
+
+export type Metric = 'actual' | 'ideal' | 'sigma';

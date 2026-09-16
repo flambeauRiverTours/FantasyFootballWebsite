@@ -3,17 +3,33 @@ import StandingsPanel from './components/StandingsPanel';
 import ChartPanel from './components/ChartPanel';
 import RadarPanel from './components/RadarPanel';
 import { useRelativeTime } from './hooks/useRelativeTime';
-
+import { useElapsedSince } from './hooks/useElapsedSince';
+import Skeleton from './components/Skeleton';
+import LoadFailed from './components/LoadFailed';
+import StaleBanner from './components/StaleBanner';
+import Masthead from './components/Masthead';
 /**
  * Owns the fetch and its three states, then orders the panels. A panel may
  * assume a payload exists.
  */
 export default function App() {
-  const { payload, error, loading } = useSeason(null);
+  const { payload, error, loading, refetch } = useSeason(null);
   const updated = useRelativeTime(payload?.asOfUtc);
-
-  if (loading) return <p>Loading…</p>;
-  if (!payload) return <p role="alert">Could not load the season: {error?.message}</p>;
+  const coldStartHandler = useElapsedSince(loading, 3000);
+  const mastHead = (<Masthead payload={payload} updatedAgo={updated} error={!!error} />)
+  //payload wins. error only matters when there is nothing to show
+  if (!payload) {
+    return loading ? (<>
+      {mastHead}
+      <Skeleton coldStart={coldStartHandler} />
+    </>
+    ) : (
+      <>
+        {mastHead}
+        <LoadFailed error={error} onRetry={refetch} />
+      </>
+    );
+  }
 
   // M6 fills leagueSlotAverages; until then the radar has nothing to plot, so the
   // data answers the question and no flag has to be flipped when T48 ships.
@@ -24,14 +40,9 @@ export default function App() {
 
   return (
     <>
-      <header className="masthead">
-        <div className="panel-inner">
-          <h1>Bosty Base Fantasy Football</h1>
-          <p className="muted">
-            {payload.season} · Week {payload.currentWeek} · Updated {updated}
-          </p>
-        </div>
-      </header>
+      {mastHead}
+
+      {error ? <StaleBanner asOfUtc={payload.asOfUtc} onRetry={refetch} /> : null}
 
       <main className="panels">
         <StandingsPanel teams={payload.teams} finalThroughWeek={payload.finalThroughWeek} />

@@ -31,49 +31,49 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
   return (
     <Panel id="standings" title="Standings">
       {ranked.length === 0 ? (
-        <p className="muted">No teams to show yet.</p>
+        <></>
       ) : (
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Team</th>
-              <th scope="col" aria-sort="descending">Points</th>
-              {mark ? (
-                <th scope="col">
-                  <span className="symbol">σ</span>
-                  <span className="th-note">through wk {finalThroughWeek}</span>
-                </th>
-              ) : null}
-              <th scope="col" className="col-ideal">Ideal</th>
-              <th scope="col">Gap</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranked.map((team) => (
-              <tr key={team.rosterId}>
-                <td>{team.name}</td>
-                <td className="is-sorted">{team.totals.actual.toFixed(1)}</td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Team</th>
+                <th scope="col" aria-sort="descending">Points</th>
                 {mark ? (
-                  <td>
-                    {hasConsistency(team.totals) ? (
-                      <SigmaDisplay totals={team.totals} scaleFunction={mark} />
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
+                  <th scope="col">
+                    <span className="symbol">σ</span>
+                    <span className="th-note">through wk {finalThroughWeek}</span>
+                  </th>
                 ) : null}
-                <td className="col-ideal">{team.totals.ideal.toFixed(1)}</td>
-                <td className="muted">
-                  {team.totals.actual === leader
-                    ? '—'
-                    : `−${(leader - team.totals.actual).toFixed(1)}`}
-                </td>
+                <th scope="col" className="col-ideal">Ideal</th>
+                <th scope="col">Gap</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {ranked.map((team) => (
+                <tr key={team.rosterId}>
+                  <td>{team.name}</td>
+                  <td className="is-sorted">{team.totals.actual.toFixed(1)}</td>
+                  {mark ? (
+                    <td>
+                      {hasConsistency(team.totals) ? (
+                        <SigmaDisplay totals={team.totals} scaleFunction={mark} />
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  ) : null}
+                  <td className="col-ideal">{team.totals.ideal.toFixed(1)}</td>
+                  <td className="muted">
+                    {team.totals.actual === leader
+                      ? '—'
+                      : `−${(leader - team.totals.actual).toFixed(1)}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Panel>
   );
