@@ -65,8 +65,6 @@ export type ConsistentTotals = TotalsPayload & {
 
 /** True when every consistency figure is available. */
 export function hasConsistency(totals: TotalsPayload): totals is ConsistentTotals {
-  if(!totals) return false;
+  if (!totals) return false;
   return totals.sigma !== null;
 }
-
-

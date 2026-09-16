@@ -70,10 +70,11 @@ describe('StandingsPanel', () => {
     expect(within(rows[1]).getAllByRole('cell').at(-1)).toHaveTextContent('−');
   });
 
-  it('keeps one heading per panel when there is nothing to show', () => {
+  it('keeps one heading and no table when there is nothing to show', () => {
     const { container } = render(<StandingsPanel teams={[]} finalThroughWeek={0} />);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
-    expect(screen.getByText(/no teams/i).tagName).toBe('P');
+    expect(container.querySelector('table')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Standings' })).toBeInTheDocument();
   });
 
   it('has no axe violations', async () => {
@@ -90,7 +91,11 @@ describe('ChartPanel', () => {
     for (const chip of chips) expect(chip).toHaveAttribute('aria-pressed', 'true');
 
     const metric = within(screen.getByRole('group', { name: /metric/i })).getAllByRole('button');
-    expect(metric.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+    expect(metric.map((b) => b.textContent)).toEqual(['Points', 'Ideal', 'σ']);
+    expect(metric.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+
+    expect(screen.getByRole('group', { name: /^mode$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /window/i })).toBeNull();
   });
 
   it('uses real buttons, so Enter and Space work without a key handler', () => {
@@ -102,14 +107,11 @@ describe('ChartPanel', () => {
   });
 
   it('keeps the controls and the measured wrapper when there is nothing to plot', () => {
-    const flat = {
+    const noWeeks = {
       ...payload,
-      teams: payload.teams.map((t) => ({
-        ...t,
-        weeks: t.weeks.map((w) => ({ ...w, actual: 0, ideal: 0 })),
-      })),
+      teams: payload.teams.map((t) => ({ ...t, weeks: [] })),
     };
-    const { container } = render(<ChartPanel payload={flat} />);
+    const { container } = render(<ChartPanel payload={noWeeks} />);
     expect(container.querySelector('svg.chart')).toBeNull();
     expect(container.querySelector('.chart-wrap')).not.toBeNull();
     expect(container.querySelectorAll('.chip')).toHaveLength(3);
