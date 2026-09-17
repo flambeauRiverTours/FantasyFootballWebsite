@@ -82,7 +82,7 @@ namespace FantasyLeague.Core.Tests
         {
             // fantasy_positions ["RB","WR"] makes this player legal in WRRB_FLEX.
             // Matching on the singular `position` field instead would undercount.
-            var slots = Roster.Slots("RB", "WR/RB FLEX");
+            var slots = Roster.Slots("RB", "WRRB_FLEX");
             var players = new[]
             {
                 Roster.Player("rb1", 14m, "RB"),
@@ -96,7 +96,7 @@ namespace FantasyLeague.Core.Tests
         public void Super_flex_lets_a_third_quarterback_start()
         {
             // This league's shape: two QB slots plus a SUPER_FLEX (Q2).
-            var slots = Roster.Slots("QB", "QB", "SUPER FLEX");
+            var slots = Roster.Slots("QB", "QB", "SUPER_FLEX");
             var players = new[]
             {
                 Roster.Player("qb1", 25m, "QB"),
@@ -238,7 +238,7 @@ namespace FantasyLeague.Core.Tests
     public class IdealLineupSolverPropertyTests
     {
         private static readonly string[] Codes =
-            ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX", "SUPER FLEX", "REC FLEX", "WR/RB FLEX"];
+            ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX", "SUPER_FLEX", "REC_FLEX", "WRRB_FLEX"];
         private static readonly string[] Positions = ["QB", "RB", "WR", "TE", "K", "DEF"];
 
         private static decimal BruteForce(
