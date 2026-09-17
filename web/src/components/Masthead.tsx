@@ -12,10 +12,21 @@ export default function Masthead({ payload, updatedAgo, error }: MastheadProps) 
     return (
         <header className="masthead">
             <div className="panel-inner">
-                <h1>Bosty Base Fantasy Football</h1>
-                <p className="muted">
-                    {text}
-                </p>
+                <table className="skeleton" >
+                    <tr>
+                        {payload ?
+                            <td>
+                                <h1>{payload.leagueName}</h1>
+                                <p className="muted">
+                                    {text}
+                                </p>
+                            </td> :
+                            <td>
+                                <span />
+                            </td>}
+
+                    </tr>
+                </table>
             </div>
         </header>
     )

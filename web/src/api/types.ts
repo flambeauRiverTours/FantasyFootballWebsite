@@ -2,6 +2,7 @@
  * Season data
  */
 export interface SeasonPayload {
+  leagueName: string;
   season: number;
   isCurrent: boolean;
   currentWeek: number;
@@ -21,7 +22,7 @@ export interface TeamPayload {
   rosterId: number;
   name: string;
   totals: TotalsPayload;
-  /** Per-slot season averages. Empty if no week produced an attribution. */
+  /** Empty until M6 fills it. */
   slotAverages: Record<string, number>;
   weeks: WeekPayload[];
 }

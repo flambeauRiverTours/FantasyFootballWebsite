@@ -83,7 +83,7 @@ namespace FantasyLeague.Core.Tests
                 """
                 {"league_id":"123","previous_league_id":null,"season":"2026","name":"Test",
                  "status":"in_season","total_rosters":6,
-                 "roster_positions":["QB","QB","RB","RB","WR","WR","TE","FLEX","SUPER_FLEX","K","DEF","BN"]}
+                 "roster_positions":["QB","QB","RB","RB","WR","WR","TE","FLEX","SUPER FLEX","K","DEF","BN"]}
                 """);
 
             league.PreviousLeagueId.Should().BeNull("a first season has nothing to roll over from");

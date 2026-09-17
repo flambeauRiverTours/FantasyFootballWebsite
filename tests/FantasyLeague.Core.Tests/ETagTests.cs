@@ -13,7 +13,7 @@ namespace FantasyLeague.Core.Tests
             int finalThroughWeek = 1,
             int season = 2026,
             params (int RosterId, (int Week, decimal Actual, decimal Ideal, bool IsFinal)[] Weeks)[] teams) =>
-            new(season, currentWeek, finalThroughWeek, Slot.Parse(["QB"]),
+            new("Name", season, currentWeek, finalThroughWeek, Slot.Parse(["QB"]),
                 [.. teams.Select(t => new TeamSeason(t.RosterId, $"Team {t.RosterId}",
                     [.. t.Weeks.Select(w => new TeamWeek(t.RosterId, w.Week, w.Actual, w.Ideal, [], [], [], w.IsFinal, NoAttribution))]))],
                 [], [], new Dictionary<int, string>());
@@ -153,12 +153,12 @@ namespace FantasyLeague.Core.Tests
         public void A_stale_tag_from_the_previous_poll_does_not_match()
         {
             var before = SeasonPayloadMapper.ComputeETag(
-                new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], false, NoAttribution)])],
                     [], [], new Dictionary<int, string>()));
 
             var after = SeasonPayloadMapper.ComputeETag(
-                new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 17m, 20m, [], [], [], false, NoAttribution)])],
                     [], [], new Dictionary<int, string>()));
 
@@ -172,13 +172,13 @@ namespace FantasyLeague.Core.Tests
             // T48: the mid-season rules guard can flip a week's attribution to
             // empty with Actual and Ideal unchanged; the ETag has to notice anyway
             var before = SeasonPayloadMapper.ComputeETag(
-                new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [],
                         true, new Dictionary<string, decimal> { ["QB"] = 10m })])],
                     [], [], new Dictionary<int, string>()));
 
             var after = SeasonPayloadMapper.ComputeETag(
-                new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, NoAttribution)])],
                     [], [], new Dictionary<int, string>()));
 

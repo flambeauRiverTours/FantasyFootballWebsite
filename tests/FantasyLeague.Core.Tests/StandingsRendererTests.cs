@@ -19,7 +19,7 @@ namespace FantasyLeague.Core.Tests
             int finalThroughWeek = 2,
             IReadOnlyList<string>? unresolved = null,
             IReadOnlyList<InvariantViolation>? violations = null) =>
-            new(2026, currentWeek, finalThroughWeek, Slot.Parse(["QB", "RB", "FLEX"]),
+            new("Name", 2026, currentWeek, finalThroughWeek, Slot.Parse(["QB", "RB", "FLEX"]),
                 teams ?? [], unresolved ?? [], violations ?? [], new Dictionary<int, string>());
 
         private static string Render(SeasonSnapshot snapshot)
