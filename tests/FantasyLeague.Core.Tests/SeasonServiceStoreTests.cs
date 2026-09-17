@@ -64,7 +64,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task A_stored_week_is_served_instead_of_rebuilt()
         {
-            var stored = new TeamWeek(1, 1, 999m, 999m, [], [], [], true);
+            var stored = new TeamWeek(1, 1, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
             var store = new RecordingWeekStore([stored]);
 
             var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync("L1", default);
@@ -77,7 +77,7 @@ namespace FantasyLeague.Core.Tests
         public async Task A_week_still_in_progress_is_never_served_from_the_store()
         {
             // week 3 is current, so it must come from Sleeper however the store answers
-            var stored = new TeamWeek(1, 3, 999m, 999m, [], [], [], true);
+            var stored = new TeamWeek(1, 3, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
             var store = new RecordingWeekStore([stored]);
 
             var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync("L1", default);
