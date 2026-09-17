@@ -115,7 +115,21 @@ namespace FantasyLeague.Sleeper
             {
                 var mapped = SleeperMapper.ToRosterWeek(matchup!, players.PlayerMap);
                 (var idealPoints, var idealRoster) = IdealLineupSolver.Solve(mapped.Players, slots);
-                teamWeeks.Add(new TeamWeek(mapped.RosterId, week, mapped.Actual, idealPoints, mapped.Starters, idealRoster, mapped.Players, isFinal));
+
+                var positions = mapped.Players.ToDictionary(p => p.Id.Value, p => p.FantasyPositions);
+                var slotAverages = SlotAverager.MakeSlotAverages(
+                    matchup!.Starters ?? [], matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
+                    positions, slots);
+
+                if (slotAverages is null)
+                {
+                    // roster_positions changed mid-seaso
+                    logger.LogError(
+                        "Roster {RosterId} week {Week}: starters count does not match startable slots; excluded from radar attribution.",
+                        mapped.RosterId, week);
+                }
+
+                teamWeeks.Add(new TeamWeek(mapped.RosterId, week, mapped.Actual, idealPoints, mapped.Starters, idealRoster, mapped.Players, isFinal, slotAverages ?? new Dictionary<string, decimal>()));
                 unresolved.AddRange(mapped.UnresolvedPlayerIds);
                 violations.AddRange(Check(mapped, idealPoints, week));
             }

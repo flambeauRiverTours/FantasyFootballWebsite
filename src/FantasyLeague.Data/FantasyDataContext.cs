@@ -74,6 +74,7 @@ namespace FantasyLeague.Data
                 weekScore.Property(e => e.ActualPts).HasPrecision(9, 2).IsRequired();
                 weekScore.Property(e => e.IdealPts).HasPrecision(9, 2).IsRequired();
                 weekScore.Property(e => e.IdealLineupJson).HasColumnType("nvarchar(max)").IsRequired();
+                weekScore.Property(e => e.SlotAveragesJson).HasColumnType("nvarchar(max)").IsRequired();
                 weekScore.Property(e => e.IsFinal).IsRequired();
                 weekScore.Property(e => e.ComputedUtc).IsRequired();
             });

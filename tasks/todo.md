@@ -139,7 +139,7 @@ instructions.
 - [x] **T40** Responsive and a11y — 2.5 h
       Keyboard paths, focus states, table that scrolls in its own container.
 
-## M5 · Modes, ops and docs — 10.5 h · 1 h remaining
+## M5 · Modes, ops and docs — 10.5 h · built
 
 Deliberately last: cheap, taste-driven, easier to judge against real data.
 
@@ -148,26 +148,19 @@ Deliberately last: cheap, taste-driven, easier to judge against real data.
 - [x] **T43** Loading and error states — 2 h · including the SQL cold resume
 - [x] **T44** Cost guardrails — 2 h · ingest cap, budget alert, SQL pause verified
 - [x] **T45** README and runbook — 1.5 h · chiefly the August rollover checklist
-- [x] **T57** Custom domain — 1 h · `ff.jacktreadwell.com` · **not deployed yet**
-      DNS, the SWA hostname and the managed certificate are done; the domain
-      serves over https with a valid certificate. `customDomain` is wired through
-      `main.bicep`, `deploy.yml` and the `ci.yml` what-if, and
-      `CUSTOM_DOMAIN_NAME` is a repository variable. **The bicep change is not
-      committed**, so the API still refuses the origin and the page loads with
-      "Could not load the season". Commit and push. Run 28 failed on a transient
-      `ConflictingDatabaseOperation` and may need one retry.
-      No cost and no tier change, so the $0.00/month claim stands, and the apex
-      GitHub Pages site is untouched.
+- [x] **T57** Custom domain — 1 h · `ff.jacktreadwell.com` · **live**
+      DNS, the SWA hostname, the managed certificate and the bicep change are
+      all committed and deployed; the site serves over https at the custom
+      domain. No cost and no tier change, so the $0.00/month claim stands, and
+      the apex GitHub Pages site is untouched.
 
-## M6 · Positional radar — 10 h
+## M6 · Positional radar — 10 h · built
 
-Improves most with a full season to look at.
-
-- [ ] **T46** Slot attribution — 2.5 h · `starters[i]` maps to slot `i`, plus the mid-season rules-change guard
-- [ ] **T47** League reference and ratios — 1.5 h · average first, divide second
-- [ ] **T48** Slot block in the API — 1 h · fills the two empty objects §09 already reserves, **and thereby reveals the radar panel**
-- [ ] **T49** Radar chart — 3.5 h `±` · axis order fixed and never re-sorted
-- [ ] **T50** Diverging bar alternative — 1.5 h · the same data on a linear axis
+- [x] **T46** Slot attribution — 2.5 h · `starters[i]` maps to slot `i`, plus the mid-season rules-change guard
+- [x] **T47** League reference and ratios — 1.5 h · average first, divide second
+- [x] **T48** Slot block in the API — 1 h · fills the two empty objects §09 already reserves, **and thereby reveals the radar panel**
+- [x] **T49** Radar chart — 3.5 h `±` · axis order fixed and never re-sorted
+- [x] **T50** Diverging bar alternative — 1.5 h · the same data on a linear axis
 
 ## M7 · Motion and polish — 7.5 h · **optional**
 

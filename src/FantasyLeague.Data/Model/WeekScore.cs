@@ -14,6 +14,7 @@
         public string StartersJson { get; set; } = string.Empty;
         public string PlayersPointsJson { get; set; } = string.Empty;
         public string IdealLineupJson { get; set; } = string.Empty;
+        public string SlotAveragesJson { get; set; } = string.Empty;
         public bool IsFinal { get; set; } //set after a week is finalized
         public DateTimeOffset ComputedUtc { get; set; }
     }
