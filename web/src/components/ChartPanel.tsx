@@ -88,7 +88,7 @@ function pointsFor(
 
 /** One point draws nothing. */
 function isPlottable(series: Series[]): boolean {
-  return series.some((s) => s.points.length > 1);
+  return series.some((s) => s.points.length >= 2 && s.points.some((p) => p.value !== s.points[0].value));
 }
 
 /** aria spoken description */

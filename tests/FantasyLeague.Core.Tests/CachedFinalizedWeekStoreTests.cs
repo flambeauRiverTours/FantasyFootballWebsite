@@ -28,7 +28,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         private static TeamWeek Week(int week = 1, decimal ideal = 120m) =>
-            new(1, week, 100m, ideal, [], [], [], true);
+            new(1, week, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>());
 
         [Fact]
         public async Task A_second_read_does_not_touch_the_database()

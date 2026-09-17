@@ -137,6 +137,10 @@ namespace FantasyLeague.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("SlotAveragesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("StartersJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

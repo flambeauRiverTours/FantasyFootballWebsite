@@ -39,6 +39,8 @@ namespace FantasyLeague.Sleeper
                 .OrderByDescending(t => t.Totals.Actual)
                 .ToList();
 
+            var leagueSlotAverages = SlotAverager.LeagueAverages(teams.Select(t => t.SlotAverages));
+
             return new SeasonPayload(
                 snapshot.Season,
                 requestedSeason is null || requestedSeason == snapshot.Season,
@@ -46,8 +48,7 @@ namespace FantasyLeague.Sleeper
                 snapshot.FinalThroughWeek,
                 asOfUtc,
                 SlotOrder(snapshot.Slots),
-                // M6 fills this; an empty object beats omitting the key
-                new Dictionary<string, decimal>(),
+                leagueSlotAverages,
                 teams);
         }
 
@@ -116,7 +117,7 @@ namespace FantasyLeague.Sleeper
                 team.RosterId,
                 team.Name,
                 totals,
-                new Dictionary<string, decimal>(),
+                SlotAverager.SeasonAverages(team.Weeks),
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.Actual, w.Ideal, w.IsFinal))]);
@@ -150,6 +151,14 @@ namespace FantasyLeague.Sleeper
                         .Append(',').Append(week.Actual.ToString(CultureInfo.InvariantCulture))
                         .Append(',').Append(week.Ideal.ToString(CultureInfo.InvariantCulture))
                         .Append(',').Append(week.IsFinal ? '1' : '0');
+
+                    // M6: slot attribution can change independently of Actual/Ideal
+                    // (the mid-season rules guard), so it needs its own hash input
+                    foreach (var slot in week.SlotAverages.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                    {
+                        builder.Append(';').Append(slot.Key)
+                            .Append('=').Append(slot.Value.ToString(CultureInfo.InvariantCulture));
+                    }
                 }
             }
 

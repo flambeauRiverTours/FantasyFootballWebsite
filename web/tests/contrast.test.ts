@@ -23,6 +23,11 @@ describe.each(themes)('%s theme contrast', (_name, t) => {
     expect(contrast(t['--accent'], t['--bg'])).toBeGreaterThanOrEqual(3);
   });
 
+  it('both diverging bar colours clear 3:1 as graphical objects', () => {
+    expect(contrast(t['--above'], t['--bg'])).toBeGreaterThanOrEqual(3);
+    expect(contrast(t['--below'], t['--bg'])).toBeGreaterThanOrEqual(3);
+  });
+
   it('every team colour in use clears 3:1 as a graphical object', () => {
     for (let i = 1; i <= 5; i += 1) {
       expect(contrast(t[`--team-${i}`], t['--bg']), `--team-${i}`).toBeGreaterThanOrEqual(3);
