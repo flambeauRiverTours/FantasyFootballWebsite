@@ -95,7 +95,7 @@ namespace FantasyLeague.Sleeper
         /// depends on axis order, so this order is fixed and never re-sorted.
         /// </remarks>
         private static IReadOnlyList<string> SlotOrder(IReadOnlyList<Slot> slots) =>
-            [.. slots.Select(s => s.Code).Distinct()];
+            [.. slots.Select(s => s.Code).Distinct().Select(Slot.DisplayCode)];
 
         /// <summary>
         /// Maps one roster's season.
@@ -120,7 +120,8 @@ namespace FantasyLeague.Sleeper
                 team.RosterId,
                 team.Name,
                 totals,
-                SlotAverager.SeasonAverages(team.Weeks),
+                SlotAverager.SeasonAverages(team.Weeks)
+                    .ToDictionary(kv => Slot.DisplayCode(kv.Key), kv => kv.Value),
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.Actual, w.Ideal, w.IsFinal))]);
