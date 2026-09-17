@@ -36,7 +36,7 @@ namespace FantasyLeague.Core.Tests
             // an OrderBy. A5 established that starters[i] maps to slots[i], so
             // reordering here silently misattributes every slot on the radar.
             string[] rosterPositions =
-                ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF"];
+                ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF"];
 
             Slot.Parse(rosterPositions)
                 .Select(s => s.Code)
@@ -55,10 +55,10 @@ namespace FantasyLeague.Core.Tests
             // Today an unknown code becomes a startable slot that accepts nobody,
             // so ideal is silently undercounted -- and ideal >= actual cannot
             // catch it, because undercounting is the restrictive direction.
-            var act = () => Slot.Parse(["QB", "WRTE_FLEX"]);
+            var act = () => Slot.Parse(["QB", "WR/TE FLEX"]);
 
             act.Should().Throw<ArgumentException>()
-               .WithMessage("*WRTE_FLEX*");
+               .WithMessage("*WR/TE FLEX*");
         }
     }
 
@@ -87,10 +87,10 @@ namespace FantasyLeague.Core.Tests
 
         [Theory]
         [InlineData("FLEX", "RB", "WR", "TE")]
-        [InlineData("SUPER_FLEX", "QB", "RB", "WR", "TE")]
-        [InlineData("REC_FLEX", "WR", "TE")]
-        [InlineData("WRRB_FLEX", "RB", "WR")]
-        [InlineData("IDP_FLEX", "DL", "LB", "DB")]
+        [InlineData("SUPER FLEX", "QB", "RB", "WR", "TE")]
+        [InlineData("REC FLEX", "WR", "TE")]
+        [InlineData("WR/RB FLEX", "RB", "WR")]
+        [InlineData("IDP FLEX", "DL", "LB", "DB")]
         public void A_flex_slot_accepts_every_position_it_allows(
             string code, params string[] allowed)
         {
@@ -105,10 +105,10 @@ namespace FantasyLeague.Core.Tests
 
         [Theory]
         [InlineData("FLEX", "QB", "K", "DEF")]
-        [InlineData("SUPER_FLEX", "K", "DEF")]
-        [InlineData("REC_FLEX", "QB", "RB", "K")]
-        [InlineData("WRRB_FLEX", "QB", "TE", "K")]
-        [InlineData("IDP_FLEX", "QB", "RB", "WR")]
+        [InlineData("SUPER FLEX", "K", "DEF")]
+        [InlineData("REC FLEX", "QB", "RB", "K")]
+        [InlineData("WR/RB FLEX", "QB", "TE", "K")]
+        [InlineData("IDP FLEX", "QB", "RB", "WR")]
         public void A_flex_slot_rejects_every_position_it_does_not_allow(
             string code, params string[] disallowed)
         {
@@ -131,8 +131,8 @@ namespace FantasyLeague.Core.Tests
             // for exactly the players who make flex slots interesting.
             string[] fantasyPositions = ["RB", "WR"];
 
-            new Slot("WRRB_FLEX").Accepts(fantasyPositions).Should().BeTrue();
-            new Slot("REC_FLEX").Accepts(fantasyPositions).Should().BeTrue();
+            new Slot("WR/RB FLEX").Accepts(fantasyPositions).Should().BeTrue();
+            new Slot("REC FLEX").Accepts(fantasyPositions).Should().BeTrue();
             new Slot("WR").Accepts(fantasyPositions).Should().BeTrue();
             new Slot("TE").Accepts(fantasyPositions).Should().BeFalse();
         }
@@ -141,7 +141,7 @@ namespace FantasyLeague.Core.Tests
         public void Super_flex_accepts_a_quarterback()
         {
             // This league's live case: two QB slots and a SUPER_FLEX (Q2).
-            new Slot("SUPER_FLEX").Accepts(["QB"]).Should().BeTrue();
+            new Slot("SUPER FLEX").Accepts(["QB"]).Should().BeTrue();
         }
 
         [Fact]
@@ -178,7 +178,7 @@ namespace FantasyLeague.Core.Tests
             Slot.Parse(RealRosterPositions())
                 .Select(s => s.Code)
                 .Should().Equal(
-                    "QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF");
+                    "QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF");
         }
 
         [Fact]

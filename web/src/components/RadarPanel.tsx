@@ -90,7 +90,7 @@ function Drawing({ team, view, slots, ratios, width, label }: DrawingProps) {
   if (!team) return <p className="muted">No teams to plot.</p>;
 
   return view === 'bars' ? (
-    <SlotBars slots={slots} ratios={ratios} width={width} label={label} />
+    <SlotBars slots={slots} ratios={ratios} width={width} label={label} height={Math.min(width, MaxRadarSize)} />
   ) : (
     <Radar slots={slots} ratios={ratios} size={Math.min(width, MaxRadarSize)} label={label} />
   );

@@ -57,7 +57,7 @@ namespace FantasyLeague.Core.Tests
     public class ExcludedRosterResolutionTests
     {
         private static SeasonSnapshot Snapshot(params (int RosterId, string Name, string OwnerId)[] rosters) =>
-            new(2026, 1, 0, Slot.Parse(["QB"]),
+            new("", 2026, 1, 0, Slot.Parse(["QB"]),
                 [.. rosters.Select(r => new TeamSeason(r.RosterId, r.Name, []))],
                 [], [],
                 rosters.ToDictionary(r => r.RosterId, r => r.OwnerId));
@@ -130,7 +130,7 @@ namespace FantasyLeague.Core.Tests
         public void A_roster_with_no_owner_cannot_be_excluded_and_does_not_throw()
         {
             // an orphaned roster is absent from RosterOwnerIds entirely
-            var snapshot = new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
+            var snapshot = new SeasonSnapshot("", 2026, 1, 0, Slot.Parse(["QB"]),
                 [new TeamSeason(5, "Orphan", [])], [], [],
                 new Dictionary<int, string>());
 
@@ -179,7 +179,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void The_resolved_ids_drop_the_team_from_the_payload()
         {
-            var snapshot = new SeasonSnapshot(2026, 2, 1, Slot.Parse(["QB"]),
+            var snapshot = new SeasonSnapshot("", 2026, 2, 1, Slot.Parse(["QB"]),
                 [
                     new TeamSeason(1, "Real Team", [new TeamWeek(1, 1, 30m, 30m, [], [], [], true, new Dictionary<string, decimal>())]),
                     new TeamSeason(9, "POON SQUAD", [new TeamWeek(9, 1, 0m, 0m, [], [], [], true, new Dictionary<string, decimal>())]),

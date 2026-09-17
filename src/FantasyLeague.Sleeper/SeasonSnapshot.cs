@@ -5,6 +5,7 @@ namespace FantasyLeague.Sleeper
     /// <summary>
     /// One league season, assembled from Sleeper and ready for a caller to shape.
     /// </summary>
+    /// <param name="LeagueName">The name of the league</param>
     /// <param name="Season">The season these weeks belong to.</param>
     /// <param name="CurrentWeek">The week Sleeper considers current.</param>
     /// <param name="FinalThroughWeek">The last week whose scores are settled. Sigma covers only these.</param>
@@ -15,6 +16,7 @@ namespace FantasyLeague.Sleeper
     /// <param name="RosterOwnerIds">Roster id to owning user id. The only identifier stable across seasons, and what A1 matches on.</param>
     /// <remarks>Reports facts; the caller decides policy. T16 asserts, T18 serves and logs, T28 refuses to freeze.</remarks>
     public sealed record SeasonSnapshot(
+        string LeagueName,
         int Season,
         int CurrentWeek,
         int FinalThroughWeek,
