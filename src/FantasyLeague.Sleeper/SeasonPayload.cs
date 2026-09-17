@@ -4,6 +4,7 @@
     /// The §09 response body for one season. Table and chart derive from this one
     /// payload, so they cannot disagree.
     /// </summary>
+    /// <param name="LeagueName">The name of the league</param>
     /// <param name="Season">The season these weeks belong to.</param>
     /// <param name="IsCurrent">Whether this is the live season. Decides the cache headers and whether the page polls.</param>
     /// <param name="CurrentWeek">The week Sleeper considers current.</param>
@@ -13,6 +14,7 @@
     /// <param name="LeagueSlotAverages">The radar's reference circle, averaged over non-excluded teams (A1).</param>
     /// <param name="Teams">One entry per scoring roster.</param>
     public sealed record SeasonPayload(
+        string LeagueName,
         int Season,
         bool IsCurrent,
         int CurrentWeek,

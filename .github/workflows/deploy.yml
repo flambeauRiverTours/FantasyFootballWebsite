@@ -40,6 +40,7 @@ jobs:
           SQL_ADMIN_ID: ${{ secrets.AZ_SQL_ADMIN_OBJECT_ID }}
           SQL_ADMIN_NAME: ${{ secrets.AZ_SQL_DB_ADMIN_NAME }}
           CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
+          OVERRIDE_LEAGUE_NAME: ${{ vars.OVERRIDE_LEAGUE_NAME }}
         run: |
           set -u
           : "${LEAGUE_ID:?}" "${RESOURCE_GROUP:?}" "${SQL_ADMIN_ID:?}" "${SQL_ADMIN_NAME:?}"
@@ -50,6 +51,7 @@ jobs:
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
             budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
             sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
+            overrideLeagueName=="${OVERRIDE_LEAGUE_NAME:-}" \
             -o json > out.json
           for k in functionAppName functionAppUrl staticWebAppName staticWebAppUrl; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"

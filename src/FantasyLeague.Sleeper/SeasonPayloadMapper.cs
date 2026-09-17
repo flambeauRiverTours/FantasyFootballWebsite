@@ -21,15 +21,17 @@ namespace FantasyLeague.Sleeper
         /// Maps a snapshot to the season response.
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
-        /// <param name="asOfUtc">When the snapshot was assembled.</param>
+        /// <param name="asOfUtc">When the snapshot was assembled.</param>        /// <param name="overrideLeagueName">Override name to use for the league</param>
         /// <param name="requestedSeason">The season asked for, or null for the current one.</param>
         /// <param name="excludedRosterIds">Rosters to leave out entirely (A1).</param>
+        /// <param name="overrideLeagueName">Name of the league</param>
         /// <returns>The response body.</returns>
         public static SeasonPayload ToIndividualSeasonPayload(
             SeasonSnapshot snapshot,
             DateTimeOffset asOfUtc,
             int? requestedSeason = null,
-            IReadOnlySet<int>? excludedRosterIds = null)
+            IReadOnlySet<int>? excludedRosterIds = null,
+            string overrideLeagueName = "")
         {
             var excluded = excludedRosterIds ?? new HashSet<int>();
 
@@ -40,8 +42,9 @@ namespace FantasyLeague.Sleeper
                 .ToList();
 
             var leagueSlotAverages = SlotAverager.LeagueAverages(teams.Select(t => t.SlotAverages));
-
+            var name = string.IsNullOrWhiteSpace(overrideLeagueName) ? snapshot.LeagueName : overrideLeagueName;
             return new SeasonPayload(
+                name,
                 snapshot.Season,
                 requestedSeason is null || requestedSeason == snapshot.Season,
                 snapshot.CurrentWeek,
