@@ -28,7 +28,7 @@ namespace FantasyLeague.Core.Tests
             int finalThroughWeek = 4,
             IReadOnlyDictionary<int, string>? owners = null) =>
             new("", 2026, currentWeek, finalThroughWeek,
-                Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF", "BN"]),
+                Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
                 teams ?? [], [], [], owners ?? new Dictionary<int, string>());
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>

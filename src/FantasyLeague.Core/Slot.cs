@@ -9,11 +9,30 @@
         private static readonly Dictionary<string, string[]> Flex = new()
         {
             ["FLEX"] = ["RB", "WR", "TE"],
-            ["SUPER FLEX"] = ["QB", "RB", "WR", "TE"],
-            ["REC FLEX"] = ["WR", "TE"],
-            ["WR/RB FLEX"] = ["RB", "WR"],
-            ["IDP FLEX"] = ["DL", "LB", "DB"],
+            ["SUPER_FLEX"] = ["QB", "RB", "WR", "TE"],
+            ["REC_FLEX"] = ["WR", "TE"],
+            ["WRRB_FLEX"] = ["RB", "WR"],
+            ["IDP_FLEX"] = ["DL", "LB", "DB"],
         };
+
+        /// <summary>
+        /// Sleeper's underscored flex codes, spaced out for the client. 
+        /// </summary>
+        private static readonly Dictionary<string, string> DisplayNames = new()
+        {
+            ["SUPER_FLEX"] = "SUPER FLEX",
+            ["REC_FLEX"] = "REC FLEX",
+            ["WRRB_FLEX"] = "WR/RB FLEX",
+            ["IDP_FLEX"] = "IDP FLEX",
+        };
+
+        /// <summary>
+        /// The label to show the client for a slot code. Every non-flex code is
+        /// already client-ready and passes through unchanged.
+        /// </summary>
+        /// <param name="code">A raw Sleeper slot code.</param>
+        /// <returns>The code's display form.</returns>
+        public static string DisplayCode(string code) => DisplayNames.GetValueOrDefault(code, code);
 
         /// <summary>
         /// A set of all valid position slots in the fantasy league, including quarterback (QB), running back (RB), wide receiver (WR), tight end (TE), kicker (K), defense (DEF), defensive line (DL), linebacker (LB), and defensive back (DB).
