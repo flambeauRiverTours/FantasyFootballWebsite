@@ -21,7 +21,7 @@ export interface TeamPayload {
   rosterId: number;
   name: string;
   totals: TotalsPayload;
-  /** Empty until M6 fills it. */
+  /** Per-slot season averages. Empty if no week produced an attribution. */
   slotAverages: Record<string, number>;
   weeks: WeekPayload[];
 }

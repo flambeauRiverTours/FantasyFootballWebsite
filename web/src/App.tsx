@@ -31,9 +31,8 @@ export default function App() {
     );
   }
 
-  // M6 fills leagueSlotAverages; until then the radar has nothing to plot, so the
-  // data answers the question and no flag has to be flipped when T48 ships.
-  // ?radar forces the panel open to build against hand-written data first.
+  // the data answers whether the radar has anything to plot; no flag needed.
+  // ?radar forces the panel open against hand-written data.
   const hasRadar =
     Object.keys(payload.leagueSlotAverages).length > 0 ||
     new URLSearchParams(window.location.search).has('radar');

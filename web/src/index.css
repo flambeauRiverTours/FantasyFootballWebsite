@@ -22,6 +22,10 @@ html { scrollbar-gutter: stable; }
   --accent:      oklch(52% 0.13 165);
   --accent-weak: oklch(52% 0.13 165 / 0.12);
 
+  /* diverging pair, T50 */
+  --above: oklch(52% 0.13 165);
+  --below: oklch(58% 0.15 25);
+
   /* equal visual weight */
   --team-1: oklch(58% 0.14 25);
   --team-2: oklch(58% 0.14 95);
@@ -57,6 +61,9 @@ html { scrollbar-gutter: stable; }
 
     --accent:      oklch(72% 0.13 165);
     --accent-weak: oklch(72% 0.13 165 / 0.16);
+
+    --above: oklch(72% 0.13 165);
+    --below: oklch(70% 0.15 25);
 
     --team-1: oklch(70% 0.13 25);
     --team-2: oklch(70% 0.13 95);
@@ -378,6 +385,59 @@ td.is-sorted { font-weight: var(--weight-medium); }
 
 /* one hit area */
 .chart .hit { touch-action: pan-y; }
+
+/* radar */
+
+.radar-wrap { width: 100%; display: flex; justify-content: center; }
+
+.radar { display: block; max-width: 100%; height: auto; }
+
+.radar .spoke { stroke: var(--rule-soft); }
+
+.radar .reference {
+  fill: none;
+  stroke: var(--rule);
+  stroke-dasharray: 3 4;
+}
+
+.radar .shape {
+  fill: var(--accent-weak);
+  stroke: var(--accent);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+
+.radar .unmeasured {
+  fill: var(--bg);
+  stroke: var(--fg-muted);
+  stroke-width: 1.5;
+}
+
+.radar .axis-label {
+  fill: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* bars */
+
+.bars { display: block; width: 100%; height: auto; }
+
+.bars .zero { stroke: var(--fg-muted); stroke-width: 1; }
+
+.bars .bar { fill: var(--below); }
+.bars .bar[data-above='true'] { fill: var(--above); }
+
+.bars .axis-label,
+.bars .value {
+  fill: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.bars .unmeasured {
+  fill: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-style: italic;
+}
 
 /* loading and failure */
 
