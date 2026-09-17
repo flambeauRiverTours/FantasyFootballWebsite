@@ -27,8 +27,8 @@ namespace FantasyLeague.Core.Tests
             int currentWeek = 5,
             int finalThroughWeek = 4,
             IReadOnlyDictionary<int, string>? owners = null) =>
-            new(2026, currentWeek, finalThroughWeek,
-                Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
+            new("", 2026, currentWeek, finalThroughWeek,
+                Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF", "BN"]),
                 teams ?? [], [], [], owners ?? new Dictionary<int, string>());
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
@@ -75,7 +75,7 @@ namespace FantasyLeague.Core.Tests
             var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf);
 
             payload.SlotOrder.Should().Equal(
-                "QB", "RB", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF");
+                "QB", "RB", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF");
         }
 
         [Fact]

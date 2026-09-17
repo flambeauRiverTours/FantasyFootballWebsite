@@ -9,10 +9,10 @@
         private static readonly Dictionary<string, string[]> Flex = new()
         {
             ["FLEX"] = ["RB", "WR", "TE"],
-            ["SUPER_FLEX"] = ["QB", "RB", "WR", "TE"],
-            ["REC_FLEX"] = ["WR", "TE"],
-            ["WRRB_FLEX"] = ["RB", "WR"],
-            ["IDP_FLEX"] = ["DL", "LB", "DB"],
+            ["SUPER FLEX"] = ["QB", "RB", "WR", "TE"],
+            ["REC FLEX"] = ["WR", "TE"],
+            ["WR/RB FLEX"] = ["RB", "WR"],
+            ["IDP FLEX"] = ["DL", "LB", "DB"],
         };
 
         /// <summary>

@@ -180,14 +180,14 @@ namespace FantasyLeague.Core.Tests
         {
             var teams = new[]
             {
-                new Dictionary<string, decimal> { ["QB"] = 20m, ["SUPER_FLEX"] = 8m },
+                new Dictionary<string, decimal> { ["QB"] = 20m, ["SUPER FLEX"] = 8m },
                 new Dictionary<string, decimal> { ["QB"] = 10m },
             };
 
             var league = SlotAverager.LeagueAverages(teams);
 
             league["QB"].Should().Be(15m);
-            league["SUPER_FLEX"].Should().Be(8m, "only one team ever started the slot; that is still the reference");
+            league["SUPER FLEX"].Should().Be(8m, "only one team ever started the slot; that is still the reference");
         }
 
         [Fact]

@@ -118,7 +118,7 @@ namespace FantasyLeague.Core.Tests
             await store.WriteAsync(League, 2026, [Week(slotAverages: new Dictionary<string, decimal>
             {
                 ["QB"] = 21.5m,
-                ["SUPER_FLEX"] = 14.25m,
+                ["SUPER FLEX"] = 14.25m,
             })], default);
 
             var read = await store.ReadAsync(League, 2026, default);
@@ -126,7 +126,7 @@ namespace FantasyLeague.Core.Tests
             read[0].SlotAverages.Should().BeEquivalentTo(new Dictionary<string, decimal>
             {
                 ["QB"] = 21.5m,
-                ["SUPER_FLEX"] = 14.25m,
+                ["SUPER FLEX"] = 14.25m,
             });
         }
 

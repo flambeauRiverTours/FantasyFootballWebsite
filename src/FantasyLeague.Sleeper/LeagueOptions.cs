@@ -33,5 +33,10 @@ namespace FantasyLeague.Sleeper
         /// placeholder team.
         /// </remarks>
         public IList<string> ExcludedOwnerIds { get; } = [];
+
+        /// <summary>
+        /// Gets or set the string to use as the league name, regardless of what's on sleeper's server
+        /// </summary>
+        public string OverrideLeagueName { get; set; } = string.Empty;
     }
 }
