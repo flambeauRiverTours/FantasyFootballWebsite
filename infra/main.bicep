@@ -74,6 +74,8 @@ param sqlAutoPauseDelayMinutes int = 60
 @description('Custom domain serving the site, without a scheme. Empty until T57.')
 param customDomain string = ''
 
+@description('String to use instead of the league name that exists in Sleeper.')
+param overrideLeagueName string = ''
 
 var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
 
@@ -234,6 +236,10 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
           {
             name: 'League__CurrentLeagueId'
             value: leagueId
+          }
+          {
+            name: 'League__OverrideLeagueName'
+            value: overrideLeagueName
           }
         ],
         excludedOwnerSettings,
