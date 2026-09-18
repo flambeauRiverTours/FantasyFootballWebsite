@@ -222,6 +222,21 @@ clear what would and would not have input.
       migration exists — which M6 does not require, since the radar adds no
       columns (§08).
 
+## Deferred · blob-mirrored finalized weeks — 2 h `±`
+
+- [ ] **T58** Mirror `WeekScore` to blob, same shape as A12's player map — 2 h `±`
+      **Reasoning: A16.** SQL's free-tier auto-pause is the site's one
+      disruptive cold start (D7); the fix is to stop the request path from
+      touching SQL at all, not to cache around it harder (that makes the pause
+      fire sooner, not less often) or migrate off SQL outright (a bigger
+      rewrite than the problem currently needs). `FinalizeWeek` writes the
+      season's finalized weeks to blob alongside SQL, replacing it wholesale;
+      `IFinalizedWeekStore`'s read path serves from blob first. SQL becomes
+      write-only from the Tuesday timer, which nobody waits on synchronously,
+      so its own resume stops being user-visible. Open question carried into
+      the implementation: what a cold or missing blob should do on the rare
+      fallback to SQL — block and wait, or serve stale.
+
 ---
 
 ## Open follow-ups
@@ -322,6 +337,7 @@ Listed here only so their implementation state is visible in one place.
 | **A13** | No commissioner overrides; `WeekScore` stores the actual only            | decided — T25                                                            |
 | **A14** | The stored key leads on `Season`, not `LeagueId`                         | decided — T25                                                            |
 | **A15** | Two Microsoft natives exempt from the licence allowlist                  | done                                                                     |
+| **A16** | Finalized weeks mirrored to blob, to remove SQL from the request path    | decided — **T58**                                                       |
 
 ---
 

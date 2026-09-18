@@ -3,8 +3,18 @@ name: ci
 # branch with an open PR fires both events and runs the whole workflow twice.
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'tasks/**'
+      - '**/*.md'
+      - 'LICENSE'
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'tasks/**'
+      - '**/*.md'
+      - 'LICENSE'
 
 permissions:
   id-token: write

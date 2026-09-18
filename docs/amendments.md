@@ -553,6 +553,61 @@ fails, which is the behaviour worth keeping.
 
 ---
 
+## A16 · Finalized weeks will be mirrored to blob, for the same reason the player map is (decided, not yet built)
+
+2026-09-18. The SQL free tier's auto-pause (**D7**) is the site's one disruptive
+cold start: a paused database takes 30–60 seconds to resume, and whoever's first
+after 60 idle minutes eats it in full. Three alternatives were weighed before
+landing here.
+
+**Cache harder — rejected, doesn't touch the cause.** `CachedFinalizedWeekStore`
+already wraps SQL in a 6-hour `HybridCache`, and it was tempting to lean on that
+further. Two problems. First, `HybridCache` has no `IDistributedCache`
+registered, so it is L1-only — per instance, exactly A12's failure mode. A cold
+Function instance starts with an empty cache regardless of TTL. Second, and
+counter-intuitively, a *more effective* cache makes this worse, not better:
+Azure SQL serverless pauses on its own idle timer, counted from the last query
+it actually saw. A cache that successfully absorbs reads for six hours is six
+hours the database looks idle from the inside — it pushes toward the pause
+firing sooner, not later.
+
+**Drop SQL for blob or table storage entirely — rejected for now, too big a
+swing.** `WeekScore` (§08) is genuinely key-value shaped — no joins, PK lookup
+only (**A14**) — and blob storage never pauses, so this would remove the cold
+start outright. Deferred anyway: it means retiring `SqlFinalizedWeekStore`, the
+EF Core migration, and the SQL bicep resource, which is a real rewrite, not a
+config change, for a problem that has a smaller fix available first.
+
+**A scheduled keep-warm ping — rejected, doesn't fit how SQL serverless
+works.** Auto-pause/resume is purely reactive (resumes on connection, pauses
+after N idle minutes); there is no notion of "stay up 1pm–11pm Sundays" to
+configure. The only way to simulate that is an active timer pinging the
+database through a chosen window, which trades disruption for cost on a dial —
+every warm hour spends against the free tier's **100k vCore-seconds/month**
+(≈55 hours at 0.5 vCore) — and still leaves every visitor outside the window
+exposed to the exact same wait.
+
+**Chosen: mirror A12's pattern.** `FinalizeWeek` (the Tuesday-noon timer, the
+only writer `WeekScore` has) writes the season's finalized weeks to SQL *and* to
+one JSON blob in the storage account the Function App already has, replacing it
+wholesale — same shape as `IPlayerMapStore`. The read path serves from that
+blob first and stops touching SQL on every request. This works here for a
+reason that doesn't generalize to every SQL-cold-start problem: **once this
+ships, nothing on the request path calls SQL at all.** The only remaining SQL
+traffic is the weekly finalize timer, a background job nobody is waiting on
+synchronously, so its own 30–60 second resume becomes invisible rather than
+disruptive.
+
+**What this does not fix.** A cold or missing blob — first deploy, or the blob
+deleted out of band — still falls through to SQL and still pays the full resume
+cost. That path is expected to be rare to never post-ship rather than the
+routine case it is today, but it is not eliminated, and what it should do
+(block and wait, or serve stale) is an open question for the implementation.
+
+**Not yet built.** Tracked as **T58**.
+
+---
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**
