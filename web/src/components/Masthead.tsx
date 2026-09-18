@@ -12,21 +12,14 @@ export default function Masthead({ payload, updatedAgo, error }: MastheadProps) 
     return (
         <header className="masthead">
             <div className="panel-inner">
-                <table className="skeleton" >
-                    <tr>
-                        {payload ?
-                            <td>
-                                <h1>{payload.leagueName}</h1>
-                                <p className="muted">
-                                    {text}
-                                </p>
-                            </td> :
-                            <td>
-                                <span />
-                            </td>}
-
-                    </tr>
-                </table>
+                {payload ? (
+                    <h1>{payload.leagueName}</h1>
+                ) : (
+                    <span className="skeleton-title" aria-hidden="true" />
+                )}
+                <p className="muted">
+                    {text}
+                </p>
             </div>
         </header>
     )

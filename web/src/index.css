@@ -449,6 +449,16 @@ td.is-sorted { font-weight: var(--weight-medium); }
   animation: pulse 1.6s ease-in-out infinite;
 }
 
+.masthead .skeleton-title {
+  display: block;
+  width: 14rem;
+  max-width: 40vw;
+  height: var(--text-lg);    /* matches the h1 it stands in for */
+  border-radius: 3px;
+  background: var(--bg-subtle);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
 @keyframes pulse { 50% { opacity: 0.45; } }
 
 .banner {
@@ -484,5 +494,6 @@ td.is-sorted { font-weight: var(--weight-medium); }
   .chart path.series,
   .chart .series-label { transition: none; }
 
-  .skeleton td > span { animation: none; }
+  .skeleton td > span,
+  .masthead .skeleton-title { animation: none; }
 }
