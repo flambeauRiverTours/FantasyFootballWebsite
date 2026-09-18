@@ -51,7 +51,7 @@ jobs:
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
             budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
             sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
-            overrideLeagueName=="${OVERRIDE_LEAGUE_NAME:-}" \
+            overrideLeagueName="${OVERRIDE_LEAGUE_NAME:-}" \
             -o json > out.json
           for k in functionAppName functionAppUrl staticWebAppName staticWebAppUrl; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
