@@ -47,8 +47,8 @@ namespace FantasyLeague.Data
         {
             DateTimeOffset seasonStart = new DateTimeOffset(season, 9, 1, 0, 0, 0, TimeSpan.Zero); //season start with some padding
             DateTimeOffset seasonEnd = new DateTimeOffset(season + 1, 3, 1, 0, 0, 0, TimeSpan.Zero); //season end, with some padding
-            var now = time.GetUtcNow(); 
-            if(DateTimeOffset.Compare(seasonStart, now) > 0 || DateTimeOffset.Compare(now, seasonEnd) > 0)
+            var now = time.GetUtcNow();
+            if (DateTimeOffset.Compare(seasonStart, now) > 0 || DateTimeOffset.Compare(now, seasonEnd) > 0)
             {
                 return false;
             }
