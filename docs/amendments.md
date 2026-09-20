@@ -601,10 +601,43 @@ disruptive.
 **What this does not fix.** A cold or missing blob — first deploy, or the blob
 deleted out of band — still falls through to SQL and still pays the full resume
 cost. That path is expected to be rare to never post-ship rather than the
-routine case it is today, but it is not eliminated, and what it should do
-(block and wait, or serve stale) is an open question for the implementation.
+routine case it is today, but it is not eliminated.
 
 **Not yet built.** Tracked as **T58**.
+
+### Implementation settled, 2026-09-20
+
+Three details sharpened once T58 was picked up, all in
+[`field-manual.md`](field-manual.md):
+
+- **Scope is one blob, not one per season.** `FinalizeWeek` only ever builds
+  the current season, so that is the only season this task ever mirrors — which
+  is also the only season the live site's polling actually requests. Older
+  seasons (once T29/T30 produce them) stay SQL-only and keep paying the cold
+  start on the rare read; that is an acceptable, much smaller version of the
+  same trade the design already made, not a new one.
+- **The open "block and wait, or serve stale" question resolves by default,
+  not by design.** A cold or missing blob falls through to
+  `SqlFinalizedWeekStore.ReadAsync` — which is exactly every request's
+  behaviour today, with nothing built. Block-and-wait needs no new code because
+  it already exists; there was never a decision to make here, only a fallback
+  to keep.
+- **The cache invalidation this task needs already exists.** `CachedFinalizedWeekStore`
+  calls `RemoveByTagAsync` after every `WriteAsync`, regardless of what it
+  wraps. Pointing it at a store that writes SQL *and* blob, instead of SQL
+  alone, makes "invalidate on the Tuesday write" free — it was already
+  invalidating on every write, for a cache that mattered less before there was
+  a blob copy to keep in step.
+
+One new constraint this surfaced: `FinalizeWeek`'s Tuesday timer should not run
+during the NFL offseason, both to stop spending the SQL free tier's
+vCore-seconds on a wake nothing needs and to stop writing a blob that would
+just be overwritten unchanged the next active Tuesday. Expressed as a cron
+month restriction rather than an in-function guard, so the offseason costs
+zero invocations rather than one short one — see the **Watch out** in
+`field-manual.md`'s T58 section for why the boundary is March–August, not
+March–September as first framed: the season opener usually falls inside
+September, and excluding it would skip week 1's own finalize run.
 
 ---
 

@@ -12,7 +12,7 @@ namespace FantasyLeague.Data
         IReadOnlyList<string> Positions,
         decimal Points);
 
-    internal sealed class SqlFinalizedWeekStore(
+    public sealed class SqlFinalizedWeekStore(
         IDbContextFactory<FantasyDataContext> contexts,
         ILogger<SqlFinalizedWeekStore> logger) : IFinalizedWeekStore
     {

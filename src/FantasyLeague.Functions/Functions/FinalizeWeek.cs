@@ -17,7 +17,7 @@ namespace FantasyLeague.Functions.Functions
         ILogger<FinalizeWeek> logger)
     {
         [Function("FinalizeWeek")]
-        public async Task Run([TimerTrigger("0 0 12 * * 2")] TimerInfo timer, CancellationToken ct) //run at noon Tuesday UTC - all NFL games should be wrapped up
+        public async Task Run([TimerTrigger("0 0 12 * 9,10,11,12,1,2 2")] TimerInfo timer, CancellationToken ct) //run at noon Tuesday UTC during the season - all NFL games should be wrapped up
         {
             var leagueId = league.Value.CurrentLeagueId;
             var snapshot = await seasons.BuildAsync(leagueId, ct);
