@@ -275,7 +275,7 @@ hit on the document that contained the same command.
 carry a check that fails loudly in the wrong one. Capture into a variable, assert
 something about it (`[ "${#TOKEN}" -ge 100 ]`), and only then write it. The same
 applies to a trailing carriage return: `$( )` strips a trailing newline but not a
-``, so pipe through `tr -d '
+``, so pipe through `tr -d '
 '` on Windows before storing anything.
 
 **Corollary:** this is the third failure in this project caused by a masked value
@@ -388,3 +388,57 @@ value back is not proof unless you read it from the right place.
 `useFreeLimit` comes back as `true\r`, so a comparison against `True` fails
 against a correctly configured resource. Pipe through `tr -d '\r'` and compare
 case-insensitively.
+
+## A sticky panel taller than one screen hides its own overflow
+
+**What happened:** `ChartPanel`'s content (sigma window/scale controls, a wider
+team-chip row, a tall aspect-ratio chart) grew past one viewport's height.
+`.panel` is `position: sticky; top: var(--masthead-h)` with no `max-height`, so
+nothing clipped it and nothing looked wrong in the CSS. In the browser: the
+panel pins at `top` the moment it's reached, and stays pinned — while pinned,
+the page scrolling does not reveal any more of a sticky element's own box, only
+the top slice that fits between `top` and the viewport bottom. Continued
+scrolling doesn't creep through the rest of the panel; it does nothing
+visually until the panel's bottom passes the pin point, at which moment it
+releases all at once into the next panel. Net effect: the bottom portion of an
+over-height sticky panel is never on screen at any scroll position — not
+clipped, not letterboxed, genuinely unreachable.
+
+Ruled out first, both wrongly suspected: `#chart .chart { max-height: 70svh }`
+(confirmed via a `getBoundingClientRect` probe that the SVG's own
+`preserveAspectRatio="xMidYMid meet"` default letterboxes rather than crops —
+harmless), and sticky-panel overlap (confirmed via a plain two-panel repro that
+normal document flow never overlaps a sticky element with a later sibling).
+Neither produced the reported symptom; only a repro with content genuinely
+taller than the viewport, scrolled and measured, showed the real mechanism.
+
+**Rule:** `position: sticky` on an element whose height can exceed its
+scrolling context does not make that overflow reachable by scrolling — sticky
+freezes visually the instant it pins, and unpins in one jump. Test this class
+of bug by making content deliberately taller than the container and scrolling
+through it, not by reading the CSS and reasoning about a single screen size.
+
+**First fix was wrong, and passed its own test anyway.** Capping the panel
+with `max-height` plus its own `overflow-y: auto` does make the overflow
+reachable — confirmed in an isolated repro of just `.panel` and its content.
+Applied to the real page, nested inside `.panels`' own `scroll-snap-type: y
+proximity`, it produced two visible scrollbars and the outer snap container
+still won the race for wheel input, advancing to the next section before the
+inner one finished — the same content-goes-missing bug, now with an ugly
+double scrollbar on top. **An isolated repro proves a fix works in isolation,
+not in the page it has to share a scroll container with.** The tell was in
+the diagnosis, missed the first time: the bug was never really about the
+`.panel` in isolation, it was about `position: sticky` specifically, and any
+fix that kept sticky was always going to have to fight the ancestor's
+scroll-snap for the scroll gesture.
+
+**Actual fix: drop `position: sticky` from `.panel` entirely.** With no `top`
+to pin to, the panel is an ordinary block that grows to fit its content —
+nothing is ever hidden, no inner scroll container is needed, and
+`scroll-snap-align: start` on its own (no sticky involved) still settles the
+page on each section's start once scrolling stops. The scroll-snap was never
+the problem; only the sticky pin was. Cost: panels no longer visually "stay
+put" while the next one slides up over them — a decorative effect, not a
+documented decision, so trading it for content that is always reachable was
+the right call.
+
