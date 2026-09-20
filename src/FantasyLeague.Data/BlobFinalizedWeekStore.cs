@@ -14,7 +14,7 @@ namespace FantasyLeague.Data
     /// </summary>
     /// <param name="FinalizedUtc"></param>
     /// <param name="Weeks"></param>
-    internal sealed record StoredSeason(DateTimeOffset FinalizedUtc,IReadOnlyList<TeamWeek> Weeks);
+    internal sealed record StoredSeason(DateTimeOffset FinalizedUtc, IReadOnlyList<TeamWeek> Weeks);
 
     /// <summary>
     /// Handles the blob store of the cached current season
@@ -23,7 +23,7 @@ namespace FantasyLeague.Data
     /// <param name="logger">Logger to use</param>
     public sealed class BlobFinalizedWeekStore(
     BlobContainerClient container,
-    ILogger<BlobFinalizedWeekStore> logger): IBlobFinalizedWeekStore
+    ILogger<BlobFinalizedWeekStore> logger) : IBlobFinalizedWeekStore
     {
         // one blob per (leagueId, season) — one blob in practice, per Scope above
         private static string BlobName(string leagueId, int season) => $"{leagueId}/{season}.json";
@@ -52,7 +52,7 @@ namespace FantasyLeague.Data
         /// <inheritdoc />
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken ct)
         {
-            if((weeks == null) ||(weeks.Count == 0))
+            if ((weeks == null) || (weeks.Count == 0))
             {
                 logger.LogWarning("Tried to write to BlobFinalizedWeekStore with an empty list of weeks");
                 return;
