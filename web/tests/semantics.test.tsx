@@ -90,12 +90,32 @@ describe('ChartPanel', () => {
     expect(chips.map((c) => c.textContent)).toEqual(['Alpha', 'Bravo', 'Charlie']);
     for (const chip of chips) expect(chip).toHaveAttribute('aria-pressed', 'true');
 
+    // the fixture has two finalized weeks: sigma needs four (D1), so it is
+    // not offered — see the sigma/vs-median availability tests below
     const metric = within(screen.getByRole('group', { name: /metric/i })).getAllByRole('button');
-    expect(metric.map((b) => b.textContent)).toEqual(['Points', 'Ideal', 'σ']);
-    expect(metric.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+    expect(metric.map((b) => b.textContent)).toEqual(['Points', 'Ideal']);
+    expect(metric.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
 
     expect(screen.getByRole('group', { name: /^mode$/i })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /window/i })).toBeNull();
+  });
+
+  it('hides the sigma metric below four finalized weeks and shows it at four', () => {
+    const { rerender } = render(<ChartPanel payload={{ ...payload, finalThroughWeek: 3 }} />);
+    expect(within(screen.getByRole('group', { name: /metric/i })).queryByText('σ')).toBeNull();
+
+    rerender(<ChartPanel payload={{ ...payload, finalThroughWeek: 4 }} />);
+    expect(within(screen.getByRole('group', { name: /metric/i })).getByText('σ')).toBeInTheDocument();
+  });
+
+  it('hides vs median below two finalized weeks and shows it at two', () => {
+    // one final week is a real median but only one point, and isPlottable
+    // refuses to draw a line through a single point
+    const { rerender } = render(<ChartPanel payload={{ ...payload, finalThroughWeek: 1 }} />);
+    expect(within(screen.getByRole('group', { name: /^mode$/i })).queryByText('vs median')).toBeNull();
+
+    rerender(<ChartPanel payload={{ ...payload, finalThroughWeek: 2 }} />);
+    expect(within(screen.getByRole('group', { name: /^mode$/i })).getByText('vs median')).toBeInTheDocument();
   });
 
   it('uses real buttons, so Enter and Space work without a key handler', () => {
