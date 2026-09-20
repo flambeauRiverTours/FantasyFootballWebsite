@@ -224,18 +224,25 @@ clear what would and would not have input.
 
 ## Deferred · blob-mirrored finalized weeks — 2 h `±`
 
-- [ ] **T58** Mirror `WeekScore` to blob, same shape as A12's player map — 2 h `±`
+- [x] **T58** Mirror `WeekScore` to blob, same shape as A12's player map — 2 h `±`
       **Reasoning: A16.** SQL's free-tier auto-pause is the site's one
       disruptive cold start (D7); the fix is to stop the request path from
       touching SQL at all, not to cache around it harder (that makes the pause
       fire sooner, not less often) or migrate off SQL outright (a bigger
       rewrite than the problem currently needs). `FinalizeWeek` writes the
-      season's finalized weeks to blob alongside SQL, replacing it wholesale;
-      `IFinalizedWeekStore`'s read path serves from blob first. SQL becomes
-      write-only from the Tuesday timer, which nobody waits on synchronously,
-      so its own resume stops being user-visible. Open question carried into
-      the implementation: what a cold or missing blob should do on the rare
-      fallback to SQL — block and wait, or serve stale.
+      current season's finalized weeks to blob alongside SQL — the current
+      season is the only one it ever builds, which is also the only one the
+      live site's 30 s poll actually requests; older seasons stay SQL-only.
+      `IFinalizedWeekStore`'s read path serves from blob first and falls
+      through to SQL on a cold or missing blob — the same thing every request
+      does today, so that fallback needs no new design, and
+      `CachedFinalizedWeekStore`'s existing `RemoveByTagAsync` on every write
+      already covers invalidation once it wraps a store that writes blob too.
+      Also restricts `FinalizeWeek`'s cron to active months (Sept–Feb, not
+      Mar–Sept — the season opener usually falls inside September) so the
+      offseason costs zero invocations rather than a weekly no-op. Full
+      implementation in [`field-manual.md`](../docs/field-manual.md)'s T58
+      section; reasoning updates in **A16**.
 
 ---
 
