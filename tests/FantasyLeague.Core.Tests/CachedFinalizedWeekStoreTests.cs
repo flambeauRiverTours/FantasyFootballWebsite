@@ -15,7 +15,9 @@ namespace FantasyLeague.Core.Tests
         {
             var factory = new CountingContextFactory(Guid.NewGuid().ToString());
 
-            var inner = new SqlFinalizedWeekStore(factory, NullLogger<SqlFinalizedWeekStore>.Instance);
+            var sql = new SqlFinalizedWeekStore(factory, NullLogger<SqlFinalizedWeekStore>.Instance);
+            var blobFirst = new BlobFirstFinalizedWeekStore(
+                sql, new NullBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, TimeProvider.System);
 
             var cache = new ServiceCollection()
                 .AddHybridCache()
@@ -24,7 +26,7 @@ namespace FantasyLeague.Core.Tests
                 .GetRequiredService<HybridCache>();
 
             return (new CachedFinalizedWeekStore(
-                inner, cache, NullLogger<CachedFinalizedWeekStore>.Instance), factory);
+                blobFirst, cache, NullLogger<CachedFinalizedWeekStore>.Instance), factory);
         }
 
         private static TeamWeek Week(int week = 1, decimal ideal = 120m) =>

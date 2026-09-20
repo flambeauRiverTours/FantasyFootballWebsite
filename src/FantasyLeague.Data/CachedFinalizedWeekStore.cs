@@ -10,7 +10,7 @@ namespace FantasyLeague.Data
     /// <param name="inner">DB object for the finalized week</param>
     /// <param name="cache">Hybrid cache object</param>
     /// <param name="logger"></param>
-    internal sealed class CachedFinalizedWeekStore(SqlFinalizedWeekStore inner, HybridCache cache,
+    public sealed class CachedFinalizedWeekStore(BlobFirstFinalizedWeekStore inner, HybridCache cache,
         ILogger<CachedFinalizedWeekStore> logger) : IFinalizedWeekStore
     {
         private static readonly HybridCacheEntryOptions Finalized = new() { Expiration = TimeSpan.FromHours(6) };
