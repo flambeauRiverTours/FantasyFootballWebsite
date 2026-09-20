@@ -20,9 +20,24 @@ namespace FantasyLeague.Data
     ILogger<BlobFirstFinalizedWeekStore> logger,
     TimeProvider time) : IFinalizedWeekStore
     {
-        public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken ct) =>
-            await blob.ReadAsync(leagueId, season, ct)
-            ?? await sql.ReadAsync(leagueId, season, ct);
+        public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken ct)
+        {
+            var cached = await blob.ReadAsync(leagueId, season, ct);
+            if (cached is not null)
+            {
+                return cached;
+            }
+
+            var fromSql = await sql.ReadAsync(leagueId, season, ct);
+
+            //if blob wasn't populated, backfill it (if relevant season)
+            if (SanityCheckSeasonForBlob(season))
+            {
+                await blob.WriteAsync(leagueId, season, fromSql, ct);
+            }
+
+            return fromSql;
+        }
 
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken ct)
         {

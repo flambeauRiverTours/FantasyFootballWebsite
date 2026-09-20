@@ -634,10 +634,35 @@ during the NFL offseason, both to stop spending the SQL free tier's
 vCore-seconds on a wake nothing needs and to stop writing a blob that would
 just be overwritten unchanged the next active Tuesday. Expressed as a cron
 month restriction rather than an in-function guard, so the offseason costs
-zero invocations rather than one short one — see the **Watch out** in
-`field-manual.md`'s T58 section for why the boundary is March–August, not
-March–September as first framed: the season opener usually falls inside
-September, and excluding it would skip week 1's own finalize run.
+zero invocations rather than one short one. The boundary is **March–August**,
+not March–September as first framed: the season opener usually falls inside
+September (2026's is 2026-09-10), and excluding all of September from the
+cron's active months would have skipped week 1's own finalize run.
+
+(T58's step-by-step has since been cut from `field-manual.md`, per that
+document's own stated convention of removing what has shipped — this section
+is now where that reasoning lives.)
+
+### The blob only had one writer, and that was the bug — fixed 2026-09-21
+
+Reported after ship: the cold start A16 was meant to remove was still
+happening. Cause was structural, not a typo — `BlobFirstFinalizedWeekStore`
+only ever *wrote* the blob from `FinalizeWeek`'s Tuesday timer. Between a
+deploy and the next Tuesday, every request's `ReadAsync` found the blob empty,
+fell through to SQL exactly as designed, and then stopped — nothing about a
+read ever primed the blob, so every request paid the cold-start cost until
+Tuesday arrived, which is the routine case this task exists to remove.
+
+**`ReadAsync` now writes what it fell back to**, under the same
+`SanityCheckSeasonForBlob` gate the write path already used: a cold blob for
+the season in progress is populated from the SQL answer before it's returned,
+so the second request onward is a blob hit. A cold blob for a season outside
+that window (an old season, or the same season read from off-season code)
+still falls through without being cached — there is no "in-season Tuesday
+write" to mirror for it, so caching it would mean inventing a staleness
+story this task never needed. The result: the blob now self-heals from the
+first live request after a deploy, instead of sitting empty until the next
+scheduled write.
 
 ---
 
