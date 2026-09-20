@@ -162,9 +162,21 @@ h1 { font-size: var(--text-lg); font-weight: var(--weight-medium); }
 
 .panels { scroll-snap-type: y proximity; }
 
+/*
+ * Not `position: sticky`. A sticky panel taller than one screen has no way
+ * to reveal its own overflow: while "stuck" it is pinned at `top`, and it
+ * releases straight into the next panel without ever having scrolled through
+ * what didn't fit — the bottom of a tall panel is simply never on screen at
+ * any scroll position. A first fix tried capping it with max-height plus its
+ * own overflow-y: auto, which does make the overflow reachable in isolation,
+ * but nested inside `.panels`' own scroll-snap-type it raced the outer snap
+ * for wheel input and produced two visible scrollbars at once. Dropping
+ * sticky is what actually fixes it: with no `top` to pin to, the panel is a
+ * plain block that grows to fit its content, so nothing is ever hidden, and
+ * scroll-snap-align below still settles the page on each section's start —
+ * the snapping was never the problem, the pinning was.
+ */
 .panel {
-  position: sticky;
-  top: var(--masthead-h);
   min-height: calc(100svh - var(--masthead-h));
   scroll-snap-align: start;
   display: grid;
@@ -489,7 +501,7 @@ td.is-sorted { font-weight: var(--weight-medium); }
 
 @media (prefers-reduced-motion: reduce) {
   .panels { scroll-snap-type: none; }
-  .panel { position: static; min-height: 0; }
+  .panel { min-height: 0; }
 
   .chart path.series,
   .chart .series-label { transition: none; }

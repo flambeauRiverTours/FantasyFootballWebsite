@@ -81,6 +81,38 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public async Task A_cold_blob_during_the_season_is_primed_from_sql()
+        {
+            // T58: otherwise the blob sits empty from deploy until the first
+            // Tuesday finalize run — this is what makes it self-heal instead
+            var sql = SqlStore();
+            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], default);
+            var blob = new FakeBlobFinalizedWeekStore(stored: null);
+            var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
+
+            await store.ReadAsync(League, 2026, default);
+
+            blob.Written.Should().NotBeNull();
+            blob.Written.Should().ContainSingle();
+            blob.Written![0].Ideal.Should().Be(100m);
+        }
+
+        [Fact]
+        public async Task A_cold_blob_outside_the_season_is_not_primed()
+        {
+            // same gate as a write: don't plant a stale blob for a season
+            // nobody is actively polling
+            var sql = SqlStore();
+            await sql.WriteAsync(League, 2026, [Week()], default);
+            var blob = new FakeBlobFinalizedWeekStore(stored: null);
+            var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
+
+            await store.ReadAsync(League, 2026, default);
+
+            blob.Written.Should().BeNull();
+        }
+
+        [Fact]
         public async Task Nothing_anywhere_reads_back_empty_rather_than_null()
         {
             var store = new BlobFirstFinalizedWeekStore(
