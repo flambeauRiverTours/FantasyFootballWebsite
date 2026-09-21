@@ -442,3 +442,47 @@ put" while the next one slides up over them — a decorative effect, not a
 documented decision, so trading it for content that is always reachable was
 the right call.
 
+## Three real fixes in a row, and none of them was the actual bug
+
+**What happened.** A "still hitting 30-45s loads" report led to three
+separate, each individually correct and deployed, SQL fixes: `Connect
+Timeout=90` (the client was giving up before Azure SQL serverless finished
+resuming, D7), then `EnableRetryOnFailure` (a resumed-but-not-ready database
+answers with error 40613 rather than making the client wait, which a longer
+timeout does nothing about), then SqlClient OpenTelemetry instrumentation (to
+actually see what was happening instead of reverse-engineering it from
+scattered trace timestamps). All three shipped, all three were real
+improvements — and load times were still 40+ seconds afterward.
+
+The dependency telemetry from the *third* fix is what finally showed it:
+`Invalid column name 'SlotAveragesJson'`. `WeekScores.SlotAveragesJson` was
+added by the `AddSlotAveragesJson` migration when the radar chart shipped
+(2026-09-17) — and never applied to the production database. Every
+`WeekScores` query had been failing outright since then, unconditionally,
+warm or cold, cache populated or not. `SqlFinalizedWeekStore.ReadAsync`
+catches that (by design — "unreachable reads back empty") and falls back to
+a live Sleeper rebuild every time, which is the actual 40 seconds. **T58's
+blob cache was never once able to populate**, because the read it depends on
+was permanently broken, not intermittently slow — so no amount of tuning the
+connection layer underneath it was ever going to fix the symptom on top of
+it.
+
+**Rule:** when a fix that should work doesn't, check whether the layer
+*below* the one you just fixed is even reachable, before adding another fix
+to the same layer. A connection timeout, a retry policy and better telemetry
+are all reasonable hypotheses for "this database call is slow" — none of
+them are the right hypothesis for "this database call cannot succeed," and
+nothing about a slow failure versus a broken one is distinguishable from the
+outside (both just look like "the site is slow") until something logs the
+*actual* exception, not just its symptom. `dotnet ef migrations list`
+against the real target — not the design-time factory, not what's in
+`Migrations/` — takes ten seconds and would have shown `(Pending)` before any
+of the other three fixes were written.
+
+**Corollary:** a deferred task's stated reasoning is a claim about the world,
+not a permanent fact — it needs rechecking when the thing it assumed changes.
+T31 ("migrations in the pipeline") was deferred because "M6 doesn't need a
+column (§08)." M6 added one anyway. Nothing re-checked that assumption when
+M6 shipped, because deferring a task also defers ever asking again whether
+the reason still holds.
+
