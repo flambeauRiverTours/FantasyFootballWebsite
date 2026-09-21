@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
+using OpenTelemetry.Trace;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -17,6 +18,12 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
 {
     builder.Services.AddOpenTelemetry()
         .UseFunctionsWorkerDefaults()
+        // UseFunctionsWorkerDefaults only instruments HTTP; without this, a SQL
+        // connection attempt - including every retry EnableRetryOnFailure makes
+        // during a serverless auto-resume - is invisible in Application Insights
+        // except as whatever SqlFinalizedWeekStore's own catch block logs. No SQL
+        // text or parameters are captured by default - nothing to opt out of.
+        .WithTracing(tracing => tracing.AddSqlClientInstrumentation())
         .UseAzureMonitorExporter();
 }
 
