@@ -86,11 +86,10 @@ var excludedOwnerSettings = [
   }
 ]
 
-// no secret in it: Entra auth means there is no password to protect
 var sqlConnectionSettings = deploySql ? [
   {
     name: 'ConnectionStrings__FantasyLeague'
-    value: 'Server=tcp:${sqlName}${environment().suffixes.sqlServerHostname},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;'
+    value: 'Server=tcp:${sqlName}${environment().suffixes.sqlServerHostname},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;'
   }
 ] : []
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}'
