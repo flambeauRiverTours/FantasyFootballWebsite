@@ -62,10 +62,49 @@ jobs:
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
           done
 
+  # Apply pending EF Core migrations before the new code that expects
+  # them ships
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: infra
+    environment: production
+    env:
+      RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - run: dotnet tool install --global dotnet-ef --version 10.0.12
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Open firewall for runner
+        run: |
+          set -u
+          IP=$(curl -s https://api.ipify.org)
+          SQL_SERVER=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].name" -o tsv | tr -d '\r')
+          SQL_FQDN=$(az sql server show -g "$RESOURCE_GROUP" -n "$SQL_SERVER" --query fullyQualifiedDomainName -o tsv | tr -d '\r')
+          SQL_DB=$(az sql db list -g "$RESOURCE_GROUP" -s "$SQL_SERVER" --query "[?name!='master'].name | [0]" -o tsv | tr -d '\r')
+          {
+            echo "SQL_SERVER=$SQL_SERVER"
+            echo "SQL_FQDN=$SQL_FQDN"
+            echo "SQL_DB=$SQL_DB"
+          } >> "$GITHUB_ENV"
+          az sql server firewall-rule create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
+      - name: Apply migrations
+        env:
+          ConnectionStrings__FantasyLeague: "Server=tcp:${{ env.SQL_FQDN }},1433;Database=${{ env.SQL_DB }};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;"
+        run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Data
+      - name: Close firewall
+        if: always()
+        run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "gh-${{ github.run_id }}"
+
   functions:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: infra
+    needs: [infra, migrate]
     env:
       RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
     steps:
