@@ -215,12 +215,16 @@ clear what would and would not have input.
       once-per-season job does not need a permanent trigger surface in Azure.
       Register `AddFantasyData` behind a flag so the harness stays database-free
       by default.
-- [ ] **T31** Migrations in the pipeline — 2.5 h `±` · **nothing to migrate yet**
-      Not blocked, just not yet earning its keep: there is one migration and it is
-      applied. The risk of deferring is that the _next_ schema change gets applied
-      by hand and the step is never built. Worth doing the moment a second
-      migration exists — which M6 does not require, since the radar adds no
-      columns (§08).
+- [ ] **T31** Migrations in the pipeline — 2.5 h `±` · **no longer deferrable — see 2026-09-21**
+      Was deferred on "nothing to migrate yet, and M6 doesn't need a column
+      (§08)." Both halves of that turned out wrong: M6 shipped
+      `AddSlotAveragesJson` (`WeekScores.SlotAveragesJson`), and it sat
+      **unapplied in production for four days** with nobody noticing, because
+      nothing surfaced it as a deploy-blocking problem — it just made every
+      `WeekScores` query throw `Invalid column name 'SlotAveragesJson'` and
+      silently fall back to a live Sleeper rebuild on every request. Full
+      story in `tasks/lessons.md`. This is exactly the risk the original
+      deferral named; do this one next.
 
 ## Deferred · blob-mirrored finalized weeks — 2 h `±`
 
