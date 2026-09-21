@@ -21,8 +21,14 @@ namespace FantasyLeague.Data
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
+            // EnableRetryOnFailure: a serverless database's first connection after
+            // auto-pause doesn't make the caller wait, it replies immediately with
+            // error 40613 ("not currently available, retry later") while it wakes
+            // up in the background - a bigger Connect Timeout does nothing against
+            // that, only retrying with backoff does (D7, A16's cold-start follow-up).
             services.AddDbContextFactory<FantasyDataContext>(
-                options => options.UseSqlServer(connectionString));
+                options => options.UseSqlServer(connectionString,
+                    sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)));
 
             services.AddHybridCache();
 
