@@ -167,11 +167,11 @@ Deliberately last: cheap, taste-driven, easier to judge against real data.
 Cut the entire milestone and the site still does its job — listed separately so
 that cutting it is a decision rather than an omission.
 
-- [ ] **T51** Motion setup — 1 h · `LazyMotion`, `useReducedMotion` everywhere
-- [ ] **T52** Table layout animation — 1 h · a Sunday overtake physically slides
-- [ ] **T53** Chart reveal and transitions — 2 h `±`
-- [ ] **T54** Section transitions — 1 h
-- [ ] **T55** Football loader — 2.5 h
+- [x] **T51** Motion setup — 1 h · `LazyMotion`, `useReducedMotion` everywhere
+- [x] **T52** Table layout animation — 1 h · a Sunday overtake physically slides
+- [x] **T53** Chart reveal and transitions — 2 h `±`
+- [x] **T54** Radar/Bars transition — 1 h · retargeted from a section router that never existed; see field-manual.md
+- [x] **T55** Football loader — 2.5 h
 
 ---
 

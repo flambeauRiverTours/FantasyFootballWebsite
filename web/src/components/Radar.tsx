@@ -1,3 +1,5 @@
+import { m, useReducedMotion } from 'motion/react';
+
 export interface RadarProps {
   slots: string[];
   ratios: (number | null)[];
@@ -94,6 +96,8 @@ function AxisLabels({ slots, vertices }: { slots: string[]; vertices: Vertex[] }
 
 /* Radar control */
 export default function Radar({ slots, ratios, size, label }: RadarProps) {
+  const reduced = useReducedMotion();
+
   if (slots.length === 0 || size <= 0) return null;
 
   const vertices = computeVertices(slots, ratios);
@@ -111,10 +115,17 @@ export default function Radar({ slots, ratios, size, label }: RadarProps) {
       {/* spokes, drawn first so the shape sits above them */}
       <Spokes slots={slots} vertices={vertices} />
 
-      {/* the only thing on the drawing with a fixed meaning */}
+      {/* the only thing on the drawing with a fixed meaning - never animated */}
       <circle className="reference" cx={Center} cy={Center} r={R} />
 
-      <polygon className="shape" points={polygon} />
+      <m.polygon
+        className="shape"
+        points={polygon}
+        style={{ originX: '50%', originY: '50%' }}
+        initial={{ scale: reduced ? 1 : 0 }}
+        animate={{ scale: 1 }}
+        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 30 }}
+      />
 
       <UnmeasuredMarkers slots={slots} vertices={vertices} />
       <AxisLabels slots={slots} vertices={vertices} />
