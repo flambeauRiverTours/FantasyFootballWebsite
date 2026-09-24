@@ -486,3 +486,65 @@ column (§08)." M6 added one anyway. Nothing re-checked that assumption when
 M6 shipped, because deferring a task also defers ever asking again whether
 the reason still holds.
 
+## A field-manual task can describe a component that no longer exists
+
+T54 ("Section transitions") was converted from the original artifact and
+assumed a `Section` type and a `setSection` router — plausible for a tabbed
+app, but this site was never built that way. `App.tsx` mounts `StandingsPanel`,
+`ChartPanel` and `RadarPanel` as permanent siblings; `.panels { scroll-snap-type:
+y proximity }` (`index.css`) is what makes scrolling past one settle on the
+next. There was never a `Section` to switch, so `setSection` and `go()` had
+nothing to call.
+
+Wiring T51–T55 in on 2026-09-21 caught this before it became implemented
+code that referenced a function that didn't exist. The task was retargeted to
+the one real structural swap in the app — `RadarPanel`'s Radar/Bars toggle,
+which really does replace one SVG subtree with an unrelated one — and
+`field-manual.md` now says so explicitly (**Correction, 2026-09-21**) rather
+than silently rewriting the task and losing the record of what was wrong.
+
+**Rule:** before implementing a field-manual task written against the
+artifact conversion, check that the state/types/functions it names still
+exist in the actual component tree. `docs/design.md` and `field-manual.md`
+are corrected in place as errors are found (per `CLAUDE.md`), but a task
+nobody has built yet is exactly the kind of error that survives longest —
+nothing has exercised it to prove or disprove the premise.
+
+## Two T55 bugs that only showed up once someone actually watched it run
+
+Implementing the football loader from the manual (2026-09-21) surfaced two
+bugs that a read-through, a type-check and even the full test suite all
+missed, because neither is visible from source or from `vitest` — only from
+watching the thing render over time in a real browser.
+
+**The spin arcs read as a static ring, not a spiral.** The original recipe
+clipped four arcs to the ball's silhouette with endpoints at the ball's own
+top/bottom vertices. Near a vertex an ellipse pinches to almost nothing, so
+clipping there keeps only the sliver of each arc closest to the boundary —
+and because that sliver's curvature was close to the ellipse's own, it
+traced the ball's rim instead of crossing its face. This was invisible in the
+SVG source (the path data looks like an arc regardless of what clipping does
+to it) and untestable by `vitest` (`#boot` lives in `index.html`, outside
+anything jsdom renders) — it only showed up as a screenshot, and even then
+only once someone was looking for "does this look like a spiral" rather than
+"does the element with the right class exist."
+
+**The loader was never actually seen.** `#boot` was removed in a
+`useEffect(() => {...}, [])` — unconditionally, on React's first commit. That
+commit happens the moment the JS bundle has parsed, which is almost always
+under a second and has nothing to do with whether the season fetch (the
+actual multi-second wait, the SQL cold start from D7) has resolved. The
+loader was torn down before its own fade-in finished on every real load. This
+one was invisible for a sharper reason: it degrades silently. Nothing errors,
+nothing warns, the app just works — the loader simply never gets the
+several-second window it exists for, and the only way to notice is to watch
+a real cold start (or fake one) and realize the mascot never showed up.
+
+**Rule:** a piece of UI whose entire job is to be visible for a specific
+window of time — not just present in the DOM, but on-screen for the right
+few seconds — cannot be verified by type-checking, unit tests, or reading the
+diff. It has to be watched, with the slow case actually forced (a mocked
+fetch with a real delay, not a fast/failing one), because the two ways it can
+be wrong — the wrong shape, and the wrong timing — leave no trace anywhere
+except in what a viewer sees over time.
+

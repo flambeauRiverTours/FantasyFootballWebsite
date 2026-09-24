@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { flushSync } from 'react-dom';
 import type { SeasonPayload, TeamPayload } from '../api/types';
 import { useEnumQuery } from '../hooks/useEnumQuery';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
@@ -103,8 +104,14 @@ function Drawing({ team, view, slots, ratios, width, label }: DrawingProps) {
  */
 export default function RadarPanel({ payload }: RadarPanelProps) {
   // controls
-  const [view, setView] = useEnumQuery('view', Views);
+  const [view, setViewRaw] = useEnumQuery('view', Views);
   const [rawTeam, setTeam] = useQueryState('team', '');
+
+  // Do flush sync to handle a cross fade
+  function setView(next: View) {
+    if (!document.startViewTransition) return setViewRaw(next);
+    document.startViewTransition(() => flushSync(() => setViewRaw(next)));
+  }
 
   // chart state
   const [wrapper, width] = useMeasuredWidth<HTMLDivElement>();

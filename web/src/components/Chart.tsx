@@ -2,6 +2,7 @@ import { max, min } from 'd3-array';
 import { scaleLinear } from 'd3-scale';
 import type { ScaleLinear } from 'd3-scale';
 import { line } from 'd3-shape';
+import { AnimatePresence, m as Motion, useReducedMotion } from 'motion/react';
 import type { Point } from '../api/pointCalculation';
 
 export interface Series {
@@ -20,6 +21,7 @@ interface ChartProps {
   zeroBased?: boolean;
   label: string;
   yTitle?: string;
+  displayKey?: string;
 }
 
 type Scale = ScaleLinear<number, number>;
@@ -106,7 +108,9 @@ function SeriesLabels({ series, x, y, hovered }: { series: Series[]; x: Scale; y
 }
 
 /* Chart control */
-export default function Chart({ series, width, height, hovered = null, onHover, zeroBased = true, label, yTitle = '' }: ChartProps) {
+export default function Chart({ series, width, height, hovered = null, onHover, zeroBased = true, label, yTitle = '', displayKey = '' }: ChartProps) {
+  const reduced = useReducedMotion();
+
   if (width <= m.left + m.right || series.length === 0) return null;
 
   // extents
@@ -175,17 +179,23 @@ export default function Chart({ series, width, height, hovered = null, onHover, 
 
       <WeekAxis x={x} height={height} maxWeek={maxWeek} />
 
-      {/* lines */}
-      {ordered.map((s) => (
-        <path
-          key={s.rosterId}
-          className="series"
-          d={path(s.points) ?? undefined}
-          stroke={s.colour}
-          data-muted={hovered !== null && hovered !== s.rosterId}
-          data-raised={hovered === s.rosterId}
-        />
-      ))}
+      {/* crossfades when metrics are changed*/}
+      <AnimatePresence>
+        {ordered.map((s) => (
+          <Motion.path
+            key={`${s.rosterId}-${displayKey}`}
+            className="series"
+            d={path(s.points) ?? undefined}
+            stroke={s.colour}
+            data-muted={hovered !== null && hovered !== s.rosterId}
+            data-raised={hovered === s.rosterId}
+            initial={{ opacity: 0, pathLength: reduced ? 1 : 0 }}
+            animate={{ opacity: 1, pathLength: 1 }}
+            exit={{ opacity: 0 }}
+            transition={reduced ? { duration: 0 } : { duration: 0.8, ease: 'easeOut' }}
+          />
+        ))}
+      </AnimatePresence>
 
       <SeriesLabels series={series} x={x} y={y} hovered={hovered} />
 

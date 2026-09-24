@@ -208,6 +208,7 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
             hovered={hovered}
             onHover={setHovered}
             zeroBased={zeroBased}
+            displayKey={showSigma ? `sigma-${sigmaWindow}-${scale}` : `${mode}-${metric}`}
             label={describe(
               metric,
               mode,
