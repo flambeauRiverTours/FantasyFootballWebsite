@@ -400,7 +400,8 @@ td.is-sorted { font-weight: var(--weight-medium); }
 
 /* radar */
 
-.radar-wrap { width: 100%; display: flex; justify-content: center; }
+/* T54: scoped so the radar/bars swap crossfades on its own, not the whole viewport */
+.radar-wrap { width: 100%; display: flex; justify-content: center; view-transition-name: radar-drawing; }
 
 .radar { display: block; max-width: 100%; height: auto; }
 
