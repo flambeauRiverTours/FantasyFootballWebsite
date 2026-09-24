@@ -16,8 +16,17 @@ function valueOf(w: WeekPayload, metric: Metric): number {
     return metric === 'ideal' ? w.ideal : w.actual;
 }
 
+/**
+ * The API includes the current week from kickoff eve, at zero, before anyone
+ * has played. Plotted, that zero drops every per-week line to the floor and
+ * flattens every running total, so leave a week out until someone scores.
+ */
+function hasStarted(w: WeekPayload): boolean {
+    return w.isFinal || w.actual !== 0;
+}
+
 function ordered(weeks: WeekPayload[]): WeekPayload[] {
-    return [...weeks].sort((a, b) => a.week - b.week);
+    return weeks.filter(hasStarted).sort((a, b) => a.week - b.week);
 }
 
 /** Running total across the season. */

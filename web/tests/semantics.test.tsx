@@ -51,10 +51,16 @@ describe('StandingsPanel', () => {
     expect(sorted[0]).toHaveAttribute('aria-sort', 'descending');
   });
 
-  it('tags the ideal column on the header and every body cell', () => {
+  it('tags the gap column on the header and every body cell', () => {
     const { container } = render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
-    expect(container.querySelectorAll('th.col-ideal')).toHaveLength(1);
-    expect(container.querySelectorAll('td.col-ideal')).toHaveLength(teams.length);
+    expect(container.querySelectorAll('th.col-gap')).toHaveLength(1);
+    expect(container.querySelectorAll('td.col-gap')).toHaveLength(teams.length);
+  });
+
+  it('puts gap next to points, then ideal', () => {
+    render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers.slice(0, 4)).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
   });
 
   it('puts the table in its own scroll container', () => {
@@ -65,9 +71,9 @@ describe('StandingsPanel', () => {
   it('renders an em dash, never a zero, for the leader gap', () => {
     render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
     const rows = screen.getAllByRole('row').slice(1);
-    const cells = within(rows[0]).getAllByRole('cell');
-    expect(cells.at(-1)).toHaveTextContent('—');
-    expect(within(rows[1]).getAllByRole('cell').at(-1)).toHaveTextContent('−');
+    const gap = (row: HTMLElement) => row.querySelector('td.col-gap');
+    expect(gap(rows[0])).toHaveTextContent('—');
+    expect(gap(rows[1])).toHaveTextContent('−');
   });
 
   it('keeps one heading and no table when there is nothing to show', () => {

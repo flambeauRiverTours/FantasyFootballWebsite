@@ -548,3 +548,22 @@ fetch with a real delay, not a fast/failing one), because the two ways it can
 be wrong — the wrong shape, and the wrong timing — leave no trace anywhere
 except in what a viewer sees over time.
 
+## A deploy check that reads whatever is live cannot prove the new thing shipped
+
+The M7 deploy (#52) failed on `The deployed site is the built bundle` with a bare
+`curl: (22) ... 404`, 130 ms after SWA reported "Deployment Complete". The site
+was fine seconds later. The step retried the `index.html` fetch, which never
+fails mid-swap (it just returns whichever version the edge has), and did not
+retry the asset fetch, which is the one that can 404 while SWA swaps content in.
+
+Worse, the step took whatever `index.html` was live and checked *its* asset. On
+a slow swap that is the previous deploy's bundle, so a green run never proved the
+new one had landed.
+
+**Rule:** a post-deploy check should wait for the artefact *this job built*, by
+something that identifies it (here the hashed asset name in `web/dist/index.html`),
+rather than checking whatever happens to be live. Put the retry on the request that
+can actually fail. And when a step has several `curl -f` calls, work out which one
+failed from what the log does *not* show (no retry warnings, no `::error::` line)
+before changing anything; here that ruled out two of the three suspects.
+

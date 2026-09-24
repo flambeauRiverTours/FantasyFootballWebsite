@@ -50,6 +50,26 @@ describe('perWeek', () => {
   });
 });
 
+describe('the current week', () => {
+  const unplayed = weeks([1, 100, 120, true], [2, 50, 60, true], [3, 0, 0, false]);
+
+  it('is left off the chart until someone scores', () => {
+    expect(perWeek(unplayed).map((p) => p.week)).toEqual([1, 2]);
+    expect(cumulative(unplayed).map((p) => p.week)).toEqual([1, 2]);
+    expect(cumulative(unplayed, 'ideal').map((p) => p.week)).toEqual([1, 2]);
+  });
+
+  it('appears once points are on the board', () => {
+    const live = weeks([1, 100, 120, true], [2, 50, 60, true], [3, 12.4, 20, false]);
+    expect(perWeek(live).map((p) => p.value)).toEqual([100, 50, 12.4]);
+  });
+
+  it('keeps a finished week that genuinely scored zero', () => {
+    const zero = weeks([1, 100, 120, true], [2, 0, 0, true]);
+    expect(perWeek(zero).map((p) => p.value)).toEqual([100, 0]);
+  });
+});
+
 describe('weeklyMedians', () => {
   it('ignores weeks nobody has played', () => {
     const teams = [
