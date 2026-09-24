@@ -184,14 +184,26 @@ jobs:
             fi
           fi
 
-          # SWA takes a little while to swap the upload in
-          curl -fsS --retry 10 --retry-all-errors --retry-delay 6 "$SITE" -o index.html
-          grep -q "/assets/" index.html
+          # SWA keeps serving the previous index.html for a while after the
+          # upload reports complete, and mid-swap it can hand out an index
+          # whose asset 404s. So wait for the asset this job just built, rather
+          # than checking whichever index is live - that could be the old one
+          expected=$(grep -o "/assets/[^\"]*[.]js" web/dist/index.html | head -1)
+          test -n "$expected"
+          for _ in $(seq 1 20); do
+            if curl -fsS "$SITE" -o index.html && grep -qF "$expected" index.html; then break; fi
+            sleep 6
+          done
+          if ! grep -qF "$expected" index.html; then
+            echo "::error::$SITE never served the new bundle ($expected)"
+            exit 1
+          fi
           if grep -q "/src/" index.html; then echo "::error::$SITE serves source, not the bundle"; exit 1; fi
 
-          asset=$(grep -o "/assets/[^\"]*[.]js" index.html | head -1)
-          test -n "$asset"
-          curl -fsS "$SITE$asset" | grep -qF "$API"
+          if ! curl -fsS --retry 5 --retry-all-errors --retry-delay 3 "$SITE$expected" | grep -qF "$API"; then
+            echo "::error::$SITE$expected is missing or was not built against $API"
+            exit 1
+          fi
 
           #/api swallowed by the fallback is 200 + HTML; a 404 is the exclude
           #working, and SWA's own 404 page is HTML too

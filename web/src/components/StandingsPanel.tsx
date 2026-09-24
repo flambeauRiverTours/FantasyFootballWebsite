@@ -40,14 +40,14 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
               <tr>
                 <th scope="col">Team</th>
                 <th scope="col" aria-sort="descending">Points</th>
+                <th scope="col" className="col-gap">Gap</th>
+                <th scope="col">Ideal</th>
                 {mark ? (
                   <th scope="col">
                     <span className="symbol">σ</span>
                     <span className="th-note">through wk {finalThroughWeek}</span>
                   </th>
                 ) : null}
-                <th scope="col" className="col-ideal">Ideal</th>
-                <th scope="col">Gap</th>
               </tr>
             </thead>
             <tbody>
@@ -55,6 +55,12 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
                 <m.tr layout key={team.rosterId} transition={{ type: 'spring', stiffness: 400, damping: 40 }}>
                   <td>{team.name}</td>
                   <td className="is-sorted">{team.totals.actual.toFixed(1)}</td>
+                  <td className="muted col-gap">
+                    {team.totals.actual === leader
+                      ? '—'
+                      : `−${(leader - team.totals.actual).toFixed(1)}`}
+                  </td>
+                  <td>{team.totals.ideal.toFixed(1)}</td>
                   {mark ? (
                     <td>
                       {hasConsistency(team.totals) ? (
@@ -64,12 +70,6 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
                       )}
                     </td>
                   ) : null}
-                  <td className="col-ideal">{team.totals.ideal.toFixed(1)}</td>
-                  <td className="muted">
-                    {team.totals.actual === leader
-                      ? '—'
-                      : `−${(leader - team.totals.actual).toFixed(1)}`}
-                  </td>
                 </m.tr>
               ))}
             </tbody>

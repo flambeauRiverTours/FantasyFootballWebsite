@@ -6,7 +6,10 @@ interface SkeletonProps {
 }
 
 const Rows = [0, 1, 2, 3, 4];
-const Columns = ['Team', 'Points', 'Ideal', 'Gap'];
+const Columns = ['Team', 'Points', 'Gap', 'Ideal'];
+
+// matches StandingsPanel, so nothing jumps when the real table replaces this
+const className = (c: string) => (c === 'Gap' ? 'col-gap' : undefined);
 
 /*Skeleton of StandingsPanel that's shown while loading */
 export default function Skeleton({ coldStart = false }: SkeletonProps) {
@@ -19,7 +22,7 @@ export default function Skeleton({ coldStart = false }: SkeletonProps) {
                         <thead>
                             <tr>
                                 {Columns.map((c) => (
-                                    <th key={c} scope="col">
+                                    <th key={c} scope="col" className={className(c)}>
                                         {c}
                                     </th>
                                 ))}
@@ -29,7 +32,7 @@ export default function Skeleton({ coldStart = false }: SkeletonProps) {
                             {Rows.map((r) => (
                                 <tr key={r}>
                                     {Columns.map((c) => (
-                                        <td key={c}>
+                                        <td key={c} className={className(c)}>
                                             <span />
                                         </td>
                                     ))}
