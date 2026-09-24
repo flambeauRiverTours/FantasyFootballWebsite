@@ -478,7 +478,7 @@ td.is-sorted { font-weight: var(--weight-medium); }
 
 @media (max-width: 40rem) {
   th, td { padding: var(--space-2); }
-  .col-ideal { display: none; }
+  .col-gap { display: none; }
   .masthead p { display: none; }
   .segmented { display: flex; width: 100%; }
   .segmented button { flex: 1; }
