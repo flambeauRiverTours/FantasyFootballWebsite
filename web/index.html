@@ -8,23 +8,9 @@
     <meta name="theme-color" content="#111317" media="(prefers-color-scheme: dark)" />
     <title>Bosty Base Fantasy Football</title>
     <style>
-      /* T55: has to paint before the bundle has loaded, so it can't be a
-         React component - self-contained, no dependency on src/index.css.
-         Colours mirror the theme-color meta tags above.
-
-         No background fill: #boot used to be an opaque full-screen overlay,
-         but that meant the ball sat on top of (and hid) Skeleton, which is
-         its own useful loading state once React has mounted. #boot is now
-         just a transparent positioning context - the ball is the only thing
-         painted, everything else shows through underneath. No copy of its
-         own: Skeleton's title already says "Waking the database..." on a
-         slow load, and saying it twice a few pixels apart looked sloppy. */
+      /* Overlay when loading to show the ball*/
       #boot {
-        /* where the arc is centred: halfway between the masthead's bottom
-           and the top of the Skeleton's title. App.tsx measures both and
-           overwrites this once React has mounted; this is only the estimate
-           for the moment before that, assuming the Skeleton (measured at
-           283px tall, phone and desktop alike) centred under the masthead */
+        /* THe arc is centered halfway between the masthead's bottom and the top of the Skeleton's title.*/
         --boot-mid: calc(4rem + (100svh - 4rem - 283px) / 4);
         position: fixed;
         inset: 0;
@@ -44,21 +30,7 @@
 
       @keyframes boot-fadein { to { opacity: 1; } }
 
-      /* the ball: a throw from edge to edge of the viewport, in the band
-         just below the masthead (--masthead-h in src/index.css is 4rem -
-         duplicated here rather than imported, per the note above).
-
-         `left` carries the horizontal edge-to-edge travel (percentages on a
-         `position: fixed` box resolve against the viewport); `translate` and
-         `scale` are animated separately from it and from each other, as
-         individual CSS properties rather than packed into one `transform`,
-         so none of the three animations can stomp on another's value.
-
-         The ball's centre swings 18px either side of --boot-mid (19.2px is
-         half the 64px-wide ball's height), so the arc's midpoint sits on it
-         exactly. max() is the floor for short viewports, where the midpoint
-         would be too close to the masthead: at the peak the ball's top edge
-         is never higher than 4rem + 8px. */
+      /* Ball arcs from side to side*/
       #boot .ball {
         position: absolute;
         top: max(calc(4rem + 26px), calc(var(--boot-mid) - 19.2px));
@@ -88,16 +60,7 @@
         100% { scale: 1 1; }
       }
 
-      /* spin: a spiral turns the ball about its long axis, which barely
-         changes the silhouette - so the laces carry it instead. They roll up
-         from the bottom rim, over the face, and away over the top, then
-         spend the other half-turn on the far side, out of sight.
-
-         Keyframes sample a real rotation: at angle t the laces sit at
-         y = -6.5 sin t and are foreshortened to scaleY(cos t), so they move
-         fastest and are fullest across the middle, and flatten to nothing at
-         the rim. The clip lives on the parent <g>, which doesn't move, so
-         the ball's outline stays put while the laces pass under its edge. */
+      /*  spiral turns the ball about its long axis*/
       #boot .laces {
         transform-box: fill-box;
         transform-origin: center;
@@ -138,8 +101,7 @@
     <div id="boot" role="status" aria-live="polite">
       <svg class="ball" viewBox="0 0 40 24" aria-hidden="true">
         <defs>
-          <!-- two cubics meeting at slightly pointed ends: a plain ellipse
-               read too round. Same 22 x 13.6 box, so everything sized to it holds -->
+          <!-- two cubics meeting at slightly pointed ends - makes a football-->
           <path id="boot-shape" d="M9 12 C11.5 2.93 28.5 2.93 31 12 C28.5 21.07 11.5 21.07 9 12Z" />
           <clipPath id="boot-skin">
             <use href="#boot-shape" />
