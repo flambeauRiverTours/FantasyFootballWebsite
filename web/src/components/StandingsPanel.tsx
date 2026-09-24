@@ -1,5 +1,6 @@
 import { extent } from 'd3-array';
 import { scaleLinear } from 'd3-scale';
+import { m } from 'motion/react';
 import { hasConsistency } from '../api/types';
 import type { TeamPayload } from '../api/types';
 import Panel from './Panel';
@@ -51,7 +52,7 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
             </thead>
             <tbody>
               {ranked.map((team) => (
-                <tr key={team.rosterId}>
+                <m.tr layout key={team.rosterId} transition={{ type: 'spring', stiffness: 400, damping: 40 }}>
                   <td>{team.name}</td>
                   <td className="is-sorted">{team.totals.actual.toFixed(1)}</td>
                   {mark ? (
@@ -69,7 +70,7 @@ export default function StandingsPanel({ teams, finalThroughWeek }: StandingsPan
                       ? '—'
                       : `−${(leader - team.totals.actual).toFixed(1)}`}
                   </td>
-                </tr>
+                </m.tr>
               ))}
             </tbody>
           </table>
