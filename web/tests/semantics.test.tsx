@@ -143,6 +143,28 @@ describe('ChartPanel', () => {
     expect(container.querySelectorAll('.chip')).toHaveLength(3);
   });
 
+  it('plots the current week for every team as soon as any team has scored', () => {
+    const withWeek3 = (alphaScore: number) => ({
+      ...payload,
+      teams: payload.teams.map((t) => ({
+        ...t,
+        weeks: [
+          ...t.weeks,
+          { week: 3, actual: t.name === 'Alpha' ? alphaScore : 0, ideal: 0, isFinal: false },
+        ],
+      })),
+    });
+    const pointsPerLine = (c: HTMLElement) =>
+      [...c.querySelectorAll('path.series')].map((p) => (p.getAttribute('d') ?? '').split('L').length);
+
+    const before = render(<ChartPanel payload={withWeek3(0)} />);
+    expect(pointsPerLine(before.container)).toEqual([2, 2, 2]);
+    before.unmount();
+
+    const after = render(<ChartPanel payload={withWeek3(12.4)} />);
+    expect(pointsPerLine(after.container)).toEqual([3, 3, 3]);
+  });
+
   it('describes the chart for a screen reader', () => {
     render(<ChartPanel payload={payload} />);
     const img = screen.getByRole('img');
