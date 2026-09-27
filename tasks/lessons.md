@@ -567,3 +567,17 @@ can actually fail. And when a step has several `curl -f` calls, work out which o
 failed from what the log does *not* show (no retry warnings, no `::error::` line)
 before changing anything; here that ruled out two of the three suspects.
 
+## "The current week" is a league-wide fact, so decide it once for everyone
+
+#53 left an unplayed current week off the chart by checking each team's own
+week in `ordered()`. That hid the week for a team still on zero while showing it
+for a team that had scored, so on a Thursday night one line ran to week N and
+the rest stopped at N−1. The rule was meant to be "has this week started",
+which is a question about the whole league, not about one roster.
+
+**Rule:** when a display rule is phrased in terms of *the* week, *the* season or
+*the* league, compute it across all teams first (`startedWeeks(teams)`), then
+apply the same answer to every series. A per-series helper that only sees one
+team's data can't answer a league-wide question, and it fails quietly, as
+lines of different lengths rather than an error.
+

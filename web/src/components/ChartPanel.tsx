@@ -6,6 +6,7 @@ import {
   cumulative,
   perWeek,
   sigmaSeries,
+  startedWeeks,
   vsMedian,
   weeklyMedians,
 } from '../api/pointCalculation';
@@ -136,11 +137,13 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
 
   // data
   const medians = useMemo(() => weeklyMedians(payload.teams, metric), [payload.teams, metric]);
-  const series = toSeries(payload.teams, (weeks) =>
-    showSigma
+  const started = useMemo(() => startedWeeks(payload.teams), [payload.teams]);
+  const series = toSeries(payload.teams, (all) => {
+    const weeks = all.filter((w) => started.has(w.week));
+    return showSigma
       ? sigmaSeries(weeks, sigmaWindow === 'rolling', scale === 'cv')
-      : pointsFor(mode, metric, weeks, medians),
-  );
+      : pointsFor(mode, metric, weeks, medians);
+  });
   const visible = series.filter((s) => shown.has(s.rosterId));
 
   return (
