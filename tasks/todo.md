@@ -54,7 +54,7 @@ GitHub to Entra with no secret in the repo, and three workflows.
 | T21     | GitHub to Entra OIDC                         | done — needed immutable-ID subjects                                                                             |
 | T22     | `ci.yml`                                     | done — build, test, format, vulnerable packages, plus a bicep what-if job. No vite build; `web/` arrives at T32 |
 | T23     | `deploy.yml`                                 | done — infra, then functions with SBOM and scan, then a smoke test. `web` job stubbed until T32                 |
-| T24     | CORS and first deploy shakeout               | **in progress**                                                                                                 |
+| T24     | CORS and first deploy shakeout               | done — verification pass run 2026-10-05, after the #58 deploy                                                  |
 
 ### T24 · what is left
 
@@ -64,14 +64,26 @@ allowed — production origin only, decided rather than discovered. `devOrigins`
 exists as a bicep parameter, empty by default, for front-end development against
 the deployed API when T32 needs it.
 
-- [ ] Run the full verification pass after the next green deploy. The runbook is
-      in the field manual under **T24**.
+- [x] Run the full verification pass after the next green deploy. **Done 2026-10-05**,
+      after the #58 deploy. The runbook was cut from the field manual with the
+      other finished tasks; it survives in `git show f54bacb:docs/field-manual.md`.
+      All passed: the API answers (week 4, five teams), A1 holds, `max-age=5` and a
+      weak ETag, a conditional request gets 304, CORS allows the SWA and the custom
+      domain and refuses anything else, the stored map is 840,735 bytes, no
+      exceptions in seven days, and no failed requests bar one `favicon.ico` 404.
+      Spend: $0.02 of the $1 budget five days into October (see F8).
 - [x] `AZURE_STATIC_WEB_APPS_API_TOKEN` is set and the `web` job deploys with
       it. The first value stored was the literal `$(az ...)` command string,
       because `$( )` is not substitution in cmd.
-- [ ] Confirm on a **second** cold start that the log says "Adopted the stored
+- [x] Confirm on a **second** cold start that the log says "Adopted the stored
       player map" rather than "Refreshing player map from Sleeper API". This is
       the only evidence A12 solved the problem rather than moving it.
+      **Confirmed 2026-10-05, without forcing a restart:** since 2026-09-13, starts
+      adopted the stored map 280 times. Sleeper was fetched 24 times: 23 by the daily
+      09:30 timer, and once, almost certainly the very first start, before anything
+      was stored. Two traps hit on the way: `az monitor app-insights query` only
+      looks back 24 hours whatever the query says (use the Log Analytics REST API,
+      as the runbook does), and `kind` is a reserved word in KQL.
 
 ---
 
@@ -215,7 +227,7 @@ clear what would and would not have input.
       once-per-season job does not need a permanent trigger surface in Azure.
       Register `AddFantasyData` behind a flag so the harness stays database-free
       by default.
-- [ ] **T31** Migrations in the pipeline — 2.5 h `±` · **no longer deferrable — see 2026-09-21**
+- [x] **T31** Migrations in the pipeline — 2.5 h `±` · **done in #45** — the `migrate` job has passed on every deploy since, last on #58 (2026-10-05)
       Was deferred on "nothing to migrate yet, and M6 doesn't need a column
       (§08)." Both halves of that turned out wrong: M6 shipped
       `AddSlotAveragesJson` (`WeekScores.SlotAveragesJson`), and it sat
@@ -282,6 +294,11 @@ Nothing here blocks anything.
       environment variable instead. Both keep the id out of the repo, so this is
       a documentation mismatch rather than a leak.
 
+- [ ] **F8 · Spend is not quite $0.00.** $0.021 five days into October, so about
+      $0.13 a month. Far under the $1 budget, but the design and README say
+      $0.00 steady state. Find the meter in Cost Analysis (storage transactions or
+      egress are the likely ones), then fix it or amend the claim.
+
 F3 (the client timeout) was resolved and is recorded in `amendments.md`.
 
 ## Blocked on the season
@@ -302,6 +319,15 @@ Each is one command once the date passes:
 export SLEEPER_LEAGUE_ID=...          # never committed; see A2
 python scripts/capture_fixtures.py    # every completed week
 ```
+
+**B1, B2 and B5 done 2026-10-05.** Weeks 1–3 captured after each had finalized,
+replacing the mid-week-1 capture. Every roster has real points, and every
+roster's starters sum to its total to the cent. Two binding tests had pinned
+numbers from the partial week (19 players per roster, roster 1 on 16.92); they
+now assert what always holds instead. The `ideal >= actual` test runs once per
+captured week file and requires at least one genuine `ideal > actual` gap per
+week (B5). 324 tests pass. `starters[i]` alignment re-checked: 191 of 191.
+B3 and B4 remain.
 
 Then re-run the suite. `A_roster_short_at_a_position_leaves_that_slot_empty`
 pins per-roster fill counts from the week-1 capture and will need its expected
