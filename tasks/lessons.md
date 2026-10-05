@@ -275,11 +275,323 @@ hit on the document that contained the same command.
 carry a check that fails loudly in the wrong one. Capture into a variable, assert
 something about it (`[ "${#TOKEN}" -ge 100 ]`), and only then write it. The same
 applies to a trailing carriage return: `$( )` strips a trailing newline but not a
-``, so pipe through `tr -d '
+``, so pipe through `tr -d '
 '` on Windows before storing anything.
 
 **Corollary:** this is the third failure in this project caused by a masked value
 making an error unactionable. Any gate that compares against a secret should
 report what it can safely say — length, line numbers, the variable's name — and
 never just "something matched".
+
+
+## CSS that removes a box removes everything attached to the box
+
+**What happened:** I proposed `display: contents` on `.masthead .panel-inner` to
+flatten a wrapper into a flex row. It worked — and silently discarded that
+element's `max-width: 64rem`, `margin-inline: auto` and side padding, so the
+masthead ran full-bleed with a flush-left title while every panel below it stayed
+centred at 64 rem. The reported symptom was "padding in the masthead is off".
+
+**Rule:** `display: contents` is not a layout adjustment, it is a deletion of the
+element's box. Anything that box was carrying — width constraints, padding,
+background, border — goes with it. To make a wrapper's children into a row, put
+the row on the wrapper. Reach for `display: contents` only when the wrapper is
+purely structural and styles nothing.
+
+## Measure before diagnosing a layout bug
+
+**What happened:** A horizontal scrollbar was reported as "width computation of
+table is off". Two plausible table-level causes came to mind. Measuring in the
+browser showed `panel-inner w=807` against `clientWidth 775`, while the table was
+already at 775 — the table had been collapsing correctly the whole time, and the
+overflow was `width: 100%` plus padding under a missing `box-sizing` reset.
+
+**Rule:** For any overflow, list the elements whose `getBoundingClientRect().right`
+exceeds `documentElement.clientWidth` before forming a theory. The first
+overflowing element in document order is the cause; everything after it is a
+symptom. Guessing from a screenshot picks the most visually prominent element,
+which is usually one of the symptoms.
+
+**Corollary:** a stylesheet with no `box-sizing: border-box` reset has a latent
+overflow in every `width: 100%` element that also has padding. Check for the
+reset before debugging any individual one.
+
+## `Function` as a type is an opt-out from type checking
+
+**What happened:** A prop typed `scalingFunction: Function` accepted any
+arguments and returned `any`. The only error the compiler could still report was
+a prop-name mismatch; the arithmetic built on its `any` return was unchecked.
+
+**Rule:** Never `Function`. Type a callback by its signature — `(v: number) =>
+number` — or by the library's own type. The same applies to `object` and to a
+bare `any` in a prop: a single loose type at a component boundary silently
+unchecks everything downstream of it.
+
+## Truthiness is not a null check on a number
+
+**What happened:** `totals.min ? totals.min : -1` was written to handle a
+nullable figure. `0` is falsy, so a legitimate zero score would have been
+replaced by a sentinel and drawn off the edge of the chart.
+
+**Rule:** For a nullable number use `??`, never `?:` or `||`. Better, make the
+null unreachable: if a type guard already exists, export the narrowed type and
+have the component demand it, so there is no fallback to get wrong.
+
+## `! cmd` under `set -e` is not a guard
+
+**What happened:** `! grep -q "/src/" dist/index.html` was used to assert the
+built bundle does not reference source. POSIX exempts a command prefixed with
+`!` from `errexit`, so when the grep *succeeds* — source is present, the exact
+regression the line exists to catch — the script continues and the step exits 0.
+It only works when the `!` command is the last statement, whose status becomes
+the step's status. Two of the four such guards in this repo were inert;
+shellcheck flags it as SC2251 and had never been run.
+
+**Rule:** Write negative assertions as `if cmd; then echo "::error::…"; exit 1; fi`.
+Prove a new gate fails by feeding it the bad input once, before trusting it.
+
+**Corollary:** run `actionlint` with `shellcheck` on `$PATH`. Without shellcheck
+present, actionlint silently disables the rule and reports zero errors, so a
+green run means less than it looks.
+
+## `environment:` on a job changes its OIDC subject
+
+**What happened:** Adding `environment: production` to the deploy's `infra` job
+broke `azure/login` with `AADSTS700213`. GitHub replaces the ref segment of the
+subject claim rather than appending to it — `…:ref:refs/heads/main` became
+`…:environment:production` — and no federated credential matched. Jobs in the
+same workflow with no `environment:` were unaffected, which is why only one of
+three jobs failed.
+
+**Rule:** A federated credential authorises one subject shape. Adding
+`environment:`, changing a branch, or moving a trigger between `push` and
+`pull_request` each mint a different subject and each need their own credential.
+Before changing any of those, read the intended subject out of the workflow log —
+`azure/login` prints it under "Federated token details" — and check it against
+`az ad app federated-credential list` rather than assuming the existing one
+covers it.
+
+## Workspace-based App Insights caps on the workspace
+
+**What happened:** A cost check read `properties.DailyCapGb` off the Application
+Insights component and got `100`, which looked like the 0.16 GB cap had never
+been applied. The bicep was correct: a workspace-based component ingests through
+Log Analytics, so the cap is `workspaceCapping.dailyQuotaGb` on the workspace.
+The component's own `DailyCapGb` is the classic-mode default and controls
+nothing.
+
+**Rule:** For any Azure setting that exists on two resources in a chain, verify
+on the resource that actually enforces it, not the one that names it. Reading the
+value back is not proof unless you read it from the right place.
+
+**Corollary:** `az ... -o tsv` lowercases booleans and emits CRLF on Windows.
+`useFreeLimit` comes back as `true\r`, so a comparison against `True` fails
+against a correctly configured resource. Pipe through `tr -d '\r'` and compare
+case-insensitively.
+
+## A sticky panel taller than one screen hides its own overflow
+
+**What happened:** `ChartPanel`'s content (sigma window/scale controls, a wider
+team-chip row, a tall aspect-ratio chart) grew past one viewport's height.
+`.panel` is `position: sticky; top: var(--masthead-h)` with no `max-height`, so
+nothing clipped it and nothing looked wrong in the CSS. In the browser: the
+panel pins at `top` the moment it's reached, and stays pinned — while pinned,
+the page scrolling does not reveal any more of a sticky element's own box, only
+the top slice that fits between `top` and the viewport bottom. Continued
+scrolling doesn't creep through the rest of the panel; it does nothing
+visually until the panel's bottom passes the pin point, at which moment it
+releases all at once into the next panel. Net effect: the bottom portion of an
+over-height sticky panel is never on screen at any scroll position — not
+clipped, not letterboxed, genuinely unreachable.
+
+Ruled out first, both wrongly suspected: `#chart .chart { max-height: 70svh }`
+(confirmed via a `getBoundingClientRect` probe that the SVG's own
+`preserveAspectRatio="xMidYMid meet"` default letterboxes rather than crops —
+harmless), and sticky-panel overlap (confirmed via a plain two-panel repro that
+normal document flow never overlaps a sticky element with a later sibling).
+Neither produced the reported symptom; only a repro with content genuinely
+taller than the viewport, scrolled and measured, showed the real mechanism.
+
+**Rule:** `position: sticky` on an element whose height can exceed its
+scrolling context does not make that overflow reachable by scrolling — sticky
+freezes visually the instant it pins, and unpins in one jump. Test this class
+of bug by making content deliberately taller than the container and scrolling
+through it, not by reading the CSS and reasoning about a single screen size.
+
+**First fix was wrong, and passed its own test anyway.** Capping the panel
+with `max-height` plus its own `overflow-y: auto` does make the overflow
+reachable — confirmed in an isolated repro of just `.panel` and its content.
+Applied to the real page, nested inside `.panels`' own `scroll-snap-type: y
+proximity`, it produced two visible scrollbars and the outer snap container
+still won the race for wheel input, advancing to the next section before the
+inner one finished — the same content-goes-missing bug, now with an ugly
+double scrollbar on top. **An isolated repro proves a fix works in isolation,
+not in the page it has to share a scroll container with.** The tell was in
+the diagnosis, missed the first time: the bug was never really about the
+`.panel` in isolation, it was about `position: sticky` specifically, and any
+fix that kept sticky was always going to have to fight the ancestor's
+scroll-snap for the scroll gesture.
+
+**Actual fix: drop `position: sticky` from `.panel` entirely.** With no `top`
+to pin to, the panel is an ordinary block that grows to fit its content —
+nothing is ever hidden, no inner scroll container is needed, and
+`scroll-snap-align: start` on its own (no sticky involved) still settles the
+page on each section's start once scrolling stops. The scroll-snap was never
+the problem; only the sticky pin was. Cost: panels no longer visually "stay
+put" while the next one slides up over them — a decorative effect, not a
+documented decision, so trading it for content that is always reachable was
+the right call.
+
+## Three real fixes in a row, and none of them was the actual bug
+
+**What happened.** A "still hitting 30-45s loads" report led to three
+separate, each individually correct and deployed, SQL fixes: `Connect
+Timeout=90` (the client was giving up before Azure SQL serverless finished
+resuming, D7), then `EnableRetryOnFailure` (a resumed-but-not-ready database
+answers with error 40613 rather than making the client wait, which a longer
+timeout does nothing about), then SqlClient OpenTelemetry instrumentation (to
+actually see what was happening instead of reverse-engineering it from
+scattered trace timestamps). All three shipped, all three were real
+improvements — and load times were still 40+ seconds afterward.
+
+The dependency telemetry from the *third* fix is what finally showed it:
+`Invalid column name 'SlotAveragesJson'`. `WeekScores.SlotAveragesJson` was
+added by the `AddSlotAveragesJson` migration when the radar chart shipped
+(2026-09-17) — and never applied to the production database. Every
+`WeekScores` query had been failing outright since then, unconditionally,
+warm or cold, cache populated or not. `SqlFinalizedWeekStore.ReadAsync`
+catches that (by design — "unreachable reads back empty") and falls back to
+a live Sleeper rebuild every time, which is the actual 40 seconds. **T58's
+blob cache was never once able to populate**, because the read it depends on
+was permanently broken, not intermittently slow — so no amount of tuning the
+connection layer underneath it was ever going to fix the symptom on top of
+it.
+
+**Rule:** when a fix that should work doesn't, check whether the layer
+*below* the one you just fixed is even reachable, before adding another fix
+to the same layer. A connection timeout, a retry policy and better telemetry
+are all reasonable hypotheses for "this database call is slow" — none of
+them are the right hypothesis for "this database call cannot succeed," and
+nothing about a slow failure versus a broken one is distinguishable from the
+outside (both just look like "the site is slow") until something logs the
+*actual* exception, not just its symptom. `dotnet ef migrations list`
+against the real target — not the design-time factory, not what's in
+`Migrations/` — takes ten seconds and would have shown `(Pending)` before any
+of the other three fixes were written.
+
+**Corollary:** a deferred task's stated reasoning is a claim about the world,
+not a permanent fact — it needs rechecking when the thing it assumed changes.
+T31 ("migrations in the pipeline") was deferred because "M6 doesn't need a
+column (§08)." M6 added one anyway. Nothing re-checked that assumption when
+M6 shipped, because deferring a task also defers ever asking again whether
+the reason still holds.
+
+## A field-manual task can describe a component that no longer exists
+
+T54 ("Section transitions") was converted from the original artifact and
+assumed a `Section` type and a `setSection` router — plausible for a tabbed
+app, but this site was never built that way. `App.tsx` mounts `StandingsPanel`,
+`ChartPanel` and `RadarPanel` as permanent siblings; `.panels { scroll-snap-type:
+y proximity }` (`index.css`) is what makes scrolling past one settle on the
+next. There was never a `Section` to switch, so `setSection` and `go()` had
+nothing to call.
+
+Wiring T51–T55 in on 2026-09-21 caught this before it became implemented
+code that referenced a function that didn't exist. The task was retargeted to
+the one real structural swap in the app — `RadarPanel`'s Radar/Bars toggle,
+which really does replace one SVG subtree with an unrelated one — and
+`field-manual.md` now says so explicitly (**Correction, 2026-09-21**) rather
+than silently rewriting the task and losing the record of what was wrong.
+
+**Rule:** before implementing a field-manual task written against the
+artifact conversion, check that the state/types/functions it names still
+exist in the actual component tree. `docs/design.md` and `field-manual.md`
+are corrected in place as errors are found (per `CLAUDE.md`), but a task
+nobody has built yet is exactly the kind of error that survives longest —
+nothing has exercised it to prove or disprove the premise.
+
+## Two T55 bugs that only showed up once someone actually watched it run
+
+Implementing the football loader from the manual (2026-09-21) surfaced two
+bugs that a read-through, a type-check and even the full test suite all
+missed, because neither is visible from source or from `vitest` — only from
+watching the thing render over time in a real browser.
+
+**The spin arcs read as a static ring, not a spiral.** The original recipe
+clipped four arcs to the ball's silhouette with endpoints at the ball's own
+top/bottom vertices. Near a vertex an ellipse pinches to almost nothing, so
+clipping there keeps only the sliver of each arc closest to the boundary —
+and because that sliver's curvature was close to the ellipse's own, it
+traced the ball's rim instead of crossing its face. This was invisible in the
+SVG source (the path data looks like an arc regardless of what clipping does
+to it) and untestable by `vitest` (`#boot` lives in `index.html`, outside
+anything jsdom renders) — it only showed up as a screenshot, and even then
+only once someone was looking for "does this look like a spiral" rather than
+"does the element with the right class exist."
+
+**The loader was never actually seen.** `#boot` was removed in a
+`useEffect(() => {...}, [])` — unconditionally, on React's first commit. That
+commit happens the moment the JS bundle has parsed, which is almost always
+under a second and has nothing to do with whether the season fetch (the
+actual multi-second wait, the SQL cold start from D7) has resolved. The
+loader was torn down before its own fade-in finished on every real load. This
+one was invisible for a sharper reason: it degrades silently. Nothing errors,
+nothing warns, the app just works — the loader simply never gets the
+several-second window it exists for, and the only way to notice is to watch
+a real cold start (or fake one) and realize the mascot never showed up.
+
+**Rule:** a piece of UI whose entire job is to be visible for a specific
+window of time — not just present in the DOM, but on-screen for the right
+few seconds — cannot be verified by type-checking, unit tests, or reading the
+diff. It has to be watched, with the slow case actually forced (a mocked
+fetch with a real delay, not a fast/failing one), because the two ways it can
+be wrong — the wrong shape, and the wrong timing — leave no trace anywhere
+except in what a viewer sees over time.
+
+## A deploy check that reads whatever is live cannot prove the new thing shipped
+
+The M7 deploy (#52) failed on `The deployed site is the built bundle` with a bare
+`curl: (22) ... 404`, 130 ms after SWA reported "Deployment Complete". The site
+was fine seconds later. The step retried the `index.html` fetch, which never
+fails mid-swap (it just returns whichever version the edge has), and did not
+retry the asset fetch, which is the one that can 404 while SWA swaps content in.
+
+Worse, the step took whatever `index.html` was live and checked *its* asset. On
+a slow swap that is the previous deploy's bundle, so a green run never proved the
+new one had landed.
+
+**Rule:** a post-deploy check should wait for the artefact *this job built*, by
+something that identifies it (here the hashed asset name in `web/dist/index.html`),
+rather than checking whatever happens to be live. Put the retry on the request that
+can actually fail. And when a step has several `curl -f` calls, work out which one
+failed from what the log does *not* show (no retry warnings, no `::error::` line)
+before changing anything; here that ruled out two of the three suspects.
+
+## "The current week" is a league-wide fact, so decide it once for everyone
+
+#53 left an unplayed current week off the chart by checking each team's own
+week in `ordered()`. That hid the week for a team still on zero while showing it
+for a team that had scored, so on a Thursday night one line ran to week N and
+the rest stopped at N−1. The rule was meant to be "has this week started",
+which is a question about the whole league, not about one roster.
+
+**Rule:** when a display rule is phrased in terms of *the* week, *the* season or
+*the* league, compute it across all teams first (`startedWeeks(teams)`), then
+apply the same answer to every series. A per-series helper that only sees one
+team's data can't answer a league-wide question, and it fails quietly, as
+lines of different lengths rather than an error.
+
+## A deploy-time default on a property that can't change breaks the next month
+
+`budgetStartDate` defaulted to `utcNow('yyyy-MM-01')`. The budget was created
+with 2026-09-01, and every September deploy passed the same value, so nothing
+changed. The first October deploy passed 2026-10-01, and ARM refused: "Start date
+of budgets cannot be updated." Every deploy failed at the infra job, so nothing
+after it ran. None of that month's code changes had anything to do with it.
+
+**Rule:** a template default computed at deploy time (`utcNow()`, `newGuid()`) is
+only safe on a property Azure lets you update. On one fixed at creation, read the
+existing value and pass it back in, falling back to the computed default only
+when the resource does not exist yet. And suspect the calendar when a deploy
+that changed nothing in `infra/` fails on the first run of a new month.
 

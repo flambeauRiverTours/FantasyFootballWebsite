@@ -8,9 +8,18 @@ namespace FantasyLeague.Core.Tests
     {
         private static readonly DateTimeOffset AsOf = new(2026, 10, 18, 18, 42, 3, TimeSpan.Zero);
 
+        private static readonly IReadOnlyDictionary<string, decimal> NoAttribution = new Dictionary<string, decimal>();
+
         private static TeamSeason Team(int rosterId, string name, params (decimal Actual, decimal Ideal, bool IsFinal)[] weeks) =>
             new(rosterId, name,
-                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal))]);
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal, NoAttribution))]);
+
+        /// <summary>A team whose weeks carry real slot attribution, for T47/T48.</summary>
+        private static TeamSeason TeamWithSlots(
+            int rosterId, string name,
+            params (bool IsFinal, IReadOnlyDictionary<string, decimal> Slots)[] weeks) =>
+            new(rosterId, name,
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, 0m, 0m, [], [], [], w.IsFinal, w.Slots))]);
 
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,
@@ -18,7 +27,7 @@ namespace FantasyLeague.Core.Tests
             int currentWeek = 5,
             int finalThroughWeek = 4,
             IReadOnlyDictionary<int, string>? owners = null) =>
-            new(2026, currentWeek, finalThroughWeek,
+            new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
                 teams ?? [], [], [], owners ?? new Dictionary<int, string>());
 
@@ -66,7 +75,7 @@ namespace FantasyLeague.Core.Tests
             var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf);
 
             payload.SlotOrder.Should().Equal(
-                "QB", "RB", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF");
+                "QB", "RB", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF");
         }
 
         [Fact]
@@ -198,13 +207,59 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_radar_blocks_are_present_but_empty_until_M6()
+        public void The_radar_blocks_are_empty_when_no_week_produced_an_attribution()
         {
             // an empty object beats omitting the key; the client can bind either way
             var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
 
             payload.LeagueSlotAverages.Should().NotBeNull().And.BeEmpty();
             payload.Teams[0].SlotAverages.Should().NotBeNull().And.BeEmpty();
+        }
+
+        [Fact]
+        public void Slot_averages_flow_from_weeks_to_the_team_and_the_league_reference()
+        {
+            // T47: average each team's weeks, then average across teams
+            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+                TeamWithSlots(1, "High",
+                    (true, new Dictionary<string, decimal> { ["QB"] = 20m }),
+                    (true, new Dictionary<string, decimal> { ["QB"] = 24m })),
+                TeamWithSlots(2, "Low",
+                    (true, new Dictionary<string, decimal> { ["QB"] = 10m }),
+                    (true, new Dictionary<string, decimal> { ["QB"] = 10m })),
+            ]), AsOf);
+
+            payload.Teams.Single(t => t.RosterId == 1).SlotAverages["QB"].Should().Be(22m);
+            payload.Teams.Single(t => t.RosterId == 2).SlotAverages["QB"].Should().Be(10m);
+            payload.LeagueSlotAverages["QB"].Should().Be(16m, "the two teams' season averages, averaged");
+        }
+
+        [Fact]
+        public void An_unfinished_week_and_a_rules_mismatch_week_do_not_count_toward_the_average()
+        {
+            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+                TeamWithSlots(1, "Mixed",
+                    (true, new Dictionary<string, decimal> { ["QB"] = 20m }),
+                    (false, new Dictionary<string, decimal> { ["QB"] = 99m }),           // not final
+                    (true, NoAttribution)),                                              // rules guard excluded it
+            ]), AsOf);
+
+            payload.Teams[0].SlotAverages["QB"].Should().Be(20m);
+        }
+
+        [Fact]
+        public void The_league_reference_excludes_the_dummy_team_A1_step_2()
+        {
+            // A1: a second, separate filter from the standings exclusion above
+            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
+                Snapshot([
+                    TeamWithSlots(1, "Real", (true, new Dictionary<string, decimal> { ["QB"] = 20m })),
+                    TeamWithSlots(9, "POON SQUAD", (true, new Dictionary<string, decimal> { ["QB"] = 0m })),
+                ]),
+                AsOf,
+                excludedRosterIds: new HashSet<int> { 9 });
+
+            payload.LeagueSlotAverages["QB"].Should().Be(20m, "the dummy team's zero must not drag the reference down");
         }
 
         [Fact]

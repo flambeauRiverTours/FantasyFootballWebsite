@@ -21,15 +21,17 @@ namespace FantasyLeague.Sleeper
         /// Maps a snapshot to the season response.
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
-        /// <param name="asOfUtc">When the snapshot was assembled.</param>
+        /// <param name="asOfUtc">When the snapshot was assembled.</param>        /// <param name="overrideLeagueName">Override name to use for the league</param>
         /// <param name="requestedSeason">The season asked for, or null for the current one.</param>
         /// <param name="excludedRosterIds">Rosters to leave out entirely (A1).</param>
+        /// <param name="overrideLeagueName">Name of the league</param>
         /// <returns>The response body.</returns>
         public static SeasonPayload ToIndividualSeasonPayload(
             SeasonSnapshot snapshot,
             DateTimeOffset asOfUtc,
             int? requestedSeason = null,
-            IReadOnlySet<int>? excludedRosterIds = null)
+            IReadOnlySet<int>? excludedRosterIds = null,
+            string overrideLeagueName = "")
         {
             var excluded = excludedRosterIds ?? new HashSet<int>();
 
@@ -39,15 +41,17 @@ namespace FantasyLeague.Sleeper
                 .OrderByDescending(t => t.Totals.Actual)
                 .ToList();
 
+            var leagueSlotAverages = SlotAverager.LeagueAverages(teams.Select(t => t.SlotAverages));
+            var name = string.IsNullOrWhiteSpace(overrideLeagueName) ? snapshot.LeagueName : overrideLeagueName;
             return new SeasonPayload(
+                name,
                 snapshot.Season,
                 requestedSeason is null || requestedSeason == snapshot.Season,
                 snapshot.CurrentWeek,
                 snapshot.FinalThroughWeek,
                 asOfUtc,
                 SlotOrder(snapshot.Slots),
-                // M6 fills this; an empty object beats omitting the key
-                new Dictionary<string, decimal>(),
+                leagueSlotAverages,
                 teams);
         }
 
@@ -91,7 +95,7 @@ namespace FantasyLeague.Sleeper
         /// depends on axis order, so this order is fixed and never re-sorted.
         /// </remarks>
         private static IReadOnlyList<string> SlotOrder(IReadOnlyList<Slot> slots) =>
-            [.. slots.Select(s => s.Code).Distinct()];
+            [.. slots.Select(s => s.Code).Distinct().Select(Slot.DisplayCode)];
 
         /// <summary>
         /// Maps one roster's season.
@@ -116,7 +120,8 @@ namespace FantasyLeague.Sleeper
                 team.RosterId,
                 team.Name,
                 totals,
-                new Dictionary<string, decimal>(),
+                SlotAverager.SeasonAverages(team.Weeks)
+                    .ToDictionary(kv => Slot.DisplayCode(kv.Key), kv => kv.Value),
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.Actual, w.Ideal, w.IsFinal))]);
@@ -150,6 +155,14 @@ namespace FantasyLeague.Sleeper
                         .Append(',').Append(week.Actual.ToString(CultureInfo.InvariantCulture))
                         .Append(',').Append(week.Ideal.ToString(CultureInfo.InvariantCulture))
                         .Append(',').Append(week.IsFinal ? '1' : '0');
+
+                    // M6: slot attribution can change independently of Actual/Ideal
+                    // (the mid-season rules guard), so it needs its own hash input
+                    foreach (var slot in week.SlotAverages.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                    {
+                        builder.Append(';').Append(slot.Key)
+                            .Append('=').Append(slot.Value.ToString(CultureInfo.InvariantCulture));
+                    }
                 }
             }
 

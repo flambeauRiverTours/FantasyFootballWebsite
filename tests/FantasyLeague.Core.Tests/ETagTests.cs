@@ -6,14 +6,16 @@ namespace FantasyLeague.Core.Tests
 {
     public class ComputeETagTests
     {
+        private static readonly IReadOnlyDictionary<string, decimal> NoAttribution = new Dictionary<string, decimal>();
+
         private static SeasonSnapshot Snapshot(
             int currentWeek = 2,
             int finalThroughWeek = 1,
             int season = 2026,
             params (int RosterId, (int Week, decimal Actual, decimal Ideal, bool IsFinal)[] Weeks)[] teams) =>
-            new(season, currentWeek, finalThroughWeek, Slot.Parse(["QB"]),
+            new("Name", season, currentWeek, finalThroughWeek, Slot.Parse(["QB"]),
                 [.. teams.Select(t => new TeamSeason(t.RosterId, $"Team {t.RosterId}",
-                    [.. t.Weeks.Select(w => new TeamWeek(t.RosterId, w.Week, w.Actual, w.Ideal, [], [], [], w.IsFinal))]))],
+                    [.. t.Weeks.Select(w => new TeamWeek(t.RosterId, w.Week, w.Actual, w.Ideal, [], [], [], w.IsFinal, NoAttribution))]))],
                 [], [], new Dictionary<int, string>());
 
         private static SeasonSnapshot OneTeam(decimal actual = 100m, decimal ideal = 120m, bool isFinal = true) =>
@@ -105,6 +107,7 @@ namespace FantasyLeague.Core.Tests
     public class MatchesETagTests
     {
         private const string Tag = "W/\"2026-wk7-ABCDEF0123456789\"";
+        private static readonly IReadOnlyDictionary<string, decimal> NoAttribution = new Dictionary<string, decimal>();
 
         [Fact]
         public void An_absent_header_never_matches()
@@ -150,17 +153,36 @@ namespace FantasyLeague.Core.Tests
         public void A_stale_tag_from_the_previous_poll_does_not_match()
         {
             var before = SeasonPayloadMapper.ComputeETag(
-                new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
-                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], false)])],
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
+                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], false, NoAttribution)])],
                     [], [], new Dictionary<int, string>()));
 
             var after = SeasonPayloadMapper.ComputeETag(
-                new SeasonSnapshot(2026, 1, 0, Slot.Parse(["QB"]),
-                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 17m, 20m, [], [], [], false)])],
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
+                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 17m, 20m, [], [], [], false, NoAttribution)])],
                     [], [], new Dictionary<int, string>()));
 
             SeasonPayloadMapper.MatchesETag(new StringValues(before), after)
                 .Should().BeFalse("a 304 here would freeze the page mid-Sunday");
+        }
+
+        [Fact]
+        public void A_slot_attribution_change_alone_changes_the_tag()
+        {
+            // T48: the mid-season rules guard can flip a week's attribution to
+            // empty with Actual and Ideal unchanged; the ETag has to notice anyway
+            var before = SeasonPayloadMapper.ComputeETag(
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
+                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [],
+                        true, new Dictionary<string, decimal> { ["QB"] = 10m })])],
+                    [], [], new Dictionary<int, string>()));
+
+            var after = SeasonPayloadMapper.ComputeETag(
+                new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
+                    [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, NoAttribution)])],
+                    [], [], new Dictionary<int, string>()));
+
+            SeasonPayloadMapper.MatchesETag(new StringValues(before), after).Should().BeFalse();
         }
 
         [Fact]

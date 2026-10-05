@@ -55,6 +55,7 @@ namespace FantasyLeague.Sleeper
 
             var league = await reader.GetLeagueAsync(leagueId, cancellationToken);
 
+            var name = GetLeagueName(league!);
             var slots = Slot.Parse(league!.RosterPositions!);
             var users = await reader.GetUsersAsync(leagueId, cancellationToken);
             var rosters = await reader.GetRostersAsync(leagueId, cancellationToken);
@@ -87,7 +88,7 @@ namespace FantasyLeague.Sleeper
 
             logger.LogInformation("Finished building season snapshot in {ElapsedMilliseconds}ms.", stopwatch.ElapsedMilliseconds);
 
-            return new SeasonSnapshot(state.Season, state.Week, Math.Max(0, state.Week - 1), slots, teams, unresolved.Distinct().ToList(), violations, owners);
+            return new SeasonSnapshot(name, state.Season, state.Week, Math.Max(0, state.Week - 1), slots, teams, unresolved.Distinct().ToList(), violations, owners);
         }
 
         /// <summary>
@@ -115,7 +116,21 @@ namespace FantasyLeague.Sleeper
             {
                 var mapped = SleeperMapper.ToRosterWeek(matchup!, players.PlayerMap);
                 (var idealPoints, var idealRoster) = IdealLineupSolver.Solve(mapped.Players, slots);
-                teamWeeks.Add(new TeamWeek(mapped.RosterId, week, mapped.Actual, idealPoints, mapped.Starters, idealRoster, mapped.Players, isFinal));
+
+                var positions = mapped.Players.ToDictionary(p => p.Id.Value, p => p.FantasyPositions);
+                var slotAverages = SlotAverager.MakeSlotAverages(
+                    matchup!.Starters ?? [], matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
+                    positions, slots);
+
+                if (slotAverages is null)
+                {
+                    // roster_positions changed mid-seaso
+                    logger.LogError(
+                        "Roster {RosterId} week {Week}: starters count does not match startable slots; excluded from radar attribution.",
+                        mapped.RosterId, week);
+                }
+
+                teamWeeks.Add(new TeamWeek(mapped.RosterId, week, mapped.Actual, idealPoints, mapped.Starters, idealRoster, mapped.Players, isFinal, slotAverages ?? new Dictionary<string, decimal>()));
                 unresolved.AddRange(mapped.UnresolvedPlayerIds);
                 violations.AddRange(Check(mapped, idealPoints, week));
             }
@@ -159,5 +174,17 @@ namespace FantasyLeague.Sleeper
         /// SQL and this reads it instead. Kept in one place so that swap is local.
         /// </remarks>
         private static bool IsFinal(int week, int currentWeek) => week < currentWeek;
+
+        /// <summary>
+        /// Gets the name of the league
+        /// </summary>
+        /// <param name="overrideLeagueName">Override league name passed to the server</param>
+        /// <param name="leagueDto">League dto object</param>
+        /// <returns>String to use as the name of the league</returns>
+        private static string GetLeagueName(LeagueDto leagueDto) => string.IsNullOrWhiteSpace(leagueDto.Name) ? DefaultLeagueName : leagueDto.Name!;
+        /// <summary>
+        /// Default league name to use if none is provided
+        /// </summary>
+        private static readonly string DefaultLeagueName = "Fantasy Football League";
     }
 }

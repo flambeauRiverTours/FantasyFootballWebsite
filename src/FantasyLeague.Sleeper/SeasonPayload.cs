@@ -4,15 +4,17 @@
     /// The §09 response body for one season. Table and chart derive from this one
     /// payload, so they cannot disagree.
     /// </summary>
+    /// <param name="LeagueName">The name of the league</param>
     /// <param name="Season">The season these weeks belong to.</param>
     /// <param name="IsCurrent">Whether this is the live season. Decides the cache headers and whether the page polls.</param>
     /// <param name="CurrentWeek">The week Sleeper considers current.</param>
     /// <param name="FinalThroughWeek">The last settled week. Lets the table label the sigma column honestly while points already include the live week.</param>
     /// <param name="AsOfUtc">When the snapshot was assembled.</param>
     /// <param name="SlotOrder">Distinct startable slots in roster_positions order. Fixed, never re-sorted (R2).</param>
-    /// <param name="LeagueSlotAverages">The radar's reference circle. Empty until M6.</param>
+    /// <param name="LeagueSlotAverages">The radar's reference circle, averaged over non-excluded teams (A1).</param>
     /// <param name="Teams">One entry per scoring roster.</param>
     public sealed record SeasonPayload(
+        string LeagueName,
         int Season,
         bool IsCurrent,
         int CurrentWeek,
@@ -28,7 +30,7 @@
     /// <param name="RosterId">The roster's id within this league and season.</param>
     /// <param name="Name">The team name, falling back to the manager's handle.</param>
     /// <param name="Totals">Season-to-date figures, computed server-side so the definition lives in one place.</param>
-    /// <param name="SlotAverages">Per-slot weekly means. Empty until M6.</param>
+    /// <param name="SlotAverages">Per-slot season means. Empty if no week produced an attribution.</param>
     /// <param name="Weeks">Every week played, in order.</param>
     public sealed record TeamPayload(
         int RosterId,

@@ -16,6 +16,6 @@
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.12" />
     <PackageReference Include="Microsoft.Net.Http.Headers" Version="10.0.12" />
-    <PackageReference Include="System.Threading.RateLimiting" Version="9.0.0" />
+    <PackageReference Include="System.Threading.RateLimiting" Version="10.0.12" />
   </ItemGroup>
 </Project>

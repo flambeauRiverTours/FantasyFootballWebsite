@@ -36,12 +36,13 @@ namespace FantasyLeague.Core.Tests
             decimal actual = 100m,
             decimal ideal = 120m,
             bool isFinal = true,
-            IReadOnlyList<RosteredPlayer>? players = null) =>
+            IReadOnlyList<RosteredPlayer>? players = null,
+            IReadOnlyDictionary<string, decimal>? slotAverages = null) =>
             new(rosterId, week, actual, ideal,
                 [new PlayerId("s1"), new PlayerId("s2")],
                 [new PlayerId("s1"), new PlayerId("i9")],
                 players ?? [new RosteredPlayer(new PlayerId("s1"), "Patrick Mahomes", ["QB"], 27.5m)],
-                isFinal);
+                isFinal, slotAverages ?? new Dictionary<string, decimal>());
 
         [Fact]
         public async Task An_empty_store_reads_back_nothing()
@@ -106,6 +107,27 @@ namespace FantasyLeague.Core.Tests
                 new RosteredPlayer(new PlayerId("4046"), "Patrick Mahomes", ["QB"], 27.5m));
             read[0].Players[1].Points.Should().Be(8.25m);
             read[0].Players[1].FantasyPositions.Should().Equal("RB", "WR");
+        }
+
+        [Fact]
+        public async Task The_slot_averages_survive_the_round_trip()
+        {
+            // M6's stored column; an empty dict is the only shape prior tests exercised
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(slotAverages: new Dictionary<string, decimal>
+            {
+                ["QB"] = 21.5m,
+                ["SUPER FLEX"] = 14.25m,
+            })], default);
+
+            var read = await store.ReadAsync(League, 2026, default);
+
+            read[0].SlotAverages.Should().BeEquivalentTo(new Dictionary<string, decimal>
+            {
+                ["QB"] = 21.5m,
+                ["SUPER FLEX"] = 14.25m,
+            });
         }
 
         [Fact]
@@ -209,7 +231,7 @@ namespace FantasyLeague.Core.Tests
             var store = new NullFinalizedWeekStore();
 
             await store.WriteAsync("L1", 2026,
-                [new TeamWeek(1, 1, 10m, 10m, [], [], [], true)], default);
+                [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>())], default);
 
             (await store.ReadAsync("L1", 2026, default)).Should().BeEmpty();
         }
