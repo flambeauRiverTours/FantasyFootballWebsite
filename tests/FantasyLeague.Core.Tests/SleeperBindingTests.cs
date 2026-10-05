@@ -23,7 +23,11 @@ namespace FantasyLeague.Core.Tests
             var matchups = Read<List<MatchupDto>>(FixtureText("wk1-matchups.json"));
 
             matchups.Should().HaveCount(6);
-            matchups.Should().OnlyContain(m => m.Players!.Count == 19);
+            // Not a fixed count: in week 1 one roster carries 20 players to
+            // everyone else's 19. What always holds is that every starter is
+            // on the roster, bar the "0" that marks an empty slot.
+            matchups.Should().OnlyContain(m =>
+                m.Starters!.Where(id => id != "0").All(id => m.Players!.Contains(id)));
             matchups.Should().OnlyContain(m => m.Starters!.Count == 11);
             matchups.Should().OnlyContain(m => m.StartersPoints!.Count == 11);
             matchups.Should().OnlyContain(m => m.PlayersPoints!.Count > 0);
@@ -33,21 +37,22 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void Points_bind_as_decimal_without_drifting()
         {
-            // 16.92 as a double is 16.919999999999998. The invariant
-            // sum(starters_points) == points is stated to the cent, so the
-            // literal has to survive the parse exactly.
+            // Roster 2's eleven starter scores sum to 122.82000000000001 as
+            // doubles. The invariant sum(starters_points) == points is stated
+            // to the cent, so the values have to survive the parse exactly.
             var matchups = Read<List<MatchupDto>>(FixtureText("wk1-matchups.json"));
-            var roster1 = matchups.Single(m => m.RosterId == 1);
+            var roster2 = matchups.Single(m => m.RosterId == 2);
 
-            roster1.Points.Should().Be(16.92m);
-            roster1.StartersPoints!.Sum().Should().Be(roster1.Points);
+            roster2.Points.Should().Be(122.82m);
+            roster2.StartersPoints!.Sum().Should().Be(roster2.Points);
         }
 
         [Fact]
         public void Empty_starter_slots_survive_as_the_string_zero()
         {
             // Three of them across two rosters in this one week, so this is
-            // routine rather than theoretical.
+            // routine rather than theoretical. (Still three in the full week-1
+            // capture: one on roster 4, two on the placeholder roster.)
             var matchups = Read<List<MatchupDto>>(FixtureText("wk1-matchups.json"));
 
             matchups.SelectMany(m => m.Starters!).Count(id => id == "0").Should().Be(3);
