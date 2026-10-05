@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 
 export interface RadarProps {
@@ -5,6 +6,8 @@ export interface RadarProps {
   ratios: (number | null)[];
   size: number;
   label: string;
+  /** The shape's colour, so it matches the team's chip. Falls back to the accent. */
+  colour?: string;
 }
 
 interface Vertex {
@@ -95,7 +98,7 @@ function AxisLabels({ slots, vertices }: { slots: string[]; vertices: Vertex[] }
 }
 
 /* Radar control */
-export default function Radar({ slots, ratios, size, label }: RadarProps) {
+export default function Radar({ slots, ratios, size, label, colour }: RadarProps) {
   const reduced = useReducedMotion();
 
   if (slots.length === 0 || size <= 0) return null;
@@ -111,6 +114,7 @@ export default function Radar({ slots, ratios, size, label }: RadarProps) {
       height={size}
       role="img"
       aria-label={label}
+      style={colour ? ({ '--team': colour } as CSSProperties) : undefined}
     >
       {/* spokes, drawn first so the shape sits above them */}
       <Spokes slots={slots} vertices={vertices} />

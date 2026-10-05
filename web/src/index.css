@@ -399,9 +399,10 @@ td.is-sorted { font-weight: var(--weight-medium); }
   stroke-dasharray: 3 4;
 }
 
+/* --team is the selected team's chip colour, set on the svg by RadarPanel */
 .radar .shape {
-  fill: var(--accent-weak);
-  stroke: var(--accent);
+  fill: color-mix(in oklch, var(--team, var(--accent)) 14%, transparent);
+  stroke: var(--team, var(--accent));
   stroke-width: 1.75;
   stroke-linejoin: round;
 }
