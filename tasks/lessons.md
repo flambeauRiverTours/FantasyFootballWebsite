@@ -581,3 +581,17 @@ apply the same answer to every series. A per-series helper that only sees one
 team's data can't answer a league-wide question, and it fails quietly, as
 lines of different lengths rather than an error.
 
+## A deploy-time default on a property that can't change breaks the next month
+
+`budgetStartDate` defaulted to `utcNow('yyyy-MM-01')`. The budget was created
+with 2026-09-01, and every September deploy passed the same value, so nothing
+changed. The first October deploy passed 2026-10-01, and ARM refused: "Start date
+of budgets cannot be updated." Every deploy failed at the infra job, so nothing
+after it ran. None of that month's code changes had anything to do with it.
+
+**Rule:** a template default computed at deploy time (`utcNow()`, `newGuid()`) is
+only safe on a property Azure lets you update. On one fixed at creation, read the
+existing value and pass it back in, falling back to the computed default only
+when the resource does not exist yet. And suspect the calendar when a deploy
+that changed nothing in `infra/` fails on the first run of a new month.
+

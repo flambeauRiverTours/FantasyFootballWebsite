@@ -49,6 +49,8 @@ jobs:
         run: |
           set -u
           : "${LEAGUE_ID:?}" "${RESOURCE_GROUP:?}" "${SQL_ADMIN_ID:?}" "${SQL_ADMIN_NAME:?}"
+          BUDGET_START=$(az consumption budget list -g "$RESOURCE_GROUP" \
+            --query "[0].timePeriod.startDate" -o tsv 2>/dev/null | cut -c1-10)
           az deployment group create \
             --name deploy-${{ github.run_number }} \
             --resource-group "$RESOURCE_GROUP" \
@@ -57,6 +59,7 @@ jobs:
             budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
             sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
             overrideLeagueName="${OVERRIDE_LEAGUE_NAME:-}" \
+            ${BUDGET_START:+budgetStartDate="$BUDGET_START"} \
             -o json > out.json
           for k in functionAppName functionAppUrl staticWebAppName staticWebAppUrl; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
