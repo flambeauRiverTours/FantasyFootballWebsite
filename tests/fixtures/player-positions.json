@@ -97,6 +97,13 @@
     "name": "Ladd McConkey",
     "team": "LAC"
   },
+  "11646": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Jalen Coker",
+    "team": "CAR"
+  },
   "1169": {
     "fantasyPositions": [
       "QB"
@@ -131,6 +138,13 @@
     ],
     "name": "Cam Skattebo",
     "team": "NYG"
+  },
+  "12487": {
+    "fantasyPositions": [
+      "TE"
+    ],
+    "name": "Terrance Ferguson",
+    "team": "LAR"
   },
   "12490": {
     "fantasyPositions": [
@@ -209,12 +223,26 @@
     "name": "Ashton Jeanty",
     "team": "LV"
   },
+  "12545": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "Tyler Shough",
+    "team": "NO"
+  },
   "1264": {
     "fantasyPositions": [
       "K"
     ],
     "name": "Justin Tucker",
     "team": null
+  },
+  "12711": {
+    "fantasyPositions": [
+      "K"
+    ],
+    "name": "Tyler Loop",
+    "team": "BAL"
   },
   "13286": {
     "fantasyPositions": [
@@ -706,6 +734,13 @@
     "name": "De'Von Achane",
     "team": "MIA"
   },
+  "9228": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "Bryce Young",
+    "team": "CAR"
+  },
   "9482": {
     "fantasyPositions": [
       "TE"
@@ -727,6 +762,13 @@
     "name": "Tucker Kraft",
     "team": "GB"
   },
+  "9487": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Parker Washington",
+    "team": "JAX"
+  },
   "9488": {
     "fantasyPositions": [
       "WR"
@@ -740,6 +782,13 @@
     ],
     "name": "Puka Nacua",
     "team": "LAR"
+  },
+  "9500": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Josh Downs",
+    "team": "IND"
   },
   "9509": {
     "fantasyPositions": [
@@ -796,5 +845,12 @@
     ],
     "name": "SEA",
     "team": "SEA"
+  },
+  "TB": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "TB",
+    "team": "TB"
   }
 }

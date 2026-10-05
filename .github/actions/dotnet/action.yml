@@ -1,0 +1,22 @@
+name: dotnet
+description: Set up .NET with a cached NuGet folder and restore.
+
+inputs:
+  dotnet-version:
+    description: SDK version
+    required: false
+    default: 10.0.x
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+        restore-keys: nuget-${{ runner.os }}-
+    - run: dotnet restore
+      shell: bash

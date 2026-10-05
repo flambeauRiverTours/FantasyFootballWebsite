@@ -553,6 +553,119 @@ fails, which is the behaviour worth keeping.
 
 ---
 
+## A16 · Finalized weeks will be mirrored to blob, for the same reason the player map is (decided, not yet built)
+
+2026-09-18. The SQL free tier's auto-pause (**D7**) is the site's one disruptive
+cold start: a paused database takes 30–60 seconds to resume, and whoever's first
+after 60 idle minutes eats it in full. Three alternatives were weighed before
+landing here.
+
+**Cache harder — rejected, doesn't touch the cause.** `CachedFinalizedWeekStore`
+already wraps SQL in a 6-hour `HybridCache`, and it was tempting to lean on that
+further. Two problems. First, `HybridCache` has no `IDistributedCache`
+registered, so it is L1-only — per instance, exactly A12's failure mode. A cold
+Function instance starts with an empty cache regardless of TTL. Second, and
+counter-intuitively, a *more effective* cache makes this worse, not better:
+Azure SQL serverless pauses on its own idle timer, counted from the last query
+it actually saw. A cache that successfully absorbs reads for six hours is six
+hours the database looks idle from the inside — it pushes toward the pause
+firing sooner, not later.
+
+**Drop SQL for blob or table storage entirely — rejected for now, too big a
+swing.** `WeekScore` (§08) is genuinely key-value shaped — no joins, PK lookup
+only (**A14**) — and blob storage never pauses, so this would remove the cold
+start outright. Deferred anyway: it means retiring `SqlFinalizedWeekStore`, the
+EF Core migration, and the SQL bicep resource, which is a real rewrite, not a
+config change, for a problem that has a smaller fix available first.
+
+**A scheduled keep-warm ping — rejected, doesn't fit how SQL serverless
+works.** Auto-pause/resume is purely reactive (resumes on connection, pauses
+after N idle minutes); there is no notion of "stay up 1pm–11pm Sundays" to
+configure. The only way to simulate that is an active timer pinging the
+database through a chosen window, which trades disruption for cost on a dial —
+every warm hour spends against the free tier's **100k vCore-seconds/month**
+(≈55 hours at 0.5 vCore) — and still leaves every visitor outside the window
+exposed to the exact same wait.
+
+**Chosen: mirror A12's pattern.** `FinalizeWeek` (the Tuesday-noon timer, the
+only writer `WeekScore` has) writes the season's finalized weeks to SQL *and* to
+one JSON blob in the storage account the Function App already has, replacing it
+wholesale — same shape as `IPlayerMapStore`. The read path serves from that
+blob first and stops touching SQL on every request. This works here for a
+reason that doesn't generalize to every SQL-cold-start problem: **once this
+ships, nothing on the request path calls SQL at all.** The only remaining SQL
+traffic is the weekly finalize timer, a background job nobody is waiting on
+synchronously, so its own 30–60 second resume becomes invisible rather than
+disruptive.
+
+**What this does not fix.** A cold or missing blob — first deploy, or the blob
+deleted out of band — still falls through to SQL and still pays the full resume
+cost. That path is expected to be rare to never post-ship rather than the
+routine case it is today, but it is not eliminated.
+
+**Not yet built.** Tracked as **T58**.
+
+### Implementation settled, 2026-09-20
+
+Three details sharpened once T58 was picked up, all in
+[`field-manual.md`](field-manual.md):
+
+- **Scope is one blob, not one per season.** `FinalizeWeek` only ever builds
+  the current season, so that is the only season this task ever mirrors — which
+  is also the only season the live site's polling actually requests. Older
+  seasons (once T29/T30 produce them) stay SQL-only and keep paying the cold
+  start on the rare read; that is an acceptable, much smaller version of the
+  same trade the design already made, not a new one.
+- **The open "block and wait, or serve stale" question resolves by default,
+  not by design.** A cold or missing blob falls through to
+  `SqlFinalizedWeekStore.ReadAsync` — which is exactly every request's
+  behaviour today, with nothing built. Block-and-wait needs no new code because
+  it already exists; there was never a decision to make here, only a fallback
+  to keep.
+- **The cache invalidation this task needs already exists.** `CachedFinalizedWeekStore`
+  calls `RemoveByTagAsync` after every `WriteAsync`, regardless of what it
+  wraps. Pointing it at a store that writes SQL *and* blob, instead of SQL
+  alone, makes "invalidate on the Tuesday write" free — it was already
+  invalidating on every write, for a cache that mattered less before there was
+  a blob copy to keep in step.
+
+One new constraint this surfaced: `FinalizeWeek`'s Tuesday timer should not run
+during the NFL offseason, both to stop spending the SQL free tier's
+vCore-seconds on a wake nothing needs and to stop writing a blob that would
+just be overwritten unchanged the next active Tuesday. Expressed as a cron
+month restriction rather than an in-function guard, so the offseason costs
+zero invocations rather than one short one. The boundary is **March–August**,
+not March–September as first framed: the season opener usually falls inside
+September (2026's is 2026-09-10), and excluding all of September from the
+cron's active months would have skipped week 1's own finalize run.
+
+(T58's step-by-step has since been cut from `field-manual.md`, per that
+document's own stated convention of removing what has shipped — this section
+is now where that reasoning lives.)
+
+### The blob only had one writer, and that was the bug — fixed 2026-09-21
+
+Reported after ship: the cold start A16 was meant to remove was still
+happening. Cause was structural, not a typo — `BlobFirstFinalizedWeekStore`
+only ever *wrote* the blob from `FinalizeWeek`'s Tuesday timer. Between a
+deploy and the next Tuesday, every request's `ReadAsync` found the blob empty,
+fell through to SQL exactly as designed, and then stopped — nothing about a
+read ever primed the blob, so every request paid the cold-start cost until
+Tuesday arrived, which is the routine case this task exists to remove.
+
+**`ReadAsync` now writes what it fell back to**, under the same
+`SanityCheckSeasonForBlob` gate the write path already used: a cold blob for
+the season in progress is populated from the SQL answer before it's returned,
+so the second request onward is a blob hit. A cold blob for a season outside
+that window (an old season, or the same season read from off-season code)
+still falls through without being cached — there is no "in-season Tuesday
+write" to mirror for it, so caching it would mean inventing a staleness
+story this task never needed. The result: the blob now self-heals from the
+first live request after a deploy, instead of sitting empty until the next
+scheduled write.
+
+---
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

@@ -73,7 +73,7 @@ namespace FantasyLeague.Functions.Functions
             }
 
             return new OkObjectResult(SeasonPayloadMapper.ToIndividualSeasonPayload(
-                snapshot, DateTimeOffset.UtcNow, requested, ExcludedRosterIds(snapshot)));
+                snapshot, DateTimeOffset.UtcNow, requested, ExcludedRosterIds(snapshot), league.Value.OverrideLeagueName));
         }
 
         /// <summary>

@@ -12,7 +12,7 @@ namespace FantasyLeague.Data
         IReadOnlyList<string> Positions,
         decimal Points);
 
-    internal sealed class SqlFinalizedWeekStore(
+    public sealed class SqlFinalizedWeekStore(
         IDbContextFactory<FantasyDataContext> contexts,
         ILogger<SqlFinalizedWeekStore> logger) : IFinalizedWeekStore
     {
@@ -102,7 +102,8 @@ namespace FantasyLeague.Data
                 FromJson(row.StartersJson),
                 FromJson(row.IdealLineupJson),
                 FromPlayersJson(row.PlayersPointsJson),
-                row.IsFinal);
+                row.IsFinal,
+                FromSlotJson(row.SlotAveragesJson));
 
         /// <summary>
         /// Creates a WeekScore db object based on an input teamweek
@@ -137,6 +138,7 @@ namespace FantasyLeague.Data
             row.StartersJson = ToJson(week.Starters);
             row.IdealLineupJson = ToJson(week.IdealLineup);
             row.PlayersPointsJson = ToPlayersJson(week.Players);
+            row.SlotAveragesJson = JsonSerializer.Serialize(week.SlotAverages, Json);
             row.IsFinal = week.IsFinal;
             row.ComputedUtc = DateTimeOffset.UtcNow;
         }
@@ -174,5 +176,15 @@ namespace FantasyLeague.Data
         /// <returns>List of player Ids</returns>
         private static IReadOnlyList<PlayerId> FromJson(string json) => string.IsNullOrWhiteSpace(json) ? []
                 : [.. (JsonSerializer.Deserialize<string[]>(json, Json) ?? []).Select(v => new PlayerId(v))];
+
+        /// <summary>
+        /// Reads per-slot averages from Json
+        /// </summary>
+        /// <param name="json">Json slot-average string</param>
+        /// <returns>Per-slot averages, or empty when the row predates M6 or the week carried none</returns>
+        private static IReadOnlyDictionary<string, decimal> FromSlotJson(string json) =>
+            string.IsNullOrWhiteSpace(json)
+                ? new Dictionary<string, decimal>()
+                : JsonSerializer.Deserialize<Dictionary<string, decimal>>(json, Json) ?? new Dictionary<string, decimal>();
     }
 }

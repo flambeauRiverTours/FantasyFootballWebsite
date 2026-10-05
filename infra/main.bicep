@@ -71,6 +71,12 @@ param sqlAdminLogin string = ''
 @description('Minutes of inactivity before the database pauses. Required on the free offer; 60 is the minimum.')
 param sqlAutoPauseDelayMinutes int = 60
 
+@description('Custom domain serving the site, without a scheme. Empty until T57.')
+param customDomain string = ''
+
+@description('String to use instead of the league name that exists in Sleeper.')
+param overrideLeagueName string = ''
+
 var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
 
 var excludedOwnerSettings = [
@@ -80,11 +86,10 @@ var excludedOwnerSettings = [
   }
 ]
 
-// no secret in it: Entra auth means there is no password to protect
 var sqlConnectionSettings = deploySql ? [
   {
     name: 'ConnectionStrings__FantasyLeague'
-    value: 'Server=tcp:${sqlName}${environment().suffixes.sqlServerHostname},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;'
+    value: 'Server=tcp:${sqlName}${environment().suffixes.sqlServerHostname},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;'
   }
 ] : []
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}'
@@ -208,9 +213,8 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
       http20Enabled: true
       cors: {
         allowedOrigins: concat(
-          [
-            'https://${site.properties.defaultHostname}'
-          ],
+          ['https://${site.properties.defaultHostname}'],
+          empty(customDomain) ? [] : ['https://${customDomain}'],
           devOrigins
         )
       }
@@ -231,6 +235,10 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
           {
             name: 'League__CurrentLeagueId'
             value: leagueId
+          }
+          {
+            name: 'League__OverrideLeagueName'
+            value: overrideLeagueName
           }
         ],
         excludedOwnerSettings,

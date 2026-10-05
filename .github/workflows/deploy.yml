@@ -2,6 +2,11 @@ name: deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'tasks/**'
+      - '**/*.md'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
@@ -16,14 +21,17 @@ concurrency:
 jobs:
   infra:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     outputs:
       functionAppName: ${{ steps.deploy.outputs.functionAppName }}
       functionAppUrl: ${{ steps.deploy.outputs.functionAppUrl }}
       staticWebAppName: ${{ steps.deploy.outputs.staticWebAppName }}
+      staticWebAppUrl: ${{ steps.deploy.outputs.staticWebAppUrl }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: az bicep build --file infra/main.bicep --stdout > /dev/null
-      - uses: azure/login@v3
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
@@ -36,49 +44,94 @@ jobs:
           RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
           SQL_ADMIN_ID: ${{ secrets.AZ_SQL_ADMIN_OBJECT_ID }}
           SQL_ADMIN_NAME: ${{ secrets.AZ_SQL_DB_ADMIN_NAME }}
+          CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
+          OVERRIDE_LEAGUE_NAME: ${{ vars.OVERRIDE_LEAGUE_NAME }}
         run: |
           set -u
           : "${LEAGUE_ID:?}" "${RESOURCE_GROUP:?}" "${SQL_ADMIN_ID:?}" "${SQL_ADMIN_NAME:?}"
+          BUDGET_START=$(az consumption budget list -g "$RESOURCE_GROUP" \
+            --query "[0].timePeriod.startDate" -o tsv 2>/dev/null | cut -c1-10)
           az deployment group create \
             --name deploy-${{ github.run_number }} \
             --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
             budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
-            sqlAdminLogin="$SQL_ADMIN_NAME" \
+            sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
+            overrideLeagueName="${OVERRIDE_LEAGUE_NAME:-}" \
+            ${BUDGET_START:+budgetStartDate="$BUDGET_START"} \
             -o json > out.json
-          for k in functionAppName functionAppUrl staticWebAppName; do
+          for k in functionAppName functionAppUrl staticWebAppName staticWebAppUrl; do
             echo "$k=$(jq -r ".properties.outputs.$k.value" out.json)" >> "$GITHUB_OUTPUT"
           done
 
-  functions:
+  # Apply pending EF Core migrations before the new code that expects
+  # them ships
+  migrate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: infra
+    environment: production
     env:
       RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - run: dotnet tool install --global dotnet-ef --version 10.0.12
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
-          dotnet-version: 10.0.x
-      - run: dotnet publish -c Release -o publish src/FantasyLeague.Functions/FantasyLeague.Functions.csproj
-      - uses: anchore/sbom-action@v0
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Open firewall for runner
+        run: |
+          set -u
+          IP=$(curl -s https://api.ipify.org)
+          SQL_SERVER=$(az sql server list -g "$RESOURCE_GROUP" --query "[0].name" -o tsv | tr -d '\r')
+          SQL_FQDN=$(az sql server show -g "$RESOURCE_GROUP" -n "$SQL_SERVER" --query fullyQualifiedDomainName -o tsv | tr -d '\r')
+          SQL_DB=$(az sql db list -g "$RESOURCE_GROUP" -s "$SQL_SERVER" --query "[?name!='master'].name | [0]" -o tsv | tr -d '\r')
+          {
+            echo "SQL_SERVER=$SQL_SERVER"
+            echo "SQL_FQDN=$SQL_FQDN"
+            echo "SQL_DB=$SQL_DB"
+          } >> "$GITHUB_ENV"
+          az sql server firewall-rule create -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "gh-${{ github.run_id }}" --start-ip-address "$IP" --end-ip-address "$IP"
+      - name: Apply migrations
+        env:
+          ConnectionStrings__FantasyLeague: "Server=tcp:${{ env.SQL_FQDN }},1433;Database=${{ env.SQL_DB }};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;"
+        run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Data
+      - name: Close firewall
+        if: always()
+        run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s "$SQL_SERVER" -n "gh-${{ github.run_id }}"
+
+  functions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [infra, migrate]
+    env:
+      RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - run: dotnet test --no-restore --verbosity normal
+      - run: dotnet publish -c Release --no-restore -o publish src/FantasyLeague.Functions/FantasyLeague.Functions.csproj
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: publish
           artifact-name: sbom-functions.spdx.json
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: publish
           scanners: vuln
           severity: CRITICAL,HIGH
           exit-code: '1'
-      - uses: azure/login@v3
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - uses: Azure/functions-action@v1
+      - uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
         with:
           app-name: ${{ needs.infra.outputs.functionAppName }}
           package: publish
@@ -92,6 +145,73 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: infra
     steps:
-      - run: echo "web deploy pending T32"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      # the browser calls the Function App directly: the SWA has no linked
+      # backend, so a relative /api path is answered by the SPA fallback
+      - run: npm run build --prefix web
+        env:
+          VITE_API_ORIGIN: ${{ needs.infra.outputs.functionAppUrl }}
+
+      - uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: web/dist
+          skip_app_build: true
+          api_location: ''
+      - name: The deployed site is the built bundle
+        env:
+          SITE: ${{ needs.infra.outputs.staticWebAppUrl }}
+          API: ${{ needs.infra.outputs.functionAppUrl }}
+          CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
+        run: |
+          set -euo pipefail
+          # the custom domain is refused by the api until the bicep carries it.
+          # curl does not enforce cors so the header has to be asked for
+          domain="${CUSTOM_DOMAIN_NAME:-}"
+          if [ -n "$domain" ]; then
+            allowed=$(curl -fsS -D - -o /dev/null -H "Origin: https://$domain" \
+              "$API/api/season" | grep -i '^access-control-allow-origin:' || true)
+            if [ -z "$allowed" ]; then
+              echo "::error::$API refuses https://$domain. Is customDomain in the bicep deploy?"
+              exit 1
+            fi
+          fi
+
+          # SWA keeps serving the previous index.html for a while after the
+          # upload reports complete, and mid-swap it can hand out an index
+          # whose asset 404s. So wait for the asset this job just built, rather
+          # than checking whichever index is live - that could be the old one
+          expected=$(grep -o "/assets/[^\"]*[.]js" web/dist/index.html | head -1)
+          test -n "$expected"
+          for _ in $(seq 1 20); do
+            if curl -fsS "$SITE" -o index.html && grep -qF "$expected" index.html; then break; fi
+            sleep 6
+          done
+          if ! grep -qF "$expected" index.html; then
+            echo "::error::$SITE never served the new bundle ($expected)"
+            exit 1
+          fi
+          if grep -q "/src/" index.html; then echo "::error::$SITE serves source, not the bundle"; exit 1; fi
+
+          if ! curl -fsS --retry 5 --retry-all-errors --retry-delay 3 "$SITE$expected" | grep -qF "$API"; then
+            echo "::error::$SITE$expected is missing or was not built against $API"
+            exit 1
+          fi
+
+          #/api swallowed by the fallback is 200 + HTML; a 404 is the exclude
+          #working, and SWA's own 404 page is HTML too
+          code=$(curl -s -o api.out -w '%{http_code}' "$SITE/api/season" || true)
+          if [ "$code" = "200" ] && grep -qi '<!doctype html' api.out; then
+            echo "::error::$SITE/api/season returned 200 HTML: the SPA fallback is answering it"
+            exit 1
+          fi

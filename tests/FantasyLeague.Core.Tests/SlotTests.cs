@@ -55,10 +55,10 @@ namespace FantasyLeague.Core.Tests
             // Today an unknown code becomes a startable slot that accepts nobody,
             // so ideal is silently undercounted -- and ideal >= actual cannot
             // catch it, because undercounting is the restrictive direction.
-            var act = () => Slot.Parse(["QB", "WRTE_FLEX"]);
+            var act = () => Slot.Parse(["QB", "WR/TE FLEX"]);
 
             act.Should().Throw<ArgumentException>()
-               .WithMessage("*WRTE_FLEX*");
+               .WithMessage("*WR/TE FLEX*");
         }
     }
 
