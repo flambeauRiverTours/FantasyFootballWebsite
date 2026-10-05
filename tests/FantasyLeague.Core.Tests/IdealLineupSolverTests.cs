@@ -375,15 +375,26 @@ namespace FantasyLeague.Core.Tests
                 .ToList();
         }
 
-        [Fact]
-        public void Ideal_is_never_below_actual_for_any_roster_in_the_captured_week()
+        /// <summary>
+        /// Every week captured by scripts/capture_fixtures.py, found on disk so a
+        /// new capture is covered without editing this file.
+        /// </summary>
+        public static IEnumerable<object[]> CapturedWeeks() =>
+            Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "fixtures"), "wk*-matchups.json")
+                .Select(path => new object[] { Path.GetFileName(path) })
+                .OrderBy(row => (string)row[0]);
+
+        [Theory]
+        [MemberData(nameof(CapturedWeeks))]
+        public void Ideal_is_never_below_actual_for_any_roster(string weekFile)
         {
             // The single assertion that catches nearly every way the solver can be
             // wrong: the lineup actually started is one of the assignments the
             // solver considers, so ideal can never come out lower.
             var slots = LeagueSlots();
             var positions = PlayerPositions();
-            using var week = Fixture("wk1-matchups.json");
+            using var week = Fixture(weekFile);
+            var gaps = 0;
 
             foreach (var entry in week.RootElement.EnumerateArray())
             {
@@ -402,7 +413,15 @@ namespace FantasyLeague.Core.Tests
                     actual, $"roster {rosterId} ideal must not fall below what it actually scored");
                 lineup.Should().OnlyHaveUniqueItems($"roster {rosterId}");
                 lineup.Count.Should().BeLessThanOrEqualTo(slots.Count, $"roster {rosterId}");
+
+                if (ideal > actual) gaps++;
             }
+
+            // ideal >= actual alone would still pass if the solver just returned
+            // the lineup the manager started. In a real week somebody always
+            // leaves points on the bench, so demand at least one genuine gap (B5).
+            gaps.Should().BeGreaterThan(0,
+                $"in {weekFile} at least one roster should have left points on the bench");
         }
 
         [Fact]
