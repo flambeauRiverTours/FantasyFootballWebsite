@@ -143,6 +143,25 @@ describe('RadarPanel', () => {
     vi.stubGlobal('location', original);
   });
 
+  it("draws the shape in the selected team's chip colour", () => {
+    const { container } = render(<RadarPanel payload={withSlots()} />);
+    const radarColour = () =>
+      (container.querySelector('svg.radar') as SVGElement).style.getPropertyValue('--team');
+    const chipColour = (name: string) =>
+      screen.getByRole('button', { name }).style.getPropertyValue('--chip');
+
+    expect(radarColour()).toBe(chipColour('Alpha'));
+
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Bravo' }));
+      expect(radarColour()).toBe(chipColour('Bravo'));
+      expect(radarColour()).not.toBe(chipColour('Alpha'));
+    } finally {
+      // selecting a team writes ?team= into the URL, which the next test would read
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
   it('draws the radar by default and switches to bars on toggle', () => {
     const { container } = render(<RadarPanel payload={withSlots()} />);
     expect(container.querySelector('svg.radar')).not.toBeNull();
