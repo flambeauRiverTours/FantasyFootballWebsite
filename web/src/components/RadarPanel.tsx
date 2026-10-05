@@ -22,6 +22,11 @@ const Views = [
 
 const MaxRadarSize = 420;
 
+/** One colour per team, by its place in the list: the chip and the radar shape both use it. */
+function teamColour(index: number): string {
+  return `var(--team-${index + 1})`;
+}
+
 // ratios
 
 /** !league catches both the missing key and T47's zero-denominator guard. */
@@ -66,7 +71,7 @@ function TeamChips({ teams, teamId, onSelect }: TeamChipsProps) {
             type="button"
             className="chip"
             aria-pressed={t.rosterId === teamId}
-            style={{ '--chip': `var(--team-${i + 1})` } as CSSProperties}
+            style={{ '--chip': teamColour(i) } as CSSProperties}
             onClick={() => onSelect(t.rosterId)}
           >
             <span className="swatch" aria-hidden="true" />
@@ -80,6 +85,7 @@ function TeamChips({ teams, teamId, onSelect }: TeamChipsProps) {
 
 interface DrawingProps {
   team: TeamPayload | undefined;
+  colour: string | undefined;
   view: View;
   slots: string[];
   ratios: (number | null)[];
@@ -87,13 +93,13 @@ interface DrawingProps {
   label: string;
 }
 
-function Drawing({ team, view, slots, ratios, width, label }: DrawingProps) {
+function Drawing({ team, colour, view, slots, ratios, width, label }: DrawingProps) {
   if (!team) return <p className="muted">No teams to plot.</p>;
 
   return view === 'bars' ? (
     <SlotBars slots={slots} ratios={ratios} width={width} label={label} height={Math.min(width, MaxRadarSize)} />
   ) : (
-    <Radar slots={slots} ratios={ratios} size={Math.min(width, MaxRadarSize)} label={label} />
+    <Radar slots={slots} ratios={ratios} size={Math.min(width, MaxRadarSize)} label={label} colour={colour} />
   );
 }
 
@@ -120,7 +126,9 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
   const teamId = payload.teams.some((t) => String(t.rosterId) === rawTeam)
     ? Number(rawTeam)
     : (payload.teams[0]?.rosterId ?? null);
-  const team = payload.teams.find((t) => t.rosterId === teamId);
+  const teamIndex = payload.teams.findIndex((t) => t.rosterId === teamId);
+  const team = payload.teams[teamIndex];
+  const colour = teamIndex >= 0 ? teamColour(teamIndex) : undefined;
   const ratios = ratiosFor(payload, teamId);
   const label = team ? describe(team.name, payload.slotOrder, ratios) : '';
   const selectTeam = (rosterId: number) =>
@@ -133,7 +141,7 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
 
       {/* the wrapper always mounts so the observer has something to watch */}
       <div className="radar-wrap" ref={wrapper}>
-        <Drawing team={team} view={view} slots={payload.slotOrder} ratios={ratios} width={width} label={label} />
+        <Drawing team={team} colour={colour} view={view} slots={payload.slotOrder} ratios={ratios} width={width} label={label} />
       </div>
     </Panel>
   );
