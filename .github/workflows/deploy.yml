@@ -203,7 +203,11 @@ jobs:
           fi
           if grep -q "/src/" index.html; then echo "::error::$SITE serves source, not the bundle"; exit 1; fi
 
-          if ! curl -fsS --retry 5 --retry-all-errors --retry-delay 3 "$SITE$expected" | grep -qF "$API"; then
+          # to a file, not piped: grep -q quits at the first match, curl then
+          # fails writing the rest (exit 23), and pipefail turns that into a
+          # failure even though the check passed
+          if ! curl -fsS --retry 5 --retry-all-errors --retry-delay 3 "$SITE$expected" -o bundle.js \
+             || ! grep -qF "$API" bundle.js; then
             echo "::error::$SITE$expected is missing or was not built against $API"
             exit 1
           fi

@@ -692,6 +692,29 @@ are still on the chart (T42), so the figure has not gone from the site.
 **D3 is affected, not reversed.** It chose σ over CV for the place people
 look first. That place is now T59's panel rather than a table column.
 
+## A18 · A licence shipped as a file is declared, not exempted
+
+2026-10-08. Azure.Storage.Blobs 12.30.0 (Dependabot, #61) brought in
+**Apache.Arrow 22.1.0** as a new transitive dependency. Its nuspec gives the
+licence as a file, `LICENSE.txt`, not an SPDX expression, so `nuget-license`
+reports "Unable to determine license" and the `dependencies` job fails.
+
+The file was read rather than assumed: it is the Apache License 2.0 text, plus
+a note that the package bundles FlatBuffers code, also under Apache-2.0.
+Apache-2.0 is already on the allowed list, so there is nothing to exempt, only
+something the tool cannot see for itself.
+
+**So it is declared, not ignored.** A15's Microsoft natives are ignored by name
+because their licence is proprietary and could never be on the list.
+Apache.Arrow is the opposite: an allowed licence the tool cannot read. It goes
+in `.github/license-overrides.json`, passed with `-override`, which the tool
+documents for exactly this case.
+
+**Pinned to a version on purpose.** Unlike A15's ignores, an override names
+the version. When Dependabot next bumps Apache.Arrow, the job fails again until
+someone has read that version's licence file and updated the entry. That is a
+small cost for not waving through a licence change unread.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**
