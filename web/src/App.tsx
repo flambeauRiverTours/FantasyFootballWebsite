@@ -73,7 +73,7 @@ export default function App() {
           {error ? <StaleBanner asOfUtc={payload.asOfUtc} onRetry={refetch} /> : null}
 
           <main className="panels">
-            <StandingsPanel teams={payload.teams} finalThroughWeek={payload.finalThroughWeek} />
+            <StandingsPanel teams={payload.teams} />
             <ChartPanel payload={payload} />
             {hasRadar ? <RadarPanel payload={payload} /> : null}
           </main>

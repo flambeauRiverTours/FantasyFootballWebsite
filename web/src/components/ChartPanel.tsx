@@ -109,13 +109,8 @@ function describe(
 }
 
 export default function ChartPanel({ payload }: ChartPanelProps) {
-  // options that need data the season doesn't have yet are hidden, not
-  // merely disabled: an offered-but-nonfunctional control is a worse
-  // affordance than not offering it (D1: sigma needs four finalized weeks;
-  // vs median needs a league value for at least two finalized weeks — one
-  // is a real value but only a single point, and isPlottable below refuses
-  // to draw a line through just one)
-  const hasSigma = payload.finalThroughWeek >= 4;
+  // options that need data the season doesn't have yet are hidden
+  const hasSigma = payload.finalThroughWeek >= 5;
   const hasMedian = payload.finalThroughWeek >= 2;
   const availableMetrics = Metrics.filter(([key]) => key !== 'sigma' || hasSigma);
   const availableModes = Modes.filter(([key]) => key !== 'vsMedian' || hasMedian);
@@ -224,7 +219,7 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
         ) : (
           <p className="muted">
             {showSigma
-              ? 'Available with four weeks of data. Stay tuned!'
+              ? 'Available with five weeks of data. Stay tuned!'
               : 'Point chart will appear here once multiple weeks are final. Stay tuned!'}
           </p>
         )}
