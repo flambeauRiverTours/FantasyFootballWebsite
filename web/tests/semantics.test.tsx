@@ -44,7 +44,7 @@ describe('Panel', () => {
 
 describe('StandingsPanel', () => {
   it('marks the sorted column with aria-sort', () => {
-    render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    render(<StandingsPanel teams={teams} />);
     const sorted = screen.getAllByRole('columnheader').filter((h) => h.hasAttribute('aria-sort'));
     expect(sorted).toHaveLength(1);
     expect(sorted[0]).toHaveTextContent('Points');
@@ -52,24 +52,34 @@ describe('StandingsPanel', () => {
   });
 
   it('tags the gap column on the header and every body cell', () => {
-    const { container } = render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    const { container } = render(<StandingsPanel teams={teams} />);
     expect(container.querySelectorAll('th.col-gap')).toHaveLength(1);
     expect(container.querySelectorAll('td.col-gap')).toHaveLength(teams.length);
   });
 
+  it('has no sigma column, even once every team has a sigma', () => {
+    const withSigma = teams.map((t) => ({
+      ...t,
+      totals: { ...t.totals, sigma: 12.5, cv: 0.1, mean: 120, min: 100, max: 140 },
+    }));
+    render(<StandingsPanel teams={withSigma} />);
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
+  });
+
   it('puts gap next to points, then ideal', () => {
-    render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    render(<StandingsPanel teams={teams} />);
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers.slice(0, 4)).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
   });
 
   it('puts the table in its own scroll container', () => {
-    const { container } = render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    const { container } = render(<StandingsPanel teams={teams} />);
     expect(container.querySelector('.table-wrap > table')).not.toBeNull();
   });
 
   it('renders an em dash, never a zero, for the leader gap', () => {
-    render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    render(<StandingsPanel teams={teams} />);
     const rows = screen.getAllByRole('row').slice(1);
     const gap = (row: HTMLElement) => row.querySelector('td.col-gap');
     expect(gap(rows[0])).toHaveTextContent('—');
@@ -77,14 +87,14 @@ describe('StandingsPanel', () => {
   });
 
   it('keeps one heading and no table when there is nothing to show', () => {
-    const { container } = render(<StandingsPanel teams={[]} finalThroughWeek={0} />);
+    const { container } = render(<StandingsPanel teams={[]} />);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelector('table')).toBeNull();
     expect(screen.getByRole('region', { name: 'Standings' })).toBeInTheDocument();
   });
 
   it('has no axe violations', async () => {
-    const { container } = render(<StandingsPanel teams={teams} finalThroughWeek={2} />);
+    const { container } = render(<StandingsPanel teams={teams} />);
     expect(await violations(container)).toEqual([]);
   });
 });
@@ -96,7 +106,7 @@ describe('ChartPanel', () => {
     expect(chips.map((c) => c.textContent)).toEqual(['Alpha', 'Bravo', 'Charlie']);
     for (const chip of chips) expect(chip).toHaveAttribute('aria-pressed', 'true');
 
-    // the fixture has two finalized weeks: sigma needs four (D1), so it is
+    // the fixture has two finalized weeks: a sigma line needs five, so it is
     // not offered — see the sigma/vs-median availability tests below
     const metric = within(screen.getByRole('group', { name: /metric/i })).getAllByRole('button');
     expect(metric.map((b) => b.textContent)).toEqual(['Points', 'Ideal']);
@@ -106,12 +116,37 @@ describe('ChartPanel', () => {
     expect(screen.queryByRole('group', { name: /window/i })).toBeNull();
   });
 
-  it('hides the sigma metric below four finalized weeks and shows it at four', () => {
-    const { rerender } = render(<ChartPanel payload={{ ...payload, finalThroughWeek: 3 }} />);
+  it('hides the sigma metric below five finalized weeks and shows it at five', () => {
+    // at four the first sigma exists (D1), but it is one point and a line needs two
+    const { rerender } = render(<ChartPanel payload={{ ...payload, finalThroughWeek: 4 }} />);
     expect(within(screen.getByRole('group', { name: /metric/i })).queryByText('σ')).toBeNull();
 
-    rerender(<ChartPanel payload={{ ...payload, finalThroughWeek: 4 }} />);
+    rerender(<ChartPanel payload={{ ...payload, finalThroughWeek: 5 }} />);
     expect(within(screen.getByRole('group', { name: /metric/i })).getByText('σ')).toBeInTheDocument();
+  });
+
+  it('draws a sigma line, not the empty message, as soon as sigma is offered', () => {
+    // five finalized weeks: expanding sigma has points at weeks 4 and 5
+    const scores = [100, 140, 90, 160, 120];
+    const fiveWeeks = {
+      ...payload,
+      finalThroughWeek: 5,
+      teams: payload.teams.map((t, i) => ({
+        ...t,
+        weeks: scores.map((s, w) => ({ week: w + 1, actual: s + i * 7, ideal: s + 20, isFinal: true })),
+      })),
+    };
+    window.history.replaceState(null, '', '?metric=sigma');
+    try {
+      const { container } = render(<ChartPanel payload={fiveWeeks} />);
+      // without sigma on offer the chart would fall back to points and still
+      // draw three lines, so check these are the sigma ones
+      expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/^Consistency sigma/);
+      expect(container.querySelectorAll('path.series')).toHaveLength(3);
+      expect(screen.queryByText(/Stay tuned/)).toBeNull();
+    } finally {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
   });
 
   it('hides vs median below two finalized weeks and shows it at two', () => {

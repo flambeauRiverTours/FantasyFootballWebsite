@@ -133,11 +133,15 @@ Default to expanding. Rolling is the more interesting series in the back half of
 
 Chosen: display σ in points; offer CV = σ ÷ mean as a chart toggle.
 
+**Corrected (A17): σ is no longer in the standings table.** The reasoning below still decides σ over CV, but for σ's own panel (T59) rather than a table column.
+
 σ is scale-dependent, which makes it quietly unfair across teams with different scoring levels: a team averaging 140 with σ = 25 is *relatively* steadier than one averaging 90 with σ = 22, but the raw numbers say the opposite. CV is the statistically correct comparison and it is one division away.
 
 It is also less intuitive. "I swing about twenty-five points a week" is a sentence a league-mate will say out loud; "my coefficient of variation is 0.18" is not. The table gets the number people will actually discuss, and the chart carries the one that is technically right for anyone who wants it.
 
 ### Showing σ in a table cell
+
+**Corrected (A17): this did not work in a table cell.** At roughly 140px the range mark was illegible, and it shipped without the figure. It moves, with the figure, to a panel of its own (T59), where the reasoning below still applies.
 
 A bare standard deviation is hard to interpret at a glance even for readers who know what it is. Pair the figure with a small inline range mark — a horizontal rule spanning the team's minimum to maximum weekly score, with a tick at the mean and a shaded band at ±σ, drawn on a scale shared by every row. The number stays for precision; the mark makes every row comparable without reading any of them.
 
