@@ -666,6 +666,32 @@ scheduled write.
 
 ---
 
+## A17 · σ leaves the standings table for a panel of its own
+
+2026-10-07. The first week σ had real data behind it (week 4, after **D1**'s
+four-week minimum), the column went live and looked badly out of place.
+
+The design asked for the σ figure *plus* a small inline range mark (§04,
+"Showing σ in a table cell"): a rule from the team's lowest to highest week,
+a tick at the mean, a band at ±σ, on one scale shared by every row. What
+shipped was the mark without the number. In a ~140px cell, beside four
+right-aligned figures, the mark read as decoration rather than data, and with
+no figure next to it there was nothing to read precisely either.
+
+**Showing just the number was considered and not taken.** It would fit the
+table, and σ is the figure people say out loud (**D3**). But the mark is the
+part that carries information a number cannot: floor, ceiling and spread,
+comparable across teams at a glance. Rather than throw that away or keep it
+cramped, σ comes out of the table entirely and gets a panel (**T59**) where
+the range mark has room to be legible and the number can sit beside it.
+
+**What changes:** the standings table is Team, Points, Gap and Ideal.
+`SigmaDisplay` and its tests are kept, unused, for T59 to build on. σ and CV
+are still on the chart (T42), so the figure has not gone from the site.
+
+**D3 is affected, not reversed.** It chose σ over CV for the place people
+look first. That place is now T59's panel rather than a table column.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**
@@ -707,6 +733,10 @@ that are easy to make again.
   build order is now partly history** — M0–M2 are built. Both sections say so.
 
 ---
+
+- **§04 put σ in the standings table, with an inline range mark.** At table
+  size the mark was illegible, and it shipped without the figure it was meant
+  to accompany. σ is out of the table pending its own panel. See **A17**.
 
 ## Corrections applied to the manual
 
