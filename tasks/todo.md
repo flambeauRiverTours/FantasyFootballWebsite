@@ -391,6 +391,7 @@ Listed here only so their implementation state is visible in one place.
 | **A15** | Two Microsoft natives exempt from the licence allowlist                  | done                                                                     |
 | **A16** | Finalized weeks mirrored to blob, to remove SQL from the request path    | decided — **T58**                                                       |
 | **A17** | σ leaves the standings table for a panel of its own                      | table done — panel is **T59**                                           |
+| **A18** | A licence shipped as a file is declared by version, not exempted         | done — Apache.Arrow, in `.github/license-overrides.json`                |
 
 ---
 
