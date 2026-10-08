@@ -595,3 +595,18 @@ existing value and pass it back in, falling back to the computed default only
 when the resource does not exist yet. And suspect the calendar when a deploy
 that changed nothing in `infra/` fails on the first run of a new month.
 
+## `grep -q` at the end of a `pipefail` pipeline can fail on success
+
+The deploy check `curl ... "$SITE$asset" | grep -qF "$API"` failed on a correct
+bundle. `grep -q` exits at its first match, curl then fails writing the rest of
+the 346 KB bundle into the closed pipe (`curl: (23) Failure writing output`),
+and `set -o pipefail` reports curl's failure as the pipeline's. Whether curl
+had finished before grep quit was a race: run against the live site, that line
+failed 5 times out of 10 with nothing wrong. Adding `--retry-all-errors` in #53
+made it worse, since curl then retried into the same dead pipe.
+
+**Rule:** under `pipefail`, don't pipe a large download into anything that
+quits early (`grep -q`, `head`, `grep -m1`). Write it to a file and test the
+file. Small outputs, or readers that consume everything (`jq`, plain `grep`),
+are fine. And when a step's red is on its *checker* rather than the thing
+being checked, re-run the checker against production before believing it.
