@@ -187,6 +187,21 @@ that cutting it is a decision rather than an omission.
 
 ---
 
+## Next · a panel for σ — 3 h `±`
+
+σ came out of the standings table on 2026-10-07 (**A17**): its range mark was
+illegible at table size, and it had shipped without the figure beside it.
+
+- [ ] **T59** Consistency panel — 3 h `±` · σ with room to read it
+      A panel of its own, one row per team, sharing a scale: the range mark
+      from §04 (lowest to highest week, a tick at the mean, a ±σ band) drawn
+      wide enough to read, with the σ figure beside it. `SigmaDisplay` and its
+      tests in `chart.test.tsx` are kept for this. Hidden, not empty, below
+      four finalized weeks (**D1**). Decide whether CV belongs here too or
+      stays on the chart (**D3**). Rank by σ, or keep the standings order?
+
+---
+
 ## Deferred · season picker — 1 h
 
 - [ ] **T56** Season picker in the masthead — 1 h · **waiting on August 2027**
@@ -375,6 +390,7 @@ Listed here only so their implementation state is visible in one place.
 | **A14** | The stored key leads on `Season`, not `LeagueId`                         | decided — T25                                                            |
 | **A15** | Two Microsoft natives exempt from the licence allowlist                  | done                                                                     |
 | **A16** | Finalized weeks mirrored to blob, to remove SQL from the request path    | decided — **T58**                                                       |
+| **A17** | σ leaves the standings table for a panel of its own                      | table done — panel is **T59**                                           |
 
 ---
 
