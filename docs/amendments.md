@@ -870,6 +870,40 @@ logs a count. Build and refresh durations were timed with `Stopwatch` rather
 than the injected `TimeProvider`. `SleeperReader` built two domain records
 itself rather than through `SleeperMapper`. `SlotAverager` lacked a summary.
 
+## A24 · The front end meets its standards
+
+2026-10-12. The domain 2 check found the front end close to its standards but
+short on a few that matter, and four decisions were made along the way.
+
+**What was out of line.** `noUncheckedIndexedAccess` was off, and turning it on
+surfaced nine unguarded indexes. Six `!` assertions had no reason given. The
+ranking, the gap to the leader, the radar ratios and the bar deviations were
+computed inside components rather than in `pointCalculation.ts`. The standings
+rows still slid with reduced motion on, because Motion's `layout` animation
+ignores the preference unless `MotionConfig` says otherwise, and the radar's
+crossfade ignored it too. The line chart's label said what was drawn but no
+figure from it. And `?season` was never read, so the 404 page's season links
+went nowhere.
+
+**Decisions.**
+- **Tests may use `!` without a comment,** extending A23 to TypeScript for the
+  same reason: a wrong null fails the test that relies on it.
+- **Prettier formats the front end,** with 2-space indents, single quotes,
+  semicolons and a 100-character line, which is what most files already used.
+  Three files had drifted to a different style.
+- **The 125 KB budget is enforced in CI,** by summing the gzipped size of every
+  script `index.html` loads before first paint. It stood at 112 KB, close
+  enough that one dependency could breach it unnoticed.
+- **The tab is titled with the league's name** once the season loads, and
+  "Fantasy Standings" until then.
+- **A narrow chart drops its line-end names.** Checking 375 px in a browser
+  showed them colliding where totals are close and clipping at the edge. Below
+  a 600 px chart the team chips above it are the legend, and the plot takes the
+  freed margin. The spoken label still names every team.
+
+**A consequence of F1.** The CV can now be null while sigma is not, at a zero
+mean, so `ConsistentTotals` no longer promises a CV.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

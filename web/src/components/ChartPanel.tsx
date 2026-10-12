@@ -1,16 +1,22 @@
 import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import type { SeasonPayload, TeamPayload, WeekPayload } from '../api/types';
-import type { Metric, Point } from '../api/pointCalculation';
+import type { Metric, Point, PointMode } from '../api/pointCalculation';
 import {
+  canPlotMedian,
+  canPlotSigma,
   cumulative,
+  hasMovement,
+  latestExtremes,
   perWeek,
+  rankByPoints,
   sigmaSeries,
   startedWeeks,
   vsMedian,
   weeklyMedians,
 } from '../api/pointCalculation';
 import { useEnumQuery } from '../hooks/useEnumQuery';
+import type { Options } from '../hooks/useEnumQuery';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
 import { useTeamFilter } from '../hooks/useTeamFilter';
 import Chart from './Chart';
@@ -22,7 +28,6 @@ interface ChartPanelProps {
   payload: SeasonPayload;
 }
 
-type Mode = 'cumulative' | 'perWeek' | 'vsMedian';
 type SigmaWindow = 'expanding' | 'rolling';
 type Scale = 'sigma' | 'cv';
 
@@ -40,7 +45,7 @@ const Modes = [
   ['cumulative', 'Total'],
   ['perWeek', 'Per week'],
   ['vsMedian', 'vs median'],
-] as const satisfies readonly (readonly [Mode, string])[];
+] as const satisfies readonly (readonly [PointMode, string])[];
 
 const Windows = [
   ['expanding', 'Expanding'],
@@ -52,27 +57,26 @@ const Scales = [
   ['cv', 'CV'],
 ] as const satisfies readonly (readonly [Scale, string])[];
 
-const ModeWords: Record<Mode, string> = {
-  cumulative: 'Cumulative',
-  perWeek: 'Weekly',
-  vsMedian: 'Cumulative points above the league median for',
+/** What each mode plots, in words, given what is being counted. */
+const ModeWords: Record<PointMode, (what: string) => string> = {
+  cumulative: (what) => `Cumulative ${what}`,
+  perWeek: (what) => `Weekly ${what}`,
+  vsMedian: (what) => `Cumulative ${what} above the league median`,
 };
 
 // series building
 
 function toSeries(teams: TeamPayload[], points: (weeks: WeekPayload[]) => Point[]): Series[] {
-  return [...teams]
-    .sort((a, b) => b.totals.actual - a.totals.actual)
-    .map((team, i) => ({
-      rosterId: team.rosterId,
-      name: team.name,
-      colour: `var(--team-${i + 1})`,
-      points: points(team.weeks),
-    }));
+  return rankByPoints(teams).map((team, i) => ({
+    rosterId: team.rosterId,
+    name: team.name,
+    colour: `var(--team-${i + 1})`,
+    points: points(team.weeks),
+  }));
 }
 
 function pointsFor(
-  mode: Mode,
+  mode: PointMode,
   metric: Metric,
   weeks: WeekPayload[],
   medians: Map<number, number>,
@@ -87,33 +91,48 @@ function pointsFor(
   }
 }
 
-/** One point draws nothing. */
+/** True when at least one line has something to show. */
 function isPlottable(series: Series[]): boolean {
-  return series.some((s) => s.points.length >= 2 && s.points.some((p) => p.value !== s.points[0].value));
+  return series.some((s) => hasMovement(s.points));
 }
 
-/** aria spoken description */
+/**
+ * The chart in words for a screen reader: what is plotted, for whom, and the
+ * highest and lowest values at the latest week.
+ */
 function describe(
   metric: Metric,
-  mode: Mode,
+  mode: PointMode,
   sigmaWindow: SigmaWindow,
   scale: Scale,
-  names: string,
+  visible: Series[],
 ): string {
-  if (metric === 'sigma') {
-    const what = scale === 'cv' ? 'Coefficient of variation' : 'Consistency sigma';
-    return `${what}, ${sigmaWindow} window, by week for ${names}`;
-  }
+  const names = visible.map((s) => s.name).join(', ');
+  const what =
+    metric === 'sigma'
+      ? `${scale === 'cv' ? 'Coefficient of variation' : 'Consistency sigma'}, ${sigmaWindow} window, by week for ${names}.`
+      : `${ModeWords[mode](metric === 'ideal' ? 'ideal points' : 'points')} by week for ${names}.`;
 
-  return `${ModeWords[mode]} ${metric === 'ideal' ? 'ideal points' : 'points'} by week for ${names}`;
+  const extremes = latestExtremes(visible);
+  if (extremes === null) return what;
+
+  const digits = metric === 'sigma' && scale === 'cv' ? 2 : 1;
+  const { week, high, low } = extremes;
+  return `${what} At week ${week}, highest ${high.name} at ${high.value.toFixed(digits)}, lowest ${low.name} at ${low.value.toFixed(digits)}.`;
 }
 
 export default function ChartPanel({ payload }: ChartPanelProps) {
-  // options that need data the season doesn't have yet are hidden
-  const hasSigma = payload.finalThroughWeek >= 5;
-  const hasMedian = payload.finalThroughWeek >= 2;
-  const availableMetrics = Metrics.filter(([key]) => key !== 'sigma' || hasSigma);
-  const availableModes = Modes.filter(([key]) => key !== 'vsMedian' || hasMedian);
+  // options that need data the season doesn't have yet are hidden; the first is always available
+  const hasSigma = canPlotSigma(payload.finalThroughWeek);
+  const hasMedian = canPlotMedian(payload.finalThroughWeek);
+  const availableMetrics: Options<Metric> = [
+    Metrics[0],
+    ...Metrics.slice(1).filter(([key]) => key !== 'sigma' || hasSigma),
+  ];
+  const availableModes: Options<PointMode> = [
+    Modes[0],
+    ...Modes.slice(1).filter(([key]) => key !== 'vsMedian' || hasMedian),
+  ];
 
   // controls
   const [metric, setMetric] = useEnumQuery('metric', availableMetrics);
@@ -169,7 +188,13 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
           />
         </>
       ) : (
-        <SegmentedRow name="mode" label="Mode" options={availableModes} value={mode} onChange={setMode} />
+        <SegmentedRow
+          name="mode"
+          label="Mode"
+          options={availableModes}
+          value={mode}
+          onChange={setMode}
+        />
       )}
 
       {/* teams */}
@@ -207,13 +232,7 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
             onHover={setHovered}
             zeroBased={zeroBased}
             displayKey={showSigma ? `sigma-${sigmaWindow}-${scale}` : `${mode}-${metric}`}
-            label={describe(
-              metric,
-              mode,
-              sigmaWindow,
-              scale,
-              visible.map((s) => s.name).join(', '),
-            )}
+            label={describe(metric, mode, sigmaWindow, scale, visible)}
             yTitle={showSigma ? (scale === 'cv' ? 'CV' : Sigma) : ''}
           />
         ) : (

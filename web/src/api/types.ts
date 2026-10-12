@@ -22,15 +22,14 @@ export interface TeamPayload {
   rosterId: number;
   name: string;
   totals: TotalsPayload;
-  /** Empty until M6 fills it. */
+  /** Season average per slot code. Empty when no finalized week produced an attribution. */
   slotAverages: Record<string, number>;
   weeks: WeekPayload[];
 }
 
 /**
- * The five consistency fields are null together or present together: all of them
- * are null below four finalized weeks (D1). One guard decides whether the
- * consistency column renders at all.
+ * Sigma, mean, min and max are null together, below four finalized weeks (D1).
+ * CV is also null whenever the mean is zero, because it has no denominator (F1).
  */
 export interface TotalsPayload {
   actual: number;
@@ -55,17 +54,15 @@ export interface SeasonsPayload {
   available: number[];
 }
 
-/** Totals whose five consistency figures are all present. */
+/** Totals with sigma and its range present. CV can still be null, at a zero mean. */
 export type ConsistentTotals = TotalsPayload & {
   sigma: number;
-  cv: number;
   mean: number;
   min: number;
   max: number;
 };
 
-/** True when every consistency figure is available. */
+/** True when sigma and its range are available, which the server decides together. */
 export function hasConsistency(totals: TotalsPayload): totals is ConsistentTotals {
-  if (!totals) return false;
   return totals.sigma !== null;
 }

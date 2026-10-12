@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamPayload, WeekPayload } from '../src/api/types';
 import {
+  canPlotMedian,
+  canPlotSigma,
   cumulative,
+  hasMovement,
+  latestExtremes,
   perWeek,
   populationSigma,
+  rankByPoints,
   sigmaSeries,
+  slotDeviations,
+  slotRatios,
+  standings,
   startedWeeks,
   vsMedian,
   weeklyMedians,
 } from '../src/api/pointCalculation';
+import { payload } from './fixture';
 
 function weeks(...rows: [number, number, number, boolean][]): WeekPayload[] {
   return rows.map(([week, actual, ideal, isFinal]) => ({ week, actual, ideal, isFinal }));
@@ -159,13 +168,111 @@ describe('sigmaSeries', () => {
   });
 
   it('drops a CV with no mean rather than dividing by zero', () => {
-    const zeros = weeks(
-      [1, 0, 0, true],
-      [2, 0, 0, true],
-      [3, 0, 0, true],
-      [4, 0, 0, true],
-    );
+    const zeros = weeks([1, 0, 0, true], [2, 0, 0, true], [3, 0, 0, true], [4, 0, 0, true]);
     expect(sigmaSeries(zeros, false, true)).toEqual([]);
     expect(sigmaSeries(zeros, false, false)).toHaveLength(1);
+  });
+});
+
+describe('standings', () => {
+  it('ranks by points with each gap to the leader', () => {
+    const rows = standings([...payload.teams].reverse());
+    expect(rows.map((r) => r.team.name)).toEqual(['Alpha', 'Bravo', 'Charlie']);
+    expect(rows.map((r) => Number(r.gap.toFixed(1)))).toEqual([0, 40.2, 89.5]);
+  });
+
+  it('leaves the input order alone', () => {
+    const input = [...payload.teams].reverse();
+    rankByPoints(input);
+    expect(input[0]?.name).toBe('Charlie');
+  });
+
+  it('is empty for no teams', () => {
+    expect(standings([])).toEqual([]);
+  });
+});
+
+describe('canPlotSigma and canPlotMedian', () => {
+  it('needs five final weeks for a sigma line: four for the first value, one more for a second', () => {
+    expect(canPlotSigma(4)).toBe(false);
+    expect(canPlotSigma(5)).toBe(true);
+  });
+
+  it('needs two final weeks for a median line', () => {
+    expect(canPlotMedian(1)).toBe(false);
+    expect(canPlotMedian(2)).toBe(true);
+  });
+});
+
+describe('hasMovement', () => {
+  it('is false for nothing, one point, or a flat line', () => {
+    expect(hasMovement([])).toBe(false);
+    expect(hasMovement([{ week: 1, value: 5 }])).toBe(false);
+    expect(
+      hasMovement([
+        { week: 1, value: 5 },
+        { week: 2, value: 5 },
+      ]),
+    ).toBe(false);
+  });
+
+  it('is true once two points differ', () => {
+    expect(
+      hasMovement([
+        { week: 1, value: 5 },
+        { week: 2, value: 6 },
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe('slotRatios and slotDeviations', () => {
+  const radar = {
+    ...payload,
+    slotOrder: ['QB', 'RB', 'K'],
+    leagueSlotAverages: { QB: 20, RB: 10, K: 0 },
+    teams: payload.teams.map((t) =>
+      t.rosterId === 1 ? { ...t, slotAverages: { QB: 25, K: 4 } } : t,
+    ),
+  };
+
+  it('divides by the league average, in slot order', () => {
+    expect(slotRatios(radar, 1)[0]).toBe(1.25);
+  });
+
+  it('is null where the team has no figure or the league average is zero', () => {
+    expect(slotRatios(radar, 1).slice(1)).toEqual([null, null]);
+  });
+
+  it('is null at every slot for a team not in the payload', () => {
+    expect(slotRatios(radar, 99)).toEqual([null, null, null]);
+  });
+
+  it('turns ratios into distance from the league average', () => {
+    expect(slotDeviations([1.25, null, 0.5])).toEqual([0.25, null, -0.5]);
+  });
+});
+
+describe('latestExtremes', () => {
+  const line = (name: string, ...values: number[]) => ({
+    name,
+    points: values.map((value, i) => ({ week: i + 1, value })),
+  });
+
+  it('reads the highest and lowest at the latest week', () => {
+    expect(latestExtremes([line('A', 1, 9), line('B', 5, 2), line('C', 3, 4)])).toEqual({
+      week: 2,
+      high: { name: 'A', value: 9 },
+      low: { name: 'B', value: 2 },
+    });
+  });
+
+  it('ignores a line that stops before the latest week', () => {
+    expect(latestExtremes([line('A', 1, 9), line('B', 100)])?.low.name).toBe('A');
+  });
+
+  it('is null with nothing plotted', () => {
+    expect(latestExtremes([])).toBeNull();
+    expect(latestExtremes([{ name: 'A', points: [] }])).toBeNull();
   });
 });

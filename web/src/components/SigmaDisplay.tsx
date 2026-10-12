@@ -24,9 +24,30 @@ export default function SigmaDisplay({ totals, scaleFunction }: SigmaDisplayProp
       role="img"
       aria-label={`${min.toFixed(1)} to ${max.toFixed(1)}, mean ${mean.toFixed(1)}, sigma ${sigma.toFixed(1)}`}
     >
-      <line x1={scaleFunction(min)} x2={scaleFunction(max)} y1="8" y2="8" stroke="currentColor" opacity=".35" />
-      <rect x={bandStart} width={scaleFunction(mean + sigma) - bandStart} y="4" height="8" fill="var(--accent)"opacity=".22"/>
-      <line x1={scaleFunction(mean)} x2={scaleFunction(mean)} y1="2" y2="14" stroke="var(--accent)" strokeWidth="2" />
+      <line
+        x1={scaleFunction(min)}
+        x2={scaleFunction(max)}
+        y1="8"
+        y2="8"
+        stroke="currentColor"
+        opacity=".35"
+      />
+      <rect
+        x={bandStart}
+        width={scaleFunction(mean + sigma) - bandStart}
+        y="4"
+        height="8"
+        fill="var(--accent)"
+        opacity=".22"
+      />
+      <line
+        x1={scaleFunction(mean)}
+        x2={scaleFunction(mean)}
+        y1="2"
+        y2="14"
+        stroke="var(--accent)"
+        strokeWidth="2"
+      />
     </svg>
   );
 }

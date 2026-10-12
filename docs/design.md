@@ -6,7 +6,7 @@
 > **Corrected in place on 2026-09-13 against what was actually built.** This file
 > is now edited directly rather than re-synced; a re-sync would reinstate the
 > errors marked **Corrected** below. The reasoning behind each change is in
-> [`amendments.md`](amendments.md), keyed A1–A23.
+> [`amendments.md`](amendments.md), keyed A1–A24.
 >
 > 11 decisions · 1 risk · 8 open questions, 5 of them now answered.
 

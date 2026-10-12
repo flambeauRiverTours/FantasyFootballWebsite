@@ -9,17 +9,22 @@ import Skeleton from './components/Skeleton';
 import LoadFailed from './components/LoadFailed';
 import StaleBanner from './components/StaleBanner';
 import Masthead from './components/Masthead';
-import { LazyMotion, domAnimation } from "motion/react";
+import { LazyMotion, MotionConfig, domAnimation } from 'motion/react';
+import { useQueryState } from './hooks/useQueryState';
 
 /**
  * Owns the fetch and its three states, then orders the panels. A panel may
  * assume a payload exists.
  */
 export default function App() {
-  const { payload, error, loading, refetch } = useSeason(null);
+  // ?season=2025 asks for a past season; anything that is not a year means the current one
+  const [seasonParam] = useQueryState('season', '');
+  const season = /^\d{4}$/.test(seasonParam) ? Number(seasonParam) : null;
+
+  const { payload, error, loading, refetch } = useSeason(season);
   const updated = useRelativeTime(payload?.asOfUtc);
   const coldStartHandler = useElapsedSince(loading, 3000);
-  const mastHead = (<Masthead payload={payload} updatedAgo={updated} error={!!error} />);
+  const mastHead = <Masthead payload={payload} updatedAgo={updated} error={!!error} />;
 
   // T55: #boot is a full-screen opaque overlay, so it can stay up over
   // whatever React renders underneath - including this component's own
@@ -31,6 +36,12 @@ export default function App() {
   useEffect(() => {
     if (!loading) document.getElementById('boot')?.remove();
   }, [loading]);
+
+  // index.html's title stands in until the league's own name arrives
+  const leagueName = payload?.leagueName;
+  useEffect(() => {
+    if (leagueName) document.title = leagueName;
+  }, [leagueName]);
 
   // The Skeleton's title is centred with its panel, so where it lands depends
   // on the viewport - index.html can only estimate it. Measure it instead, so
@@ -59,26 +70,29 @@ export default function App() {
       new URLSearchParams(window.location.search).has('radar'));
 
   return (
-    <LazyMotion features={domAnimation}>
-      {mastHead}
+    // reducedMotion="user" makes layout animations, not only explicit ones, respect the preference
+    <MotionConfig reducedMotion="user">
+      <LazyMotion features={domAnimation}>
+        {mastHead}
 
-      {!payload ? (
-        loading ? (
-          <Skeleton coldStart={coldStartHandler} />
+        {!payload ? (
+          loading ? (
+            <Skeleton coldStart={coldStartHandler} />
+          ) : (
+            <LoadFailed error={error} onRetry={refetch} />
+          )
         ) : (
-          <LoadFailed error={error} onRetry={refetch} />
-        )
-      ) : (
-        <>
-          {error ? <StaleBanner asOfUtc={payload.asOfUtc} onRetry={refetch} /> : null}
+          <>
+            {error ? <StaleBanner asOfUtc={payload.asOfUtc} onRetry={refetch} /> : null}
 
-          <main className="panels">
-            <StandingsPanel teams={payload.teams} />
-            <ChartPanel payload={payload} />
-            {hasRadar ? <RadarPanel payload={payload} /> : null}
-          </main>
-        </>
-      )}
-    </LazyMotion>
+            <main className="panels">
+              <StandingsPanel teams={payload.teams} />
+              <ChartPanel payload={payload} />
+              {hasRadar ? <RadarPanel payload={payload} /> : null}
+            </main>
+          </>
+        )}
+      </LazyMotion>
+    </MotionConfig>
   );
 }

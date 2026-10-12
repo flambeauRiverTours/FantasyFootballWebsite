@@ -122,7 +122,9 @@ describe('ChartPanel', () => {
     expect(within(screen.getByRole('group', { name: /metric/i })).queryByText('σ')).toBeNull();
 
     rerender(<ChartPanel payload={{ ...payload, finalThroughWeek: 5 }} />);
-    expect(within(screen.getByRole('group', { name: /metric/i })).getByText('σ')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: /metric/i })).getByText('σ'),
+    ).toBeInTheDocument();
   });
 
   it('draws a sigma line, not the empty message, as soon as sigma is offered', () => {
@@ -133,7 +135,12 @@ describe('ChartPanel', () => {
       finalThroughWeek: 5,
       teams: payload.teams.map((t, i) => ({
         ...t,
-        weeks: scores.map((s, w) => ({ week: w + 1, actual: s + i * 7, ideal: s + 20, isFinal: true })),
+        weeks: scores.map((s, w) => ({
+          week: w + 1,
+          actual: s + i * 7,
+          ideal: s + 20,
+          isFinal: true,
+        })),
       })),
     };
     window.history.replaceState(null, '', '?metric=sigma');
@@ -153,10 +160,14 @@ describe('ChartPanel', () => {
     // one final week is a real median but only one point, and isPlottable
     // refuses to draw a line through a single point
     const { rerender } = render(<ChartPanel payload={{ ...payload, finalThroughWeek: 1 }} />);
-    expect(within(screen.getByRole('group', { name: /^mode$/i })).queryByText('vs median')).toBeNull();
+    expect(
+      within(screen.getByRole('group', { name: /^mode$/i })).queryByText('vs median'),
+    ).toBeNull();
 
     rerender(<ChartPanel payload={{ ...payload, finalThroughWeek: 2 }} />);
-    expect(within(screen.getByRole('group', { name: /^mode$/i })).getByText('vs median')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: /^mode$/i })).getByText('vs median'),
+    ).toBeInTheDocument();
   });
 
   it('uses real buttons, so Enter and Space work without a key handler', () => {
@@ -190,7 +201,9 @@ describe('ChartPanel', () => {
       })),
     });
     const pointsPerLine = (c: HTMLElement) =>
-      [...c.querySelectorAll('path.series')].map((p) => (p.getAttribute('d') ?? '').split('L').length);
+      [...c.querySelectorAll('path.series')].map(
+        (p) => (p.getAttribute('d') ?? '').split('L').length,
+      );
 
     const before = render(<ChartPanel payload={withWeek3(0)} />);
     expect(pointsPerLine(before.container)).toEqual([2, 2, 2]);
@@ -204,6 +217,13 @@ describe('ChartPanel', () => {
     render(<ChartPanel payload={payload} />);
     const img = screen.getByRole('img');
     expect(img.getAttribute('aria-label')).toMatch(/Alpha, Bravo, Charlie/);
+  });
+
+  it('states the highest and lowest values at the latest week, not just what is drawn', () => {
+    render(<ChartPanel payload={payload} />);
+    expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(
+      /At week 2, highest Alpha at 340\.2, lowest Charlie at 250\.7\./,
+    );
   });
 
   it('has no axe violations', async () => {

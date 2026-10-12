@@ -106,9 +106,9 @@ describe('hasConsistency', () => {
   });
 
   it('is true when the figures are present', () => {
-    expect(
-      hasConsistency({ ...absent, sigma: 12, cv: 0.1, mean: 120, min: 100, max: 140 }),
-    ).toBe(true);
+    expect(hasConsistency({ ...absent, sigma: 12, cv: 0.1, mean: 120, min: 100, max: 140 })).toBe(
+      true,
+    );
   });
 
   it('treats a real zero sigma as present', () => {

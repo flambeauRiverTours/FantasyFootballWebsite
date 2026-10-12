@@ -50,7 +50,11 @@ describe('Radar', () => {
 
   it('clamps a runaway axis rather than escaping the drawing', () => {
     const { container } = render(<Radar slots={['QB']} ratios={[50]} size={400} label="x" />);
-    const [x, y] = container.querySelector('polygon')!.getAttribute('points')!.split(',').map(Number);
+    const [x, y] = container
+      .querySelector('polygon')!
+      .getAttribute('points')!
+      .split(',')
+      .map(Number);
     // R=90, clamp at 2x -> 180 out from centre (230)
     expect(y).toBeCloseTo(230 - 180, 1);
     expect(x).toBeCloseTo(230, 1);
@@ -60,7 +64,11 @@ describe('Radar', () => {
     // a penalty-heavy DST/IDP week can score negative; a negative radius would
     // otherwise plot the vertex on the opposite side of the wheel
     const { container } = render(<Radar slots={['QB']} ratios={[-3]} size={400} label="x" />);
-    const [x, y] = container.querySelector('polygon')!.getAttribute('points')!.split(',').map(Number);
+    const [x, y] = container
+      .querySelector('polygon')!
+      .getAttribute('points')!
+      .split(',')
+      .map(Number);
     expect(x).toBeCloseTo(230, 1);
     expect(y).toBeCloseTo(230, 1);
   });
@@ -88,16 +96,12 @@ describe('SlotBars', () => {
   });
 
   it('flags an above-average bar so it takes the other hue', () => {
-    const { container } = render(
-      <SlotBars slots={['QB']} ratios={[1.3]} width={800} label="x" />,
-    );
+    const { container } = render(<SlotBars slots={['QB']} ratios={[1.3]} width={800} label="x" />);
     expect(container.querySelector('.bar')).toHaveAttribute('data-above', 'true');
   });
 
   it('flags a below-average bar the other way', () => {
-    const { container } = render(
-      <SlotBars slots={['QB']} ratios={[0.7]} width={800} label="x" />,
-    );
+    const { container } = render(<SlotBars slots={['QB']} ratios={[0.7]} width={800} label="x" />);
     expect(container.querySelector('.bar')).toHaveAttribute('data-above', 'false');
   });
 

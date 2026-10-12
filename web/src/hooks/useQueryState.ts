@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
-/*
- * React effect to pull values from the URL 
- * @param key Key in the query to identify
- * @param fallback Fallback value to use
- * @returns Value for the key in query if found, otherwise fallback
+/**
+ * A string kept in the URL's query, so the view it describes is a shareable link.
+ * @param key The query parameter.
+ * @param fallback The value when the parameter is absent. Never written to the URL.
+ * @returns The current value and a setter that updates the URL in place.
  */
 export function useQueryState(key: string, fallback: string) {
   const [value, setValue] = useState(

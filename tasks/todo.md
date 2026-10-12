@@ -240,6 +240,14 @@ one feeds the next.
             pending model changes.
             **28–29 done 2026-10-12.** 28 needed nothing further (item 5 removed
             `FinalizedUtc`). F1 and F2 fixed below; 368 tests pass.
+      - [x] **2 · Front end** — done 2026-10-12 (A24). `noUncheckedIndexedAccess`
+            on, no uncommented `!` in `src`, calculations moved to
+            `pointCalculation.ts`, reduced motion honoured by layout animations
+            and the radar crossfade, the chart label states figures, `?season`
+            read, Prettier added, the bundle budget checked in CI. 153 tests
+            pass. Checked at 375 px in the browser against live data, which
+            showed the chart's line-end names clipping; a narrow chart now drops
+            them. Desktop keeps them.
             - Defects
               1. Delete the custom `ShouldRetry`, so the standard predicate
                  retries attempt timeouts and 500s; keep the rate-limit
@@ -513,6 +521,7 @@ Listed here only so their implementation state is visible in one place.
 | **A21** | Hosts compose, Data owns storage, policy is applied once                 | done — T61 1b, items 11–16                                              |
 | **A22** | Sleeper splits into Sleeper and Seasons; naming rules settle             | done — T61 1b, items 18–21                                              |
 | **A23** | `Pts` covers roster totals; tests may use `!` uncommented                | done — in `docs/standards.md`                                           |
+| **A24** | The front end meets its standards; Prettier and a bundle check added     | done — T61 domain 2                                                     |
 
 ---
 

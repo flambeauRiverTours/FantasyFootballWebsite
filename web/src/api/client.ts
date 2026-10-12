@@ -38,7 +38,11 @@ export class ApiError extends Error {
  * which is what makes the 30 second poll nearly free. No cache-busting
  * parameter: it would defeat the ETag, which is the point.
  */
-export async function fetchSeason(season: number | null, etag: string | null, signal?: AbortSignal): Promise<Fetched<SeasonPayload>> {
+export async function fetchSeason(
+  season: number | null,
+  etag: string | null,
+  signal?: AbortSignal,
+): Promise<Fetched<SeasonPayload>> {
   const query = season === null ? '' : `?season=${season}`;
 
   const response = await fetch(`${base}/season${query}`, {
@@ -76,5 +80,3 @@ export async function fetchSeasons(signal?: AbortSignal): Promise<SeasonsPayload
 
   return (await response.json()) as SeasonsPayload;
 }
-
-export type Metric = 'actual' | 'ideal' | 'sigma';

@@ -10,7 +10,9 @@ export interface RadarProps {
   colour?: string;
 }
 
+/** One axis: its slot, its direction, and where the team's value lands on it. */
 interface Vertex {
+  code: string;
   angle: number;
   point: readonly [number, number];
   measured: boolean;
@@ -34,12 +36,11 @@ function pointAt(angle: number, radius: number): readonly [number, number] {
 
 /** One vertex per slot. A negative ratio clamps to the centre, never mirrors. */
 function computeVertices(slots: string[], ratios: (number | null)[]): Vertex[] {
-  return slots.map((_, i) => {
+  return slots.map((code, i) => {
     const angle = angleFor(i, slots.length);
-    const ratio = ratios[i];
-    const measured = ratio !== null;
-    const radius = R * Math.max(0, Math.min(measured ? ratio : 1, ClampMax));
-    return { angle, point: pointAt(angle, radius), measured };
+    const ratio = ratios[i] ?? null;
+    const radius = R * Math.max(0, Math.min(ratio ?? 1, ClampMax));
+    return { code, angle, point: pointAt(angle, radius), measured: ratio !== null };
   });
 }
 
@@ -51,11 +52,11 @@ function anchorFor(cosA: number): 'start' | 'end' | 'middle' {
 
 // parts
 
-function Spokes({ slots, vertices }: { slots: string[]; vertices: Vertex[] }) {
+function Spokes({ vertices }: { vertices: Vertex[] }) {
   return (
     <>
-      {slots.map((code, i) => {
-        const [x2, y2] = pointAt(vertices[i].angle, LabelR);
+      {vertices.map(({ code, angle }) => {
+        const [x2, y2] = pointAt(angle, LabelR);
         return <line key={code} className="spoke" x1={Center} y1={Center} x2={x2} y2={y2} />;
       })}
     </>
@@ -63,23 +64,23 @@ function Spokes({ slots, vertices }: { slots: string[]; vertices: Vertex[] }) {
 }
 
 /** An unmeasured axis is pinned to the reference and marked, never plotted as 1.0. */
-function UnmeasuredMarkers({ slots, vertices }: { slots: string[]; vertices: Vertex[] }) {
+function UnmeasuredMarkers({ vertices }: { vertices: Vertex[] }) {
   return (
     <>
-      {vertices.map((v, i) =>
+      {vertices.map((v) =>
         v.measured ? null : (
-          <circle key={slots[i]} className="unmeasured" cx={v.point[0]} cy={v.point[1]} r={4} />
+          <circle key={v.code} className="unmeasured" cx={v.point[0]} cy={v.point[1]} r={4} />
         ),
       )}
     </>
   );
 }
 
-function AxisLabels({ slots, vertices }: { slots: string[]; vertices: Vertex[] }) {
+function AxisLabels({ vertices }: { vertices: Vertex[] }) {
   return (
     <>
-      {slots.map((code, i) => {
-        const [x, y] = pointAt(vertices[i].angle, LabelR);
+      {vertices.map(({ code, angle }) => {
+        const [x, y] = pointAt(angle, LabelR);
         return (
           <text
             key={code}
@@ -87,7 +88,7 @@ function AxisLabels({ slots, vertices }: { slots: string[]; vertices: Vertex[] }
             x={x}
             y={y}
             dy="0.32em"
-            textAnchor={anchorFor(Math.cos(vertices[i].angle))}
+            textAnchor={anchorFor(Math.cos(angle))}
           >
             {code}
           </text>
@@ -97,7 +98,10 @@ function AxisLabels({ slots, vertices }: { slots: string[]; vertices: Vertex[] }
   );
 }
 
-/* Radar control */
+/**
+ * One team's slots as ratios to the league average, with the league as the
+ * reference circle (D10). Axis order is the caller's and is never re-sorted (R2).
+ */
 export default function Radar({ slots, ratios, size, label, colour }: RadarProps) {
   const reduced = useReducedMotion();
 
@@ -117,7 +121,7 @@ export default function Radar({ slots, ratios, size, label, colour }: RadarProps
       style={colour ? ({ '--team': colour } as CSSProperties) : undefined}
     >
       {/* spokes, drawn first so the shape sits above them */}
-      <Spokes slots={slots} vertices={vertices} />
+      <Spokes vertices={vertices} />
 
       {/* the only thing on the drawing with a fixed meaning - never animated */}
       <circle className="reference" cx={Center} cy={Center} r={R} />
@@ -131,8 +135,8 @@ export default function Radar({ slots, ratios, size, label, colour }: RadarProps
         transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 30 }}
       />
 
-      <UnmeasuredMarkers slots={slots} vertices={vertices} />
-      <AxisLabels slots={slots} vertices={vertices} />
+      <UnmeasuredMarkers vertices={vertices} />
+      <AxisLabels vertices={vertices} />
     </svg>
   );
 }

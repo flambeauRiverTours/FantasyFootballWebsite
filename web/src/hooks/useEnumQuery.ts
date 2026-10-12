@@ -1,8 +1,12 @@
 import { useQueryState } from './useQueryState';
 
-type Options<T extends string> = readonly (readonly [T, string])[];
+/** One choice: its value in the URL, and its label on screen. */
+export type Option<T extends string> = readonly [T, string];
 
-/** A query parameter narrowed to one of `options`. The first is the default. */
+/** At least one choice, so there is always a default. */
+export type Options<T extends string> = readonly [Option<T>, ...Option<T>[]];
+
+/** A query parameter narrowed to one of `options`. The first is the default and is left out of the URL. */
 export function useEnumQuery<T extends string>(
   key: string,
   options: Options<T>,

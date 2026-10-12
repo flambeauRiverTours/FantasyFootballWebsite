@@ -89,10 +89,10 @@ export function useSeason(season: number | null): SeasonState {
   return { payload, error, loading, refetch: () => void load() };
 }
 
-/*
- * determines if we're in a window where a game may be happening 
- * @param at Current date
- * @returns True if we're in a game window, otherwise false
+/**
+ * Whether an NFL game may be in progress, in Eastern time (D6).
+ * @param at The moment to check.
+ * @returns True inside a game window, so a poll is worth making.
  */
 function isGameWindow(at: Date): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -103,9 +103,10 @@ function isGameWindow(at: Date): boolean {
     hour12: false,
   }).formatToParts(at);
 
-  const day = parts.find((p) => p.type === 'weekday')!.value;
-  const month = parts.find((p) => p.type === 'month')!.value;
-  const hour = Number(parts.find((p) => p.type === 'hour')!.value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value;
+  const day = part('weekday');
+  const month = part('month');
+  const hour = Number(part('hour'));
   if (month === 'Nov' && day === 'Wed') return hour >= 17; //wednesday night games before turkey day
   if (month === 'Nov' && day === 'Thu') return hour >= 12; //thursday turkey day games
   if (day === 'Thu') return hour >= 20;

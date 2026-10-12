@@ -93,6 +93,9 @@ This document states the standards for each programming domain for this project.
 - `noUncheckedIndexedAccess` is on
   - why: lookups by week or roster can be undefined
 - Every `!` assertion has a comment explaining why
+  - Tests may use `!` without a comment per A23
+- Prettier formats every file
+  - why: style is settled by a tool not review
 
 **React**
 - D3 never touches the DOM per D9

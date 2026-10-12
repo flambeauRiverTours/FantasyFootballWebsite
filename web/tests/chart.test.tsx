@@ -23,36 +23,44 @@ const paths = (c: HTMLElement) => [...c.querySelectorAll('path.series')];
 describe('Chart', () => {
   it('renders nothing when there is no room for the margins', () => {
     const { container } = render(
-      <Chart series={two} width={100} height={200} onHover={() => { }} label="x" />,
+      <Chart series={two} width={50} height={200} onHover={() => {}} label="x" />,
     );
     expect(container.querySelector('svg')).toBeNull();
   });
 
   it('renders nothing with no series', () => {
     const { container } = render(
-      <Chart series={[]} width={800} height={400} onHover={() => { }} label="x" />,
+      <Chart series={[]} width={800} height={400} onHover={() => {}} label="x" />,
     );
     expect(container.querySelector('svg')).toBeNull();
   });
 
   it('draws one path and one label per team', () => {
     const { container } = render(
-      <Chart series={two} width={800} height={400} onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} onHover={() => {}} label="x" />,
     );
     expect(paths(container)).toHaveLength(2);
     expect(container.querySelectorAll('.series-label')).toHaveLength(2);
   });
 
+  it('drops the line-end names on a narrow chart, where they would collide and clip', () => {
+    const { container } = render(
+      <Chart series={two} width={343} height={172} onHover={() => {}} label="x" />,
+    );
+    expect(paths(container)).toHaveLength(2);
+    expect(container.querySelectorAll('.series-label')).toHaveLength(0);
+  });
+
   it('is announced as an image with the label it is given', () => {
     render(
-      <Chart series={two} width={800} height={400} onHover={() => { }} label="Cumulative points" />,
+      <Chart series={two} width={800} height={400} onHover={() => {}} label="Cumulative points" />,
     );
     expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'Cumulative points');
   });
 
   it('marks the hovered team raised and the rest muted', () => {
     const { container } = render(
-      <Chart series={two} width={800} height={400} hovered={1} onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} hovered={1} onHover={() => {}} label="x" />,
     );
     const states = paths(container).map((p) => [
       p.getAttribute('data-raised'),
@@ -64,14 +72,14 @@ describe('Chart', () => {
 
   it('draws the hovered line last because svg has no z-index', () => {
     const { container } = render(
-      <Chart series={two} width={800} height={400} hovered={1} onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} hovered={1} onHover={() => {}} label="x" />,
     );
     expect(paths(container).at(-1)).toHaveAttribute('data-raised', 'true');
   });
 
   it('omits the zero rule when every value is above it', () => {
     const { container } = render(
-      <Chart series={two} width={800} height={400} onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} onHover={() => {}} label="x" />,
     );
     expect(container.querySelector('.zero')).toBeNull();
   });
@@ -84,7 +92,7 @@ describe('Chart', () => {
         width={800}
         height={400}
         zeroBased={false}
-        onHover={() => { }}
+        onHover={() => {}}
         label="x"
       />,
     );
@@ -93,7 +101,7 @@ describe('Chart', () => {
 
   it('keeps negatives out of the domain when zero based', () => {
     const { container } = render(
-      <Chart series={two} width={800} height={400} zeroBased onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} zeroBased onHover={() => {}} label="x" />,
     );
     const labels = [...container.querySelectorAll('.grid text')].map((t) => Number(t.textContent));
     expect(Math.min(...labels)).toBeGreaterThanOrEqual(0);
@@ -101,19 +109,19 @@ describe('Chart', () => {
 
   it('shows the axis title only when given one', () => {
     const { container, rerender } = render(
-      <Chart series={two} width={800} height={400} onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} onHover={() => {}} label="x" />,
     );
     expect(container.querySelector('.y-title')).toBeNull();
 
     rerender(
-      <Chart series={two} width={800} height={400} onHover={() => { }} label="x" yTitle="CV" />,
+      <Chart series={two} width={800} height={400} onHover={() => {}} label="x" yTitle="CV" />,
     );
     expect(container.querySelector('.y-title')).toHaveTextContent('CV');
   });
 
   it('covers the plot with one transparent hit area', () => {
     const { container } = render(
-      <Chart series={two} width={800} height={400} onHover={() => { }} label="x" />,
+      <Chart series={two} width={800} height={400} onHover={() => {}} label="x" />,
     );
     const hit = container.querySelector('.hit')!;
     // none would receive no pointer events at all
@@ -126,9 +134,9 @@ describe('Chart', () => {
     const { container } = render(
       <Chart series={two} width={800} height={400} onHover={onHover} label="x" />,
     );
-    container.querySelector('.hit')!.dispatchEvent(
-      new MouseEvent('pointerout', { bubbles: true, relatedTarget: document.body }),
-    );
+    container
+      .querySelector('.hit')!
+      .dispatchEvent(new MouseEvent('pointerout', { bubbles: true, relatedTarget: document.body }));
     expect(onHover).toHaveBeenCalledWith(null);
   });
 });
@@ -141,7 +149,7 @@ describe('SegmentedRow', () => {
 
   it('points the group at its visible label', () => {
     render(
-      <SegmentedRow name="metric" label="Metric" options={options} value="a" onChange={() => { }} />,
+      <SegmentedRow name="metric" label="Metric" options={options} value="a" onChange={() => {}} />,
     );
     const group = screen.getByRole('group', { name: 'Metric' });
     expect(group).toHaveAttribute('aria-labelledby', 'metric-label');
@@ -150,7 +158,7 @@ describe('SegmentedRow', () => {
 
   it('presses exactly one option', () => {
     render(
-      <SegmentedRow name="metric" label="Metric" options={options} value="b" onChange={() => { }} />,
+      <SegmentedRow name="metric" label="Metric" options={options} value="b" onChange={() => {}} />,
     );
     const pressed = within(screen.getByRole('group', { name: 'Metric' }))
       .getAllByRole('button')
@@ -170,7 +178,7 @@ describe('SegmentedRow', () => {
 
   it('uses real buttons so enter and space work unaided', () => {
     const { container } = render(
-      <SegmentedRow name="metric" label="Metric" options={options} value="a" onChange={() => { }} />,
+      <SegmentedRow name="metric" label="Metric" options={options} value="a" onChange={() => {}} />,
     );
     for (const b of container.querySelectorAll('.segmented button')) {
       expect(b).toHaveAttribute('type', 'button');
@@ -206,16 +214,11 @@ describe('SigmaDisplay', () => {
 
   it('reads out the figures rounded', () => {
     render(<SigmaDisplay totals={{ ...totals, min: 120.34 }} scaleFunction={scale} />);
-    expect(screen.getByRole('img')).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('120.3'),
-    );
+    expect(screen.getByRole('img')).toHaveAttribute('aria-label', expect.stringContaining('120.3'));
   });
 });
 
 it('interpolates rather than printing the template', () => {
-  const { container } = render(
-    <Masthead payload={payload} updatedAgo="just now" error={false} />,
-  );
+  const { container } = render(<Masthead payload={payload} updatedAgo="just now" error={false} />);
   expect(container.textContent).not.toContain('${');
 });

@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
+import { useReducedMotion } from 'motion/react';
+import { slotRatios } from '../api/pointCalculation';
 import type { SeasonPayload, TeamPayload } from '../api/types';
 import { useEnumQuery } from '../hooks/useEnumQuery';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
@@ -27,22 +29,10 @@ function teamColour(index: number): string {
   return `var(--team-${index + 1})`;
 }
 
-// ratios
-
-/** !league catches both the missing key and T47's zero-denominator guard. */
-function ratiosFor(payload: SeasonPayload, teamId: number | null): (number | null)[] {
-  const team = payload.teams.find((t) => t.rosterId === teamId);
-  return payload.slotOrder.map((code) => {
-    const league = payload.leagueSlotAverages[code];
-    const value = team?.slotAverages[code];
-    return value === undefined || !league ? null : value / league;
-  });
-}
-
-/** aria spoken description. Names the axes, never the shape (R2). */
+/** The drawing in words for a screen reader. Names the axes, never the shape (R2). */
 function describe(name: string, slots: string[], ratios: (number | null)[]): string {
-  const above = slots.filter((_, i) => ratios[i] !== null && ratios[i]! > 1);
-  const below = slots.filter((_, i) => ratios[i] !== null && ratios[i]! < 1);
+  const above = slots.filter((_, i) => (ratios[i] ?? 1) > 1);
+  const below = slots.filter((_, i) => (ratios[i] ?? 1) < 1);
   const parts = [`${name}'s positional radar, axes at the league average.`];
   if (above.length) parts.push(`Above average: ${above.join(', ')}.`);
   if (below.length) parts.push(`Below average: ${below.join(', ')}.`);
@@ -97,9 +87,21 @@ function Drawing({ team, colour, view, slots, ratios, width, label }: DrawingPro
   if (!team) return <p className="muted">No teams to plot.</p>;
 
   return view === 'bars' ? (
-    <SlotBars slots={slots} ratios={ratios} width={width} label={label} height={Math.min(width, MaxRadarSize)} />
+    <SlotBars
+      slots={slots}
+      ratios={ratios}
+      width={width}
+      label={label}
+      height={Math.min(width, MaxRadarSize)}
+    />
   ) : (
-    <Radar slots={slots} ratios={ratios} size={Math.min(width, MaxRadarSize)} label={label} colour={colour} />
+    <Radar
+      slots={slots}
+      ratios={ratios}
+      size={Math.min(width, MaxRadarSize)}
+      label={label}
+      colour={colour}
+    />
   );
 }
 
@@ -113,9 +115,10 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
   const [view, setViewRaw] = useEnumQuery('view', Views);
   const [rawTeam, setTeam] = useQueryState('team', '');
 
-  // Do flush sync to handle a cross fade
+  // crossfade between the two drawings, unless motion is off or the browser cannot
+  const reduced = useReducedMotion();
   function setView(next: View) {
-    if (!document.startViewTransition) return setViewRaw(next);
+    if (reduced || !document.startViewTransition) return setViewRaw(next);
     document.startViewTransition(() => flushSync(() => setViewRaw(next)));
   }
 
@@ -129,7 +132,7 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
   const teamIndex = payload.teams.findIndex((t) => t.rosterId === teamId);
   const team = payload.teams[teamIndex];
   const colour = teamIndex >= 0 ? teamColour(teamIndex) : undefined;
-  const ratios = ratiosFor(payload, teamId);
+  const ratios = slotRatios(payload, teamId);
   const label = team ? describe(team.name, payload.slotOrder, ratios) : '';
   const selectTeam = (rosterId: number) =>
     setTeam(rosterId === payload.teams[0]?.rosterId ? '' : String(rosterId));
@@ -141,7 +144,15 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
 
       {/* the wrapper always mounts so the observer has something to watch */}
       <div className="radar-wrap" ref={wrapper}>
-        <Drawing team={team} colour={colour} view={view} slots={payload.slotOrder} ratios={ratios} width={width} label={label} />
+        <Drawing
+          team={team}
+          colour={colour}
+          view={view}
+          slots={payload.slotOrder}
+          ratios={ratios}
+          width={width}
+          label={label}
+        />
       </div>
     </Panel>
   );

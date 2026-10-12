@@ -61,7 +61,9 @@ describe('LoadFailed', () => {
     render(<LoadFailed error={new ApiError(503, 'unavailable')} onRetry={onRetry} />);
 
     const region = screen.getByRole('alert');
-    within(region).getByRole('button', { name: /try again/i }).click();
+    within(region)
+      .getByRole('button', { name: /try again/i })
+      .click();
     expect(onRetry).toHaveBeenCalledOnce();
     expect(screen.queryByText(/reload/i)).toBeNull();
   });

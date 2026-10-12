@@ -13,7 +13,7 @@ indent_size = 4
 [*.{cs,csproj}]
 charset = utf-8-bom
 
-[*.{json,yml,yaml,md,csproj,props,targets,slnx,bicep}]
+[*.{json,ts,tsx,css,html,yml,yaml,md,csproj,props,targets,slnx,bicep}]
 indent_size = 2
 
 [*.md]

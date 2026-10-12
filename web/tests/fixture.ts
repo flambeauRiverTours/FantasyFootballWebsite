@@ -22,6 +22,7 @@ export const teams: TeamPayload[] = [
 ];
 
 export const payload: SeasonPayload = {
+  leagueName: 'Test League',
   season: 2026,
   isCurrent: true,
   currentWeek: 3,

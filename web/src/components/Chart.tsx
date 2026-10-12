@@ -2,7 +2,7 @@ import { max, min } from 'd3-array';
 import { scaleLinear } from 'd3-scale';
 import type { ScaleLinear } from 'd3-scale';
 import { line } from 'd3-shape';
-import { AnimatePresence, m as Motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { Point } from '../api/pointCalculation';
 
 export interface Series {
@@ -26,15 +26,21 @@ interface ChartProps {
 
 type Scale = ScaleLinear<number, number>;
 
-const m = { top: 16, right: 84, bottom: 28, left: 44 };
+const Margin = { top: 16, right: 84, bottom: 28, left: 44 };
+
+/** The narrowest chart that keeps its line-end names; roughly the 40rem breakpoint less panel padding. */
+const LabelledMinWidth = 600;
+
+/** The right margin once the names are dropped: room for the last point, nothing more. */
+const UnlabelledRight = 16;
 
 // scales
 
 /** Weeks across. Always at least two wide so a single week is not a zero domain. */
-function weekScale(width: number, maxWeek: number): Scale {
+function weekScale(width: number, right: number, maxWeek: number): Scale {
   return scaleLinear()
     .domain([1, Math.max(maxWeek, 2)])
-    .range([m.left, width - m.right]);
+    .range([Margin.left, width - right]);
 }
 
 /** Values up. Padding is a fraction of the range so the zoom is the same at any size. */
@@ -44,20 +50,30 @@ function valueScale(lo: number, hi: number, height: number, zeroBased: boolean):
   return scaleLinear()
     .domain([zeroBased ? Math.max(0, lo - pad) : lo - pad, hi + pad])
     .nice()
-    .range([height - m.bottom, m.top]);
+    .range([height - Margin.bottom, Margin.top]);
 }
 
 // parts
 
-function Gridlines({ y, width, count }: { y: Scale; width: number; count: number }) {
+function Gridlines({
+  y,
+  width,
+  right,
+  count,
+}: {
+  y: Scale;
+  width: number;
+  right: number;
+  count: number;
+}) {
   const format = y.tickFormat(count);
 
   return (
     <g className="grid">
       {y.ticks(count).map((t) => (
         <g key={t} className="tick">
-          <line x1={m.left} x2={width - m.right} y1={y(t)} y2={y(t)} />
-          <text x={m.left - 8} y={y(t)} dy="0.32em" textAnchor="end">
+          <line x1={Margin.left} x2={width - right} y1={y(t)} y2={y(t)} />
+          <text x={Margin.left - 8} y={y(t)} dy="0.32em" textAnchor="end">
             {format(t)}
           </text>
         </g>
@@ -73,7 +89,13 @@ function WeekAxis({ x, height, maxWeek }: { x: Scale; height: number; maxWeek: n
         .ticks(Math.min(maxWeek, 9))
         .filter(Number.isInteger)
         .map((t) => (
-          <text key={t} className="tick" x={x(t)} y={height - m.bottom + 18} textAnchor="middle">
+          <text
+            key={t}
+            className="tick"
+            x={x(t)}
+            y={height - Margin.bottom + 18}
+            textAnchor="middle"
+          >
             {t}
           </text>
         ))}
@@ -81,7 +103,17 @@ function WeekAxis({ x, height, maxWeek }: { x: Scale; height: number; maxWeek: n
   );
 }
 
-function SeriesLabels({ series, x, y, hovered }: { series: Series[]; x: Scale; y: Scale; hovered: number | null }) {
+function SeriesLabels({
+  series,
+  x,
+  y,
+  hovered,
+}: {
+  series: Series[];
+  x: Scale;
+  y: Scale;
+  hovered: number | null;
+}) {
   return (
     <>
       {series.map((s) => {
@@ -107,20 +139,37 @@ function SeriesLabels({ series, x, y, hovered }: { series: Series[]; x: Scale; y
   );
 }
 
-/* Chart control */
-export default function Chart({ series, width, height, hovered = null, onHover, zeroBased = true, label, yTitle = '', displayKey = '' }: ChartProps) {
+/**
+ * Every visible team's line over the weeks played. Hovering or focusing a team
+ * raises its line and mutes the rest.
+ */
+export default function Chart({
+  series,
+  width,
+  height,
+  hovered = null,
+  onHover,
+  zeroBased = true,
+  label,
+  yTitle = '',
+  displayKey = '',
+}: ChartProps) {
   const reduced = useReducedMotion();
 
-  if (width <= m.left + m.right || series.length === 0) return null;
+  // below this the line-end names collide and clip; the team chips are the legend instead
+  const labelled = width >= LabelledMinWidth;
+  const right = labelled ? Margin.right : UnlabelledRight;
+
+  if (width <= Margin.left + right || series.length === 0) return null;
 
   // extents
   const maxWeek = max(series, (s) => max(s.points, (p) => p.week)) ?? 1;
   const maxValue = max(series, (s) => max(s.points, (p) => p.value)) ?? 0;
   const minValue = min(series, (s) => min(s.points, (p) => p.value)) ?? 0;
 
-  const x = weekScale(width, maxWeek);
+  const x = weekScale(width, right, maxWeek);
   const y = valueScale(minValue, maxValue, height, zeroBased);
-  const tickCount = Math.max(2, Math.round((height - m.top - m.bottom) / 48));
+  const tickCount = Math.max(2, Math.round((height - Margin.top - Margin.bottom) / 48));
 
   const path = line<Point>()
     .defined((p) => Number.isFinite(p.value))
@@ -132,15 +181,15 @@ export default function Chart({ series, width, height, hovered = null, onHover, 
     hovered === null
       ? series
       : [
-        ...series.filter((s) => s.rosterId !== hovered),
-        ...series.filter((s) => s.rosterId === hovered),
-      ];
+          ...series.filter((s) => s.rosterId !== hovered),
+          ...series.filter((s) => s.rosterId === hovered),
+        ];
 
   /** Nearest line to the pointer. Vertical distance at the snapped week. */
   function onMove(e: React.PointerEvent<SVGRectElement>) {
     const box = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - box.left + m.left;
-    const py = e.clientY - box.top + m.top;
+    const px = e.clientX - box.left + Margin.left;
+    const py = e.clientY - box.top + Margin.top;
     const week = Math.min(Math.max(Math.round(x.invert(px)), 1), maxWeek);
 
     let best: { id: number; d: number } | null = null;
@@ -164,15 +213,15 @@ export default function Chart({ series, width, height, hovered = null, onHover, 
       role="img"
       aria-label={label}
     >
-      <Gridlines y={y} width={width} count={tickCount} />
+      <Gridlines y={y} width={width} right={right} count={tickCount} />
 
       {/* zero matters only when values cross it */}
-      {y.domain()[0] < 0 ? (
-        <line className="zero" x1={m.left} x2={width - m.right} y1={y(0)} y2={y(0)} />
+      {(y.domain()[0] ?? 0) < 0 ? (
+        <line className="zero" x1={Margin.left} x2={width - right} y1={y(0)} y2={y(0)} />
       ) : null}
 
       {yTitle ? (
-        <text className="y-title" x={m.left} y={m.top - 4} textAnchor="start">
+        <text className="y-title" x={Margin.left} y={Margin.top - 4} textAnchor="start">
           {yTitle}
         </text>
       ) : null}
@@ -182,7 +231,7 @@ export default function Chart({ series, width, height, hovered = null, onHover, 
       {/* crossfades when metrics are changed*/}
       <AnimatePresence>
         {ordered.map((s) => (
-          <Motion.path
+          <m.path
             key={`${s.rosterId}-${displayKey}`}
             className="series"
             d={path(s.points) ?? undefined}
@@ -197,15 +246,15 @@ export default function Chart({ series, width, height, hovered = null, onHover, 
         ))}
       </AnimatePresence>
 
-      <SeriesLabels series={series} x={x} y={y} hovered={hovered} />
+      {labelled ? <SeriesLabels series={series} x={x} y={y} hovered={hovered} /> : null}
 
       {/* one hit area. a stroke is too hard to target */}
       <rect
         className="hit"
-        x={m.left}
-        y={m.top}
-        width={width - m.left - m.right}
-        height={height - m.top - m.bottom}
+        x={Margin.left}
+        y={Margin.top}
+        width={width - Margin.left - right}
+        height={height - Margin.top - Margin.bottom}
         fill="transparent"
         onPointerMove={onMove}
         onPointerLeave={() => onHover(null)}
