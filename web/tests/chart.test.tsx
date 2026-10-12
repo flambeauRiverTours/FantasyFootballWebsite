@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import { scaleLinear } from 'd3-scale';
 import Chart from '../src/components/Chart';
 import type { Series } from '../src/components/Chart';
 import SegmentedRow from '../src/components/SegmentedRow';
-import SigmaDisplay from '../src/components/SigmaDisplay';
 import Masthead from '../src/components/Masthead';
 import { payload } from './fixture';
 
@@ -186,39 +184,7 @@ describe('SegmentedRow', () => {
   });
 });
 
-describe('SigmaDisplay', () => {
-  const scale = scaleLinear().domain([100, 200]).range([2, 138]);
-  const totals = {
-    actual: 600,
-    ideal: 700,
-    sigma: 10,
-    cv: 0.07,
-    mean: 150,
-    min: 120,
-    max: 180,
-  };
-
-  it('spans the min to max range on the shared scale', () => {
-    const { container } = render(<SigmaDisplay totals={totals} scaleFunction={scale} />);
-    const rule = container.querySelector('line')!;
-    expect(Number(rule.getAttribute('x1'))).toBeCloseTo(scale(120), 5);
-    expect(Number(rule.getAttribute('x2'))).toBeCloseTo(scale(180), 5);
-  });
-
-  it('shades one sigma either side of the mean', () => {
-    const { container } = render(<SigmaDisplay totals={totals} scaleFunction={scale} />);
-    const band = container.querySelector('rect')!;
-    expect(Number(band.getAttribute('x'))).toBeCloseTo(scale(140), 5);
-    expect(Number(band.getAttribute('width'))).toBeCloseTo(scale(160) - scale(140), 5);
-  });
-
-  it('reads out the figures rounded', () => {
-    render(<SigmaDisplay totals={{ ...totals, min: 120.34 }} scaleFunction={scale} />);
-    expect(screen.getByRole('img')).toHaveAttribute('aria-label', expect.stringContaining('120.3'));
-  });
-});
-
 it('interpolates rather than printing the template', () => {
-  const { container } = render(<Masthead payload={payload} updatedAgo="just now" error={false} />);
+  const { container } = render(<Masthead payload={payload} updatedAgo="just now" />);
   expect(container.textContent).not.toContain('${');
 });

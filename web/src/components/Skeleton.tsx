@@ -1,4 +1,5 @@
 import Panel from './Panel';
+import StandingsHead, { StandingsColumns } from './StandingsHead';
 
 interface SkeletonProps {
   /** The database may be resuming. Say so rather than implying seconds. */
@@ -6,10 +7,6 @@ interface SkeletonProps {
 }
 
 const Rows = [0, 1, 2, 3, 4];
-const Columns = ['Team', 'Points', 'Gap', 'Ideal'];
-
-// matches StandingsPanel, so nothing jumps when the real table replaces this
-const className = (c: string) => (c === 'Gap' ? 'col-gap' : undefined);
 
 /** The standings panel's shape, shown while the first response is on its way. */
 export default function Skeleton({ coldStart = false }: SkeletonProps) {
@@ -19,20 +16,15 @@ export default function Skeleton({ coldStart = false }: SkeletonProps) {
       <Panel id="standings" title={coldStart ? 'Waking the database…' : 'Loading the season…'}>
         <div className="table-wrap" aria-busy="true">
           <table className="skeleton">
-            <thead>
-              <tr>
-                {Columns.map((c) => (
-                  <th key={c} scope="col" className={className(c)}>
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+            <StandingsHead />
             <tbody>
               {Rows.map((r) => (
                 <tr key={r}>
-                  {Columns.map((c) => (
-                    <td key={c} className={className(c)}>
+                  {StandingsColumns.map((column) => (
+                    <td
+                      key={column.label}
+                      className={'className' in column ? column.className : undefined}
+                    >
                       <span />
                     </td>
                   ))}

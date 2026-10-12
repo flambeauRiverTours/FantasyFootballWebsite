@@ -1,4 +1,4 @@
-import type { SeasonPayload, SeasonsPayload } from './types';
+import type { SeasonPayload } from './types';
 
 /**
  * Where the API lives, from the browser's point of view.
@@ -55,28 +55,28 @@ export async function fetchSeason(
   }
 
   if (!response.ok) {
-    //a platform 500 is html
+    // a 500 from the platform, rather than from the API, is an HTML page, so the body may not parse
     const body = (await response.json().catch(() => null)) as { available?: unknown } | null;
     throw new ApiError(
       response.status,
       `GET /api/season${query} returned ${response.status}`,
-      Array.isArray(body?.available) ? (body.available as number[]) : null,
+      seasonsIn(body?.available),
     );
   }
 
   return {
+    // trusted rather than checked: this is our own API, and its §09 shape is pinned by the server's tests
     payload: (await response.json()) as SeasonPayload,
     etag: response.headers.get('ETag'),
   };
 }
 
-/** Fetches the seasons that can be asked for. Never cached by us; it is cheap and rarely changes. */
-export async function fetchSeasons(signal?: AbortSignal): Promise<SeasonsPayload> {
-  const response = await fetch(`${base}/seasons`, { signal });
-
-  if (!response.ok) {
-    throw new ApiError(response.status, `GET /api/seasons returned ${response.status}`);
-  }
-
-  return (await response.json()) as SeasonsPayload;
+/**
+ * Reads the seasons a 404 says do exist. Checked, unlike the payload, because
+ * an error body can come from the platform rather than the API.
+ * @param value The body's `available` field, whatever it holds.
+ * @returns The years, or null when the field is not a list of numbers.
+ */
+function seasonsIn(value: unknown): number[] | null {
+  return Array.isArray(value) && value.every((year) => typeof year === 'number') ? value : null;
 }

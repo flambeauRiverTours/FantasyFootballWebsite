@@ -904,6 +904,49 @@ went nowhere.
 **A consequence of F1.** The CV can now be null while sigma is not, at a zero
 mean, so `ConsistentTotals` no longer promises a CV.
 
+## A25 · A team keeps its colour, and polling knows the whole NFL week
+
+2026-10-12. Two decisions from the front end's high-level review.
+
+**Colour follows the team, not its rank.** Each panel coloured teams by
+position: the chart by its own ranking, the radar by the payload's order. They
+agreed only because the server sends teams ranked, so a tie could give one team
+two colours, and every team changed colour when it was overtaken. The design
+says teams are encoded by colour (§10), which only works if a team's colour is
+stable. Colours are now assigned once, in roster id order, by one helper both
+panels use.
+
+**The game windows cover the games the NFL actually plays.** D6 gates polling
+on game windows, and the rule knew Thursday, Sunday and Monday nights and
+Thanksgiving. It missed the London and Europe games at 09:30 Eastern on
+Sundays, December and January Saturdays, Christmas on whatever weekday it
+falls, Black Friday's afternoon game, and Friday night openers abroad. It also
+treated every Thursday afternoon in November as Thanksgiving, and on some
+engines read midnight as hour 24. It now covers all of them, Thanksgiving is
+the fourth Thursday by date, and the rule has its own tests: 24 Eastern-time
+moments either side of each window.
+
+## A26 · Code waits for its task, and a failure is a panel
+
+2026-10-12. Three decisions from the rest of the front end's high-level review.
+
+**Code nothing calls is removed, and its task recreates it.** The same rule
+A19 applied to the unused tables. `fetchSeasons` waited for T29's season chain,
+and `SigmaDisplay` with `ConsistentTotals` and `hasConsistency` waited for
+T59's consistency panel. Both tasks now say what to rebuild, and the git
+history keeps the old versions. Two CSS rules that matched nothing went too.
+
+**The `?radar` switch is gone.** It forced the radar panel open with no slot
+data, a debugging aid in production code that read the URL behind
+`useQueryState`'s back. The panel shows when the data has something to plot;
+the tests render it directly with hand-written data.
+
+**A failure is laid out like every other state.** The first load's failure
+rendered outside the page's panels, while the masthead also said "Error
+loading", so the failure was announced twice and looked out of place. It is now
+a panel, as the 404 page already was, and the masthead says nothing until there
+is data.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

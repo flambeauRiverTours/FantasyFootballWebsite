@@ -1,7 +1,6 @@
-import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import type { SeasonPayload, TeamPayload, WeekPayload } from '../api/types';
-import type { Metric, Point, PointMode } from '../api/pointCalculation';
+import type { Measure, Point, PointMode } from '../api/calculations';
 import {
   canPlotMedian,
   canPlotSigma,
@@ -14,7 +13,8 @@ import {
   startedWeeks,
   vsMedian,
   weeklyMedians,
-} from '../api/pointCalculation';
+} from '../api/calculations';
+import { teamColours } from '../api/teamColours';
 import { useEnumQuery } from '../hooks/useEnumQuery';
 import type { Options } from '../hooks/useEnumQuery';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
@@ -23,18 +23,22 @@ import Chart from './Chart';
 import type { Series } from './Chart';
 import Panel from './Panel';
 import SegmentedRow from './SegmentedRow';
+import TeamChips from './TeamChips';
 
 interface ChartPanelProps {
   payload: SeasonPayload;
 }
 
+/** What the chart shows: a points measure, or sigma, which replaces the modes. */
+type Metric = Measure | 'sigma';
 type SigmaWindow = 'expanding' | 'rolling';
-type Scale = 'sigma' | 'cv';
+/** How spread is shown: raw sigma, or sigma over the mean. */
+type SpreadScale = 'sigma' | 'cv';
 
 const AspectRatio = 0.5;
 const Sigma = 'σ';
 
-// options. first is the default and is dropped from the url
+// the options for each control, as [value in the URL, label on screen]
 const Metrics = [
   ['actual', 'Points'],
   ['ideal', 'Ideal'],
@@ -55,7 +59,7 @@ const Windows = [
 const Scales = [
   ['sigma', Sigma],
   ['cv', 'CV'],
-] as const satisfies readonly (readonly [Scale, string])[];
+] as const satisfies readonly (readonly [SpreadScale, string])[];
 
 /** What each mode plots, in words, given what is being counted. */
 const ModeWords: Record<PointMode, (what: string) => string> = {
@@ -66,28 +70,32 @@ const ModeWords: Record<PointMode, (what: string) => string> = {
 
 // series building
 
-function toSeries(teams: TeamPayload[], points: (weeks: WeekPayload[]) => Point[]): Series[] {
-  return rankByPoints(teams).map((team, i) => ({
+function toSeries(
+  teams: TeamPayload[],
+  colours: ReadonlyMap<number, string>,
+  points: (weeks: WeekPayload[]) => Point[],
+): Series[] {
+  return rankByPoints(teams).map((team) => ({
     rosterId: team.rosterId,
     name: team.name,
-    colour: `var(--team-${i + 1})`,
+    colour: colours.get(team.rosterId) ?? 'currentColor',
     points: points(team.weeks),
   }));
 }
 
 function pointsFor(
   mode: PointMode,
-  metric: Metric,
+  measure: Measure,
   weeks: WeekPayload[],
   medians: Map<number, number>,
 ): Point[] {
   switch (mode) {
     case 'perWeek':
-      return perWeek(weeks, metric);
+      return perWeek(weeks, measure);
     case 'vsMedian':
-      return vsMedian(weeks, medians, metric);
+      return vsMedian(weeks, medians, measure);
     default:
-      return cumulative(weeks, metric);
+      return cumulative(weeks, measure);
   }
 }
 
@@ -104,7 +112,7 @@ function describe(
   metric: Metric,
   mode: PointMode,
   sigmaWindow: SigmaWindow,
-  scale: Scale,
+  scale: SpreadScale,
   visible: Series[],
 ): string {
   const names = visible.map((s) => s.name).join(', ');
@@ -150,13 +158,16 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
   const zeroBased = !showSigma && mode !== 'vsMedian';
 
   // data
-  const medians = useMemo(() => weeklyMedians(payload.teams, metric), [payload.teams, metric]);
+  // sigma is built from actual points, so it needs no measure of its own
+  const measure: Measure = metric === 'ideal' ? 'ideal' : 'actual';
+  const medians = useMemo(() => weeklyMedians(payload.teams, measure), [payload.teams, measure]);
   const started = useMemo(() => startedWeeks(payload.teams), [payload.teams]);
-  const series = toSeries(payload.teams, (all) => {
+  const colours = teamColours(payload.teams);
+  const series = toSeries(payload.teams, colours, (all) => {
     const weeks = all.filter((w) => started.has(w.week));
     return showSigma
       ? sigmaSeries(weeks, sigmaWindow === 'rolling', scale === 'cv')
-      : pointsFor(mode, metric, weeks, medians);
+      : pointsFor(mode, measure, weeks, medians);
   });
   const visible = series.filter((s) => shown.has(s.rosterId));
 
@@ -197,29 +208,16 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
         />
       )}
 
-      {/* teams */}
-      <div className="control-row">
-        <span className="control-label" id="teams-label">
-          Teams
-        </span>
-        <div className="chips" role="group" aria-labelledby="teams-label">
-          {series.map((s) => (
-            <button
-              key={s.rosterId}
-              type="button"
-              className="chip"
-              aria-pressed={shown.has(s.rosterId)}
-              style={{ '--chip': s.colour } as CSSProperties}
-              onClick={() => toggle(s.rosterId)}
-              onFocus={() => setHovered(s.rosterId)}
-              onBlur={() => setHovered(null)}
-            >
-              <span className="swatch" aria-hidden="true" />
-              {s.name}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* several teams at once, in standings order; focusing a chip raises its line */}
+      <TeamChips
+        name="teams"
+        label="Teams"
+        teams={series}
+        colours={colours}
+        isPressed={(id) => shown.has(id)}
+        onPress={toggle}
+        onFocusTeam={setHovered}
+      />
 
       {/* chart. the wrapper always mounts so the observer has something to watch */}
       <div className="chart-wrap" ref={wrapper}>

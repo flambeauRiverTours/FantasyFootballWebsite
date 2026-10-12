@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, fetchSeason, fetchSeasons } from '../src/api/client';
-import { hasConsistency } from '../src/api/types';
-import type { TotalsPayload } from '../src/api/types';
+import { ApiError, fetchSeason } from '../src/api/client';
 import { payload } from './fixture';
 
 function respond(body: unknown, init: ResponseInit & { etag?: string } = {}) {
@@ -71,49 +69,15 @@ describe('fetchSeason', () => {
     expect((error as ApiError).available).toBeNull();
   });
 
+  it('ignores a list of seasons that holds anything but numbers', async () => {
+    fetchMock().mockResolvedValue(respond({ available: [2026, '<script>'] }, { status: 404 }));
+    const error = (await fetchSeason(1999, null).catch((e: unknown) => e)) as ApiError;
+    expect(error.available).toBeNull();
+  });
+
   it('ignores an available field that is not a list', async () => {
     fetchMock().mockResolvedValue(respond({ available: 'nope' }, { status: 404 }));
     const error = (await fetchSeason(null, null).catch((e: unknown) => e)) as ApiError;
     expect(error.available).toBeNull();
-  });
-});
-
-describe('fetchSeasons', () => {
-  it('returns the body', async () => {
-    fetchMock().mockResolvedValue(respond({ current: 2026, available: [2026] }));
-    await expect(fetchSeasons()).resolves.toEqual({ current: 2026, available: [2026] });
-  });
-
-  it('throws an ApiError carrying the status', async () => {
-    fetchMock().mockResolvedValue(respond(null, { status: 503 }));
-    await expect(fetchSeasons()).rejects.toMatchObject({ status: 503 });
-  });
-});
-
-describe('hasConsistency', () => {
-  const absent: TotalsPayload = {
-    actual: 100,
-    ideal: 120,
-    sigma: null,
-    cv: null,
-    mean: null,
-    min: null,
-    max: null,
-  };
-
-  it('is false below four finalized weeks', () => {
-    expect(hasConsistency(absent)).toBe(false);
-  });
-
-  it('is true when the figures are present', () => {
-    expect(hasConsistency({ ...absent, sigma: 12, cv: 0.1, mean: 120, min: 100, max: 140 })).toBe(
-      true,
-    );
-  });
-
-  it('treats a real zero sigma as present', () => {
-    expect(hasConsistency({ ...absent, sigma: 0, cv: 0, mean: 120, min: 120, max: 120 })).toBe(
-      true,
-    );
   });
 });

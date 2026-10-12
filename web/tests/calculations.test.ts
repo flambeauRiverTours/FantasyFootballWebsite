@@ -16,7 +16,7 @@ import {
   startedWeeks,
   vsMedian,
   weeklyMedians,
-} from '../src/api/pointCalculation';
+} from '../src/api/calculations';
 import { payload } from './fixture';
 
 function weeks(...rows: [number, number, number, boolean][]): WeekPayload[] {

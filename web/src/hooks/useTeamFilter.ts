@@ -22,7 +22,7 @@ export function useTeamFilter(teams: TeamPayload[]) {
   const validIds = useMemo(() => teams.map((t) => t.rosterId), [teams]);
   const shown = useMemo(() => toShown(param, validIds), [param, validIds]);
 
-  //never zero teams
+  // the last team shown cannot be hidden: a chart of no one says nothing
   const toggle = (id: number) =>
     setParam((prev) => {
       const current = toShown(prev, validIds);

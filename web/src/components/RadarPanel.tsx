@@ -1,7 +1,7 @@
-import type { CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { useReducedMotion } from 'motion/react';
-import { slotRatios } from '../api/pointCalculation';
+import { slotRatios } from '../api/calculations';
+import { teamColours } from '../api/teamColours';
 import type { SeasonPayload, TeamPayload } from '../api/types';
 import { useEnumQuery } from '../hooks/useEnumQuery';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
@@ -9,6 +9,7 @@ import { useQueryState } from '../hooks/useQueryState';
 import Panel from './Panel';
 import Radar from './Radar';
 import SegmentedRow from './SegmentedRow';
+import TeamChips from './TeamChips';
 import SlotBars from './SlotBars';
 
 interface RadarPanelProps {
@@ -24,11 +25,6 @@ const Views = [
 
 const MaxRadarSize = 420;
 
-/** One colour per team, by its place in the list: the chip and the radar shape both use it. */
-function teamColour(index: number): string {
-  return `var(--team-${index + 1})`;
-}
-
 /** The drawing in words for a screen reader. Names the axes, never the shape (R2). */
 function describe(name: string, slots: string[], ratios: (number | null)[]): string {
   const above = slots.filter((_, i) => (ratios[i] ?? 1) > 1);
@@ -40,38 +36,6 @@ function describe(name: string, slots: string[], ratios: (number | null)[]): str
 }
 
 // parts
-
-interface TeamChipsProps {
-  teams: TeamPayload[];
-  teamId: number | null;
-  onSelect: (rosterId: number) => void;
-}
-
-/** Single select, unlike ChartPanel's team filter: clicking sets rather than toggles. */
-function TeamChips({ teams, teamId, onSelect }: TeamChipsProps) {
-  return (
-    <div className="control-row">
-      <span className="control-label" id="radar-team-label">
-        Team
-      </span>
-      <div className="chips" role="group" aria-labelledby="radar-team-label">
-        {teams.map((t, i) => (
-          <button
-            key={t.rosterId}
-            type="button"
-            className="chip"
-            aria-pressed={t.rosterId === teamId}
-            style={{ '--chip': teamColour(i) } as CSSProperties}
-            onClick={() => onSelect(t.rosterId)}
-          >
-            <span className="swatch" aria-hidden="true" />
-            {t.name}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 interface DrawingProps {
   team: TeamPayload | undefined;
@@ -129,9 +93,9 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
   const teamId = payload.teams.some((t) => String(t.rosterId) === rawTeam)
     ? Number(rawTeam)
     : (payload.teams[0]?.rosterId ?? null);
-  const teamIndex = payload.teams.findIndex((t) => t.rosterId === teamId);
-  const team = payload.teams[teamIndex];
-  const colour = teamIndex >= 0 ? teamColour(teamIndex) : undefined;
+  const colours = teamColours(payload.teams);
+  const team = payload.teams.find((t) => t.rosterId === teamId);
+  const colour = teamId === null ? undefined : colours.get(teamId);
   const ratios = slotRatios(payload, teamId);
   const label = team ? describe(team.name, payload.slotOrder, ratios) : '';
   const selectTeam = (rosterId: number) =>
@@ -139,7 +103,15 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
 
   return (
     <Panel id="radar" title="Positional Radar">
-      <TeamChips teams={payload.teams} teamId={teamId} onSelect={selectTeam} />
+      {/* one team at a time: pressing selects rather than toggles */}
+      <TeamChips
+        name="radar-team"
+        label="Team"
+        teams={payload.teams}
+        colours={colours}
+        isPressed={(id) => id === teamId}
+        onPress={selectTeam}
+      />
       <SegmentedRow name="view" label="View" options={Views} value={view} onChange={setView} />
 
       {/* the wrapper always mounts so the observer has something to watch */}

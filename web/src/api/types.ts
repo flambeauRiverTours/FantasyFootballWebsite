@@ -47,22 +47,3 @@ export interface WeekPayload {
   ideal: number;
   isFinal: boolean;
 }
-
-export interface SeasonsPayload {
-  current: number;
-  /** [2026] until the season chain walk runs, which is deferred. */
-  available: number[];
-}
-
-/** Totals with sigma and its range present. CV can still be null, at a zero mean. */
-export type ConsistentTotals = TotalsPayload & {
-  sigma: number;
-  mean: number;
-  min: number;
-  max: number;
-};
-
-/** True when sigma and its range are available, which the server decides together. */
-export function hasConsistency(totals: TotalsPayload): totals is ConsistentTotals {
-  return totals.sigma !== null;
-}

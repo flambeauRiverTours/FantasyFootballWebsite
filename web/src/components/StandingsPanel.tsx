@@ -1,7 +1,8 @@
 import { m } from 'motion/react';
-import { standings } from '../api/pointCalculation';
+import { standings } from '../api/calculations';
 import type { TeamPayload } from '../api/types';
 import Panel from './Panel';
+import StandingsHead from './StandingsHead';
 
 interface StandingsPanelProps {
   teams: TeamPayload[];
@@ -22,18 +23,7 @@ export default function StandingsPanel({ teams }: StandingsPanelProps) {
       {rows.length === 0 ? null : (
         <div className="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th scope="col">Team</th>
-                <th scope="col" aria-sort="descending">
-                  Points
-                </th>
-                <th scope="col" className="col-gap">
-                  Gap
-                </th>
-                <th scope="col">Ideal</th>
-              </tr>
-            </thead>
+            <StandingsHead />
             <tbody>
               {rows.map(({ team, gap }) => (
                 <m.tr

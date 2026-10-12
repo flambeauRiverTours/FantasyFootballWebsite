@@ -6,7 +6,7 @@
   box-sizing: border-box;
 }
 
-/* stops centred content shifting */
+/* reserves the scrollbar's width even when nothing scrolls, so centred content does not jump sideways */
 html {
   scrollbar-gutter: stable;
 }
@@ -30,7 +30,7 @@ html {
   --above: oklch(52% 0.13 165);
   --below: oklch(58% 0.15 25);
 
-  /* equal visual weight */
+  /* one lightness and chroma, twenty hues: no team looks more important than another */
   --team-1: oklch(58% 0.14 25);
   --team-2: oklch(58% 0.14 95);
   --team-3: oklch(58% 0.14 165);
@@ -53,7 +53,7 @@ html {
   --team-20: oklch(58% 0.14 355);
 }
 
-/* designed not inverted */
+/* dark theme: chosen values, not inverted ones, so the accents and team hues keep their contrast */
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: oklch(17% 0.008 250);
@@ -134,11 +134,6 @@ h1 {
   color: var(--fg-muted);
 }
 
-/* sigma not summation */
-.symbol {
-  text-transform: none;
-}
-
 ::selection {
   background: var(--accent-weak);
 }
@@ -201,7 +196,7 @@ h1 {
   width: 100%;
 }
 
-/* one line always */
+/* a panel title stays on one line, so a long one cannot push the panel's content down */
 .panel-inner > h2 {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -241,7 +236,7 @@ td {
   color: var(--fg);
 }
 
-/* takes the slack */
+/* the team column takes all spare width, keeping the figures together on the right */
 th:first-child,
 td:first-child {
   text-align: left;
@@ -254,7 +249,7 @@ td:first-child {
   font-weight: var(--weight-medium);
 }
 
-/* hairlines */
+/* row rules: a firmer one under the header, softer ones between rows */
 thead tr {
   border-bottom: 1px solid var(--rule);
 }
@@ -275,16 +270,6 @@ th[aria-sort] {
 }
 td.is-sorted {
   font-weight: var(--weight-medium);
-}
-
-.th-note {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-normal);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--fg-muted);
-  opacity: 0.8;
 }
 
 /* controls */
@@ -325,7 +310,7 @@ td.is-sorted {
   cursor: pointer;
 }
 
-/* the only shadow */
+/* the pressed option lifts with the page's only shadow */
 .segmented button[aria-pressed='true'] {
   background: var(--bg);
   color: var(--fg);
@@ -354,7 +339,7 @@ td.is-sorted {
   cursor: pointer;
 }
 
-/* not colour alone */
+/* pressed shows in the text and background too, not in the swatch colour alone */
 .chip[aria-pressed='true'] {
   color: var(--fg);
   background: var(--bg-subtle);
@@ -384,17 +369,13 @@ td.is-sorted {
   height: auto;
 }
 
-/* room to scroll */
+/* never taller than most of the screen, so a phone can still scroll past the chart */
 #chart .chart {
   max-height: 70svh;
 }
 
 .chart .grid line {
   stroke: var(--rule-soft);
-}
-.chart .zero {
-  stroke: var(--fg-muted);
-  stroke-width: 1;
 }
 
 .chart .grid text,
@@ -409,7 +390,7 @@ td.is-sorted {
   letter-spacing: 0.06em;
 }
 
-/* fills by default */
+/* an SVG path is filled by default; a line must not be */
 .chart path.series {
   fill: none;
   stroke-width: 1.75;
@@ -435,7 +416,7 @@ td.is-sorted {
   stroke-width: 2.5;
 }
 
-/* one hit area */
+/* the plot's one pointer target lets a touch still scroll the page vertically */
 .chart .hit {
   touch-action: pan-y;
 }
@@ -493,6 +474,8 @@ td.is-sorted {
   height: auto;
 }
 
+/* the zero line, in the chart once values go negative and always in the bars */
+.chart .zero,
 .bars .zero {
   stroke: var(--fg-muted);
   stroke-width: 1;

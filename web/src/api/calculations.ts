@@ -10,11 +10,11 @@ export interface Point {
 /** How weekly values are transformed before plotting. */
 export type PointMode = 'cumulative' | 'perWeek' | 'vsMedian';
 
-/** Which number is being plotted. */
-export type Metric = 'actual' | 'ideal' | 'sigma';
+/** Which weekly score a points calculation reads. */
+export type Measure = 'actual' | 'ideal';
 
-function valueOf(w: WeekPayload, metric: Metric): number {
-  return metric === 'ideal' ? w.ideal : w.actual;
+function valueOf(w: WeekPayload, measure: Measure): number {
+  return measure === 'ideal' ? w.ideal : w.actual;
 }
 
 function ordered(weeks: WeekPayload[]): WeekPayload[] {
@@ -32,27 +32,27 @@ export function startedWeeks(teams: TeamPayload[]): Set<number> {
 }
 
 /** Running total across the season. */
-export function cumulative(weeks: WeekPayload[], metric: Metric = 'actual'): Point[] {
+export function cumulative(weeks: WeekPayload[], measure: Measure = 'actual'): Point[] {
   let total = 0;
-  return ordered(weeks).map((w) => ({ week: w.week, value: (total += valueOf(w, metric)) }));
+  return ordered(weeks).map((w) => ({ week: w.week, value: (total += valueOf(w, measure)) }));
 }
 
 /** Each week on its own. */
-export function perWeek(weeks: WeekPayload[], metric: Metric = 'actual'): Point[] {
-  return ordered(weeks).map((w) => ({ week: w.week, value: valueOf(w, metric) }));
+export function perWeek(weeks: WeekPayload[], measure: Measure = 'actual'): Point[] {
+  return ordered(weeks).map((w) => ({ week: w.week, value: valueOf(w, measure) }));
 }
 
 /** League median per finalized week. */
 export function weeklyMedians(
   teams: TeamPayload[],
-  metric: Metric = 'actual',
+  measure: Measure = 'actual',
 ): Map<number, number> {
   const byWeek = new Map<number, number[]>();
   for (const t of teams)
     for (const w of t.weeks)
       if (w.isFinal) {
         const bucket = byWeek.get(w.week) ?? [];
-        bucket.push(valueOf(w, metric));
+        bucket.push(valueOf(w, measure));
         byWeek.set(w.week, bucket);
       }
 
@@ -63,13 +63,13 @@ export function weeklyMedians(
 export function vsMedian(
   weeks: WeekPayload[],
   medians: Map<number, number>,
-  metric: Metric = 'actual',
+  measure: Measure = 'actual',
 ): Point[] {
   let total = 0;
   return ordered(weeks).flatMap((w) => {
     const league = medians.get(w.week);
     if (league === undefined) return [];
-    total += valueOf(w, metric) - league;
+    total += valueOf(w, measure) - league;
     return [{ week: w.week, value: total }];
   });
 }

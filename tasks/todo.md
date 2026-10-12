@@ -248,6 +248,28 @@ one feeds the next.
             pass. Checked at 375 px in the browser against live data, which
             showed the chart's line-end names clipping; a narrow chart now drops
             them. Desktop keeps them.
+      - [x] **2b · Front end, high-level review** — 18 items, done 2026-10-12.
+            **5, 10 and 18 done (A25):** one colour per team, fixed by roster
+            id and shared by every panel; the game windows cover London
+            Sundays, late-season Saturdays, Christmas, Black Friday and Friday
+            openers, with Thanksgiving found by date; `useSeason` and the game
+            windows have tests. 188 tests pass.
+            **1, 2, 3 and 7 done.** The loader is placed by CSS alone: two
+            measured constants, one per breakpoint, matching the old JS to the
+            pixel at 375, 800 and 1280 px (the old CSS was right only on narrow
+            screens). `useSeason` no longer tracks a season that never changes,
+            and new data no longer resets the poll timer. One `TeamChips` serves
+            both panels; one `StandingsHead` serves the table and the Skeleton.
+            15 (the false `#boot` comment) went with item 1. 190 tests pass.
+            **The rest done (A26).** Unused code removed and noted in T29 and
+            T59; `?radar` gone; a failure is a panel and the masthead stays
+            quiet; `pointCalculation.ts` is `calculations.ts`; a `Measure` type
+            for points calculations, so sigma can no longer reach them (the
+            compiler found the chart passing it); one `LinearScale` type and a
+            `SpreadScale` for the chart's sigma/CV control, which had shared
+            the name `Scale` with the d3 type; `App` names fixed; cryptic CSS
+            and code comments rewritten; the 404 season list is checked before
+            it becomes links. 185 tests pass.
             - Defects
               1. Delete the custom `ShouldRetry`, so the standard predicate
                  retries attempt timeouts and 500s; keep the rate-limit
@@ -319,8 +341,10 @@ illegible at table size, and it had shipped without the figure beside it.
 - [ ] **T59** Consistency panel — 3 h `±` · σ with room to read it
       A panel of its own, one row per team, sharing a scale: the range mark
       from §04 (lowest to highest week, a tick at the mean, a ±σ band) drawn
-      wide enough to read, with the σ figure beside it. `SigmaDisplay` and its
-      tests in `chart.test.tsx` are kept for this. Hidden, not empty, below
+      wide enough to read, with the σ figure beside it. The first draft of that
+      mark, `SigmaDisplay`, with its `ConsistentTotals` type, `hasConsistency`
+      guard and tests, was removed unused (A26); recover it from git history
+      or rebuild it. Hidden, not empty, below
       four finalized weeks (**D1**). Decide whether CV belongs here too or
       stays on the chart (**D3**). Rank by σ, or keep the standings order?
 
@@ -356,7 +380,8 @@ clear what would and would not have input.
       changes until that app setting is updated at rollover (T45's checklist).
       Needs a `Core` record for a league season before `ILeagueStore` can be
       defined the way `IFinalizedWeekStore` was, and a `SeasonOverrides` property
-      that `LeagueOptions` does not yet have.
+      that `LeagueOptions` does not yet have. The page's `fetchSeasons` client
+      call was removed unused (A26); add it back with the season picker (T56).
 - [ ] **T30** Historical backfill job — 2.5 h · **no input, and largely redundant**
       T28 writes every finalized week rather than only the most recent, and
       `WriteAsync` upserts, so **the current season already backfills itself**.
@@ -522,6 +547,8 @@ Listed here only so their implementation state is visible in one place.
 | **A22** | Sleeper splits into Sleeper and Seasons; naming rules settle             | done — T61 1b, items 18–21                                              |
 | **A23** | `Pts` covers roster totals; tests may use `!` uncommented                | done — in `docs/standards.md`                                           |
 | **A24** | The front end meets its standards; Prettier and a bundle check added     | done — T61 domain 2                                                     |
+| **A25** | Colour follows the team; game windows cover the whole NFL week           | done — T61 2b, items 5 and 10                                           |
+| **A26** | Unused code waits for its task; `?radar` removed; a failure is a panel   | done — T61 2b                                                           |
 
 ---
 

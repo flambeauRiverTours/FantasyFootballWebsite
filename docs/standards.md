@@ -112,7 +112,7 @@ This document states the standards for each programming domain for this project.
   - why: an unchanged poll costs a 304 not a payload
 - Polling runs only during game windows per D6
   - why: between games nothing changes so nothing is fetched
-- Calculations live in `pointCalculation.ts` not in components
+- Calculations live in `calculations.ts` not in components
   - why: pure functions test without rendering anything
 
 **Styling**

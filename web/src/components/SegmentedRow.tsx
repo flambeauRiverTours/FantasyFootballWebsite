@@ -30,7 +30,7 @@ export default function SegmentedRow<T extends string>({
             aria-pressed={value === option}
             onClick={() => onChange(option)}
           >
-            <span className="symbol">{text}</span>
+            {text}
           </button>
         ))}
       </div>

@@ -1,9 +1,9 @@
 import { max, min } from 'd3-array';
 import { scaleLinear } from 'd3-scale';
-import type { ScaleLinear } from 'd3-scale';
+import type { LinearScale } from './drawing';
 import { line } from 'd3-shape';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
-import type { Point } from '../api/pointCalculation';
+import type { Point } from '../api/calculations';
 
 export interface Series {
   rosterId: number;
@@ -24,8 +24,6 @@ interface ChartProps {
   displayKey?: string;
 }
 
-type Scale = ScaleLinear<number, number>;
-
 const Margin = { top: 16, right: 84, bottom: 28, left: 44 };
 
 /** The narrowest chart that keeps its line-end names; roughly the 40rem breakpoint less panel padding. */
@@ -37,14 +35,14 @@ const UnlabelledRight = 16;
 // scales
 
 /** Weeks across. Always at least two wide so a single week is not a zero domain. */
-function weekScale(width: number, right: number, maxWeek: number): Scale {
+function weekScale(width: number, right: number, maxWeek: number): LinearScale {
   return scaleLinear()
     .domain([1, Math.max(maxWeek, 2)])
     .range([Margin.left, width - right]);
 }
 
 /** Values up. Padding is a fraction of the range so the zoom is the same at any size. */
-function valueScale(lo: number, hi: number, height: number, zeroBased: boolean): Scale {
+function valueScale(lo: number, hi: number, height: number, zeroBased: boolean): LinearScale {
   const pad = (hi - lo) * 0.08 || hi * 0.08 || 1;
 
   return scaleLinear()
@@ -61,7 +59,7 @@ function Gridlines({
   right,
   count,
 }: {
-  y: Scale;
+  y: LinearScale;
   width: number;
   right: number;
   count: number;
@@ -82,7 +80,7 @@ function Gridlines({
   );
 }
 
-function WeekAxis({ x, height, maxWeek }: { x: Scale; height: number; maxWeek: number }) {
+function WeekAxis({ x, height, maxWeek }: { x: LinearScale; height: number; maxWeek: number }) {
   return (
     <g className="x-axis">
       {x
@@ -110,8 +108,8 @@ function SeriesLabels({
   hovered,
 }: {
   series: Series[];
-  x: Scale;
-  y: Scale;
+  x: LinearScale;
+  y: LinearScale;
   hovered: number | null;
 }) {
   return (
@@ -228,7 +226,7 @@ export default function Chart({
 
       <WeekAxis x={x} height={height} maxWeek={maxWeek} />
 
-      {/* crossfades when metrics are changed*/}
+      {/* a metric change gives every line a new key, so the old lines fade out as the new ones draw */}
       <AnimatePresence>
         {ordered.map((s) => (
           <m.path
@@ -248,7 +246,7 @@ export default function Chart({
 
       {labelled ? <SeriesLabels series={series} x={x} y={y} hovered={hovered} /> : null}
 
-      {/* one hit area. a stroke is too hard to target */}
+      {/* one transparent area takes the pointer: a line under 2px wide is too thin to aim at */}
       <rect
         className="hit"
         x={Margin.left}

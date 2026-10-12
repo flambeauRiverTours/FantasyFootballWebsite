@@ -9,9 +9,16 @@
     <title>Fantasy Standings</title>
     <style>
       /* overlay shown while loading: a football thrown side to side */
+      /*
+       * The arc is centred halfway between the masthead's bottom (4rem, --masthead-h)
+       * and the top of the Skeleton's title. The Skeleton is centred in the space
+       * below the masthead, so that midpoint is 4rem + (100svh - 4rem - C) / 4, where
+       * C is the Skeleton's height less twice the title's offset inside it: 331px
+       * above the 40rem breakpoint and 283px below it, where the table's cells are
+       * tighter. Measured, not guessed - re-measure if the standings panel changes.
+       */
       #boot {
-        /* the arc is centred halfway between the masthead's bottom and the top of the Skeleton's title */
-        --boot-mid: calc(4rem + (100svh - 4rem - 283px) / 4);
+        --boot-mid: calc(4rem + (100svh - 4rem - 331px) / 4);
         position: fixed;
         inset: 0;
         pointer-events: none;
@@ -26,6 +33,12 @@
         overflow: hidden;
         clip: rect(0 0 0 0);
         white-space: nowrap;
+      }
+
+      @media (max-width: 40rem) {
+        #boot {
+          --boot-mid: calc(4rem + (100svh - 4rem - 283px) / 4);
+        }
       }
 
       @keyframes boot-fadein {

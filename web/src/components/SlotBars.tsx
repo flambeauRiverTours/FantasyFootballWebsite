@@ -1,6 +1,6 @@
 import { scaleLinear } from 'd3-scale';
-import type { ScaleLinear } from 'd3-scale';
-import { slotDeviations } from '../api/pointCalculation';
+import type { LinearScale } from './drawing';
+import { slotDeviations } from '../api/calculations';
 
 export interface SlotBarsProps {
   slots: string[];
@@ -15,8 +15,6 @@ interface Row {
   mid: number;
   deviation: number | null;
 }
-
-type Scale = ScaleLinear<number, number>;
 
 const MinDomain = 0.1; // a flat week must not divide by a near-zero domain
 const Margin = { top: 8, right: 56, bottom: 8, left: 96 };
@@ -41,7 +39,7 @@ function BarRow({
   rowHeight,
 }: {
   row: Row;
-  x: Scale;
+  x: LinearScale;
   zero: number;
   rowHeight: number;
 }) {
