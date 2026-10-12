@@ -187,6 +187,29 @@ that cutting it is a decision rather than an omission.
 
 ---
 
+## Now · make the repo presentable as a portfolio piece
+
+Started 2026-10-12. Goal: a prospective employer can land on the repo or its
+site and quickly see what was built, how, and to what standard. In order; each
+one feeds the next.
+
+- [ ] **T60** Engineering standards — `docs/standards.md`. A terse, bulleted
+      list of coding and design standards, one section per domain. Grounded in
+      what the repo already enforces (`Directory.Build.props`, `.editorconfig`,
+      `.oxlintrc.json`, CI) and the design's D-decisions; where they disagree with
+      each other or with the code, the conflict is resolved before it is written
+      down. **Reviewed by Jack before T61.**
+- [ ] **T61** Validate the code against T60. One pass per domain; every gap is
+      either fixed or recorded as an accepted exception with its reason, so the
+      standards stay true rather than aspirational.
+- [ ] **T62** Rewrite the design for a prospective employer. Lead with the
+      problem, the decisions and their trade-offs, and what was measured; keep
+      the build-log history (corrections, amendments) one click away rather than
+      inline.
+- [ ] **T63** A GitHub Pages site for the project, including the runbook.
+
+---
+
 ## Next · a panel for σ — 3 h `±`
 
 σ came out of the standings table on 2026-10-07 (**A17**): its range mark was
