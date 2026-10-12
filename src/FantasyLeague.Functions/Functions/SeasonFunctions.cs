@@ -1,5 +1,4 @@
-﻿using Azure;
-using FantasyLeague.Sleeper;
+﻿using FantasyLeague.Sleeper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -13,10 +12,12 @@ namespace FantasyLeague.Functions.Functions
     /// </summary>
     /// <param name="seasons">Season assembly.</param>
     /// <param name="league">The configured league. Never taken from the request.</param>
+    /// <param name="time">Clock for the response timestamp.</param>
     /// <param name="logger">Logger.</param>
     public sealed class SeasonFunctions(
         ISeasonService seasons,
         IOptions<LeagueOptions> league,
+        TimeProvider time,
         ILogger<SeasonFunctions> logger)
     {
         /// <summary>
@@ -73,7 +74,7 @@ namespace FantasyLeague.Functions.Functions
             }
 
             return new OkObjectResult(SeasonPayloadMapper.ToIndividualSeasonPayload(
-                snapshot, DateTimeOffset.UtcNow, requested, ExcludedRosterIds(snapshot), league.Value.OverrideLeagueName));
+                snapshot, time.GetUtcNow(), requested, ExcludedRosterIds(snapshot), league.Value.OverrideLeagueName));
         }
 
         /// <summary>
@@ -119,7 +120,7 @@ namespace FantasyLeague.Functions.Functions
         {
             foreach (var violation in snapshot.Violations)
             {
-                logger.LogWarning(
+                logger.LogError(
                     "Invariant {Invariant} failed for roster {RosterId} in week {Week}: expected {Expected}, got {Actual}.",
                     violation.Invariant, violation.RosterId, violation.Week, violation.Expected, violation.Actual);
             }

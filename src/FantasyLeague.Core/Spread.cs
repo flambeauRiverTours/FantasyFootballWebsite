@@ -13,7 +13,10 @@
         /// <returns>The spread of the final weeks, or null if there are not enough weeks</returns>
         public static Spread? Calculate(IReadOnlyList<decimal> finalWeeks, int minWeeks = 4)
         {
-            if (finalWeeks.Count < minWeeks) return null;
+            if (finalWeeks.Count < minWeeks)
+            {
+                return null;
+            }
 
             var mean = finalWeeks.Average();
             var meanD = (double)mean;

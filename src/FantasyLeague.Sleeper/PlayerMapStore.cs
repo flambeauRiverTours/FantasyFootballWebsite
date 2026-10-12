@@ -80,7 +80,7 @@ namespace FantasyLeague.Sleeper
                 return null;
             }
 
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (RequestFailedException ex) when (IsTransient(ex))
             {
                 logger.LogWarning(ex, "Could not read the stored player map; falling back to Sleeper.");
                 return null;
@@ -102,10 +102,22 @@ namespace FantasyLeague.Sleeper
 
                 logger.LogInformation("Stored the player map. Startable: {StartableCount}, bytes: {Bytes}.", map.Players.Count, buffer.Length);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (RequestFailedException ex) when (IsTransient(ex))
             {
                 logger.LogWarning(ex, "Could not store the player map; the next cold instance will refetch.");
             }
+
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Could not store the player map; the next cold instance will refetch.");
+            }
         }
+
+        /// <summary>
+        /// Decides whether a storage failure could succeed if tried again.
+        /// </summary>
+        /// <param name="ex">The storage failure.</param>
+        /// <returns><c>true</c> for no response, a timeout, throttling or a server error.</returns>
+        private static bool IsTransient(RequestFailedException ex) => ex.Status is 0 or 408 or 429 or >= 500;
     }
 }

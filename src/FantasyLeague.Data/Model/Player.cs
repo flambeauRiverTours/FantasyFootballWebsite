@@ -3,7 +3,7 @@
     /// <summary>
     /// Represents a given player
     /// </summary>
-    public class Player
+    internal class Player
     {
         public string PlayerId { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;

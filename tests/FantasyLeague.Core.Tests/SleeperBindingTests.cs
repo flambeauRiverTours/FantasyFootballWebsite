@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using FantasyLeague.Core;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 
@@ -146,11 +145,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void A_manager_with_no_name_at_all_still_gets_a_label()
-        {
+        public void A_manager_with_no_name_at_all_still_gets_a_label() =>
             // Never render an empty string into the standings table.
             SleeperMapper.ResolveTeamName(User(null, null), 4).Should().Be("Roster 4");
-        }
 
         [Fact]
         public void A_commissioner_override_beats_the_scored_points()
@@ -159,7 +156,7 @@ namespace FantasyLeague.Core.Tests
             // corrected a score. Ignoring it desyncs the standings from the app.
             var matchup = new MatchupDto(
                 RosterId: 2, MatchupId: 1, Points: 88.4m, CustomPoints: 91m,
-                Players: [], Starters: [], StartersPoints: [], PlayersPoints: []);
+                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
                 .Actual.Should().Be(91m);
@@ -170,7 +167,7 @@ namespace FantasyLeague.Core.Tests
         {
             var matchup = new MatchupDto(
                 RosterId: 2, MatchupId: 1, Points: 88.4m, CustomPoints: null,
-                Players: [], Starters: [], StartersPoints: [], PlayersPoints: []);
+                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
                 .Actual.Should().Be(88.4m);
@@ -247,6 +244,47 @@ namespace FantasyLeague.Core.Tests
 
             map.Keys.Should().BeEquivalentTo(["1", "BAL"]);
             map["BAL"].Name.Should().Be("BAL", "a defence has no full name, so the id stands in");
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void An_unnamed_league_gets_the_default_name(string? name)
+        {
+            var league = new LeagueDto("L1", null, 2026, name, null, 6, ["QB"]);
+
+            SleeperMapper.ToLeagueName(league).Should().Be("Fantasy Football League");
+        }
+
+        [Fact]
+        public void A_named_league_keeps_its_name()
+        {
+            var league = new LeagueDto("L1", null, 2026, "Bosty Base", null, 6, ["QB"]);
+
+            SleeperMapper.ToLeagueName(league).Should().Be("Bosty Base");
+        }
+
+        [Fact]
+        public void A_league_with_no_roster_positions_is_rejected()
+        {
+            var league = new LeagueDto("L1", null, 2026, "Bosty Base", null, 6, null);
+
+            var act = () => SleeperMapper.ToSlots(league);
+
+            act.Should().Throw<InvalidDataException>();
+        }
+
+        [Fact]
+        public void Unowned_rosters_are_left_out_of_the_owner_map()
+        {
+            var owners = SleeperMapper.ToRosterOwnerIds(
+            [
+                new(RosterId: 1, OwnerId: "u1", CoOwners: null),
+                new(RosterId: 2, OwnerId: null, CoOwners: null),
+            ]);
+
+            owners.Should().BeEquivalentTo(new Dictionary<int, string> { [1] = "u1" });
         }
 
         [Fact]

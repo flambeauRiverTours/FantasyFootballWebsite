@@ -48,10 +48,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void No_requested_season_means_the_current_one()
-        {
-            SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf).IsCurrent.Should().BeTrue();
-        }
+        public void No_requested_season_means_the_current_one() => SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf).IsCurrent.Should().BeTrue();
 
         [Fact]
         public void Requesting_the_season_being_served_is_still_current()

@@ -1,6 +1,4 @@
-﻿
-using System.Threading.Tasks;
-using Microsoft.Extensions.Caching.Hybrid;
+﻿using Microsoft.Extensions.Caching.Hybrid;
 
 namespace FantasyLeague.Sleeper
 {
@@ -25,11 +23,10 @@ namespace FantasyLeague.Sleeper
         /// <param name="week">Week</param>
         /// <param name="ct">CancellationToken</param>
         /// <returns>Result of the API call</returns>
-        public ValueTask<IReadOnlyList<MatchupDto?>?> GetMatchupsAsync(string leagueId, int week, CancellationToken ct) =>
+        public ValueTask<IReadOnlyList<MatchupDto>> GetMatchupsAsync(string leagueId, int week, CancellationToken ct) =>
          cache.GetOrCreateAsync(
              $"matchups:{leagueId}:{week}",
-             ct2 => new ValueTask<IReadOnlyList<MatchupDto?>?>(
-                        client.GetMatchupsAsync(leagueId, week, ct2)),
+             async ct2 => RequiredList(await client.GetMatchupsAsync(leagueId, week, ct2), "matchups"),
              Matchups,
              cancellationToken: ct);
 
@@ -39,11 +36,10 @@ namespace FantasyLeague.Sleeper
         /// <param name="leagueId">League Id</param>
         /// <param name="ct">CancellationToken</param>
         /// <returns>Result of the API call</returns>
-        public ValueTask<IReadOnlyList<RosterDto?>?> GetRostersAsync(string leagueId, CancellationToken ct) =>
+        public ValueTask<IReadOnlyList<RosterDto>> GetRostersAsync(string leagueId, CancellationToken ct) =>
         cache.GetOrCreateAsync(
             $"rosters:{leagueId}",
-            ct2 => new ValueTask<IReadOnlyList<RosterDto?>?>(
-                       client.GetRostersAsync(leagueId, ct2)),
+            async ct2 => RequiredList(await client.GetRostersAsync(leagueId, ct2), "rosters"),
             Roster,
             cancellationToken: ct);
 
@@ -53,11 +49,10 @@ namespace FantasyLeague.Sleeper
         /// <param name="leagueId">League Id</param>
         /// <param name="ct">CancellationToken</param>
         /// <returns>Result of the API call</returns>
-        public ValueTask<LeagueDto?> GetLeagueAsync(string leagueId, CancellationToken ct) =>
+        public ValueTask<LeagueDto> GetLeagueAsync(string leagueId, CancellationToken ct) =>
         cache.GetOrCreateAsync(
             $"league:{leagueId}",
-            ct2 => new ValueTask<LeagueDto?>(
-                       client.GetLeagueAsync(leagueId, ct2)),
+            async ct2 => Required(await client.GetLeagueAsync(leagueId, ct2), "league"),
             League,
             cancellationToken: ct);
 
@@ -66,11 +61,10 @@ namespace FantasyLeague.Sleeper
         /// </summary>
         /// <param name="ct">CancellationToken</param>
         /// <returns>Result of the API call</returns>
-        public ValueTask<NflStateDto?> GetStateAsync(CancellationToken ct) =>
+        public ValueTask<NflStateDto> GetStateAsync(CancellationToken ct) =>
         cache.GetOrCreateAsync(
             "nfl_state",
-            ct2 => new ValueTask<NflStateDto?>(
-                       client.GetStateAsync(ct2)),
+            async ct2 => Required(await client.GetStateAsync(ct2), "NFL state"),
             NFLState,
             cancellationToken: ct);
 
@@ -80,13 +74,37 @@ namespace FantasyLeague.Sleeper
         /// <param name="leagueId">League Id</param>
         /// <param name="ct">CancellationToken</param>
         /// <returns>Result of the API call </returns>
-        public ValueTask<IReadOnlyList<LeagueUserDto?>?> GetUsersAsync(string leagueId, CancellationToken ct) =>
+        public ValueTask<IReadOnlyList<LeagueUserDto>> GetUsersAsync(string leagueId, CancellationToken ct) =>
         cache.GetOrCreateAsync(
             $"users:{leagueId}",
-            ct2 => new ValueTask<IReadOnlyList<LeagueUserDto?>?>(
-                       client.GetUsersAsync(leagueId, ct2)),
+            async ct2 => RequiredList(await client.GetUsersAsync(leagueId, ct2), "users"),
             Users,
             cancellationToken: ct);
+
+        /// <summary>
+        /// Rejects a response Sleeper sent as <c>null</c>.
+        /// </summary>
+        /// <param name="value">The deserialized response.</param>
+        /// <param name="what">What was requested, for the error message.</param>
+        /// <returns>The response, known to be present.</returns>
+        /// <exception cref="InvalidDataException">Sleeper returned nothing.</exception>
+        private static T Required<T>(T? value, string what) where T : class =>
+            value ?? throw new InvalidDataException($"Sleeper returned no {what}.");
+
+        /// <summary>
+        /// Rejects a list Sleeper sent as <c>null</c> or with a <c>null</c> entry.
+        /// </summary>
+        /// <param name="values">The deserialized response.</param>
+        /// <param name="what">What was requested, for the error message.</param>
+        /// <returns>The list, known to be present and free of nulls.</returns>
+        /// <exception cref="InvalidDataException">Sleeper returned nothing, or a null entry.</exception>
+        private static IReadOnlyList<T> RequiredList<T>(IReadOnlyList<T?>? values, string what) where T : class
+        {
+            var list = Required(values, what);
+            return list.Any(v => v is null)
+                ? throw new InvalidDataException($"Sleeper returned a null entry in {what}.")
+                : [.. list.OfType<T>()];
+        }
 
     }
 }

@@ -22,22 +22,13 @@ namespace FantasyLeague.Core.Tests
             Snapshot(teams: (1, [(1, actual, ideal, isFinal)]));
 
         [Fact]
-        public void The_tag_is_weak()
-        {
-            ComputeETagOf(OneTeam()).Should().StartWith("W/\"");
-        }
+        public void The_tag_is_weak() => ComputeETagOf(OneTeam()).Should().StartWith("W/\"");
 
         [Fact]
-        public void The_tag_is_quoted()
-        {
-            ComputeETagOf(OneTeam()).Should().EndWith("\"");
-        }
+        public void The_tag_is_quoted() => ComputeETagOf(OneTeam()).Should().EndWith("\"");
 
         [Fact]
-        public void The_same_data_gives_the_same_tag()
-        {
-            ComputeETagOf(OneTeam()).Should().Be(ComputeETagOf(OneTeam()));
-        }
+        public void The_same_data_gives_the_same_tag() => ComputeETagOf(OneTeam()).Should().Be(ComputeETagOf(OneTeam()));
 
         [Fact]
         public void A_changed_score_changes_the_tag()
@@ -61,16 +52,10 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void A_new_week_changes_the_tag()
-        {
-            ComputeETagOf(Snapshot(currentWeek: 2)).Should().NotBe(ComputeETagOf(Snapshot(currentWeek: 3)));
-        }
+        public void A_new_week_changes_the_tag() => ComputeETagOf(Snapshot(currentWeek: 2)).Should().NotBe(ComputeETagOf(Snapshot(currentWeek: 3)));
 
         [Fact]
-        public void A_different_season_changes_the_tag()
-        {
-            ComputeETagOf(Snapshot(season: 2026)).Should().NotBe(ComputeETagOf(Snapshot(season: 2025)));
-        }
+        public void A_different_season_changes_the_tag() => ComputeETagOf(Snapshot(season: 2026)).Should().NotBe(ComputeETagOf(Snapshot(season: 2025)));
 
         [Fact]
         public void Team_order_does_not_change_the_tag()
@@ -95,10 +80,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_tag_names_the_season_and_week()
-        {
-            ComputeETagOf(Snapshot(season: 2026, currentWeek: 7)).Should().Contain("2026-wk7-");
-        }
+        public void The_tag_names_the_season_and_week() => ComputeETagOf(Snapshot(season: 2026, currentWeek: 7)).Should().Contain("2026-wk7-");
 
         private static string ComputeETagOf(SeasonSnapshot snapshot) =>
             SeasonPayloadMapper.ComputeETag(snapshot);
@@ -110,16 +92,10 @@ namespace FantasyLeague.Core.Tests
         private static readonly IReadOnlyDictionary<string, decimal> NoAttribution = new Dictionary<string, decimal>();
 
         [Fact]
-        public void An_absent_header_never_matches()
-        {
-            SeasonPayloadMapper.MatchesETag(StringValues.Empty, Tag).Should().BeFalse();
-        }
+        public void An_absent_header_never_matches() => SeasonPayloadMapper.MatchesETag(StringValues.Empty, Tag).Should().BeFalse();
 
         [Fact]
-        public void The_same_tag_matches()
-        {
-            SeasonPayloadMapper.MatchesETag(new StringValues(Tag), Tag).Should().BeTrue();
-        }
+        public void The_same_tag_matches() => SeasonPayloadMapper.MatchesETag(new StringValues(Tag), Tag).Should().BeTrue();
 
         [Fact]
         public void The_tag_without_its_weak_prefix_still_matches()
@@ -186,15 +162,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void Garbage_does_not_match_and_does_not_throw()
-        {
-            SeasonPayloadMapper.MatchesETag(new StringValues("not an etag"), Tag).Should().BeFalse();
-        }
+        public void Garbage_does_not_match_and_does_not_throw() => SeasonPayloadMapper.MatchesETag(new StringValues("not an etag"), Tag).Should().BeFalse();
 
         [Fact]
-        public void A_wildcard_does_not_match()
-        {
-            SeasonPayloadMapper.MatchesETag(new StringValues("*"), Tag).Should().BeFalse();
-        }
+        public void A_wildcard_does_not_match() => SeasonPayloadMapper.MatchesETag(new StringValues("*"), Tag).Should().BeFalse();
     }
 }

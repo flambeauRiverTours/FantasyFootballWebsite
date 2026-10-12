@@ -29,6 +29,6 @@ if (string.IsNullOrWhiteSpace(leagueId))
 await host.Services.GetRequiredService<IPlayerMapRefresher>().EnsureCurrentAsync(default);
 var snapshot = await host.Services.GetRequiredService<ISeasonService>().BuildAsync(leagueId.Trim(), default);
 
-StandingsRenderer.Render(snapshot, System.Console.Out, DateTimeOffset.UtcNow);
+StandingsRenderer.Render(snapshot, System.Console.Out, host.Services.GetRequiredService<TimeProvider>().GetUtcNow());
 
 return snapshot.Violations.Count > 0 || snapshot.UnresolvedPlayerIds.Count > 0 ? 1 : 0;

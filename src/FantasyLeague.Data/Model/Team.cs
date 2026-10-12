@@ -3,7 +3,7 @@
     /// <summary>
     /// A given user's team
     /// </summary>
-    public class Team
+    internal class Team
     {
         public string LeagueId { get; set; } = string.Empty;
         public int RosterId { get; set; }

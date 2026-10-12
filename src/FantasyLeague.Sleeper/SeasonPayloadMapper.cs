@@ -21,7 +21,7 @@ namespace FantasyLeague.Sleeper
         /// Maps a snapshot to the season response.
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
-        /// <param name="asOfUtc">When the snapshot was assembled.</param>        /// <param name="overrideLeagueName">Override name to use for the league</param>
+        /// <param name="asOfUtc">When the snapshot was assembled.</param>
         /// <param name="requestedSeason">The season asked for, or null for the current one.</param>
         /// <param name="excludedRosterIds">Rosters to leave out entirely (A1).</param>
         /// <param name="overrideLeagueName">Name of the league</param>
@@ -185,9 +185,20 @@ namespace FantasyLeague.Sleeper
         /// </remarks>
         public static bool MatchesETag(StringValues ifNoneMatch, string etag)
         {
-            if (StringValues.IsNullOrEmpty(ifNoneMatch)) return false;
-            if (!EntityTagHeaderValue.TryParse(etag, out var current)) return false;
-            if (!EntityTagHeaderValue.TryParseList(ifNoneMatch!, out var candidates)) return false;
+            if (StringValues.IsNullOrEmpty(ifNoneMatch))
+            {
+                return false;
+            }
+
+            if (!EntityTagHeaderValue.TryParse(etag, out var current))
+            {
+                return false;
+            }
+
+            if (!EntityTagHeaderValue.TryParseList([.. ifNoneMatch.OfType<string>()], out var candidates))
+            {
+                return false;
+            }
 
             return candidates.Any(candidate => candidate.Compare(current, useStrongComparison: false));
         }

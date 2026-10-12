@@ -20,5 +20,5 @@
         string? FullName,
         string? Team,
         string? Position,
-        List<string>? FantasyPositions);
+        IReadOnlyList<string>? FantasyPositions);
 }

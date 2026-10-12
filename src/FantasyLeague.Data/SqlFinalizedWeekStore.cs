@@ -2,6 +2,7 @@
 using FantasyLeague.Core;
 using FantasyLeague.Data.Model;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Data
@@ -12,8 +13,9 @@ namespace FantasyLeague.Data
         IReadOnlyList<string> Positions,
         decimal Points);
 
-    public sealed class SqlFinalizedWeekStore(
+    internal sealed class SqlFinalizedWeekStore(
         IDbContextFactory<FantasyDataContext> contexts,
+        TimeProvider time,
         ILogger<SqlFinalizedWeekStore> logger) : IFinalizedWeekStore
     {
         private static readonly JsonSerializerOptions Json = new();
@@ -38,7 +40,7 @@ namespace FantasyLeague.Data
 
                 return [.. rows.Select(ToDomain)];
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is RetryLimitExceededException or TimeoutException)
             {
                 logger.LogWarning(ex, "Could not read stored weeks for season {Season}; rebuilding from Sleeper.", season);
                 return [];
@@ -67,6 +69,7 @@ namespace FantasyLeague.Data
             var existing = await db.WeekScores.Where(w => w.LeagueId == leagueId && w.Season == season && weekNumbers.Contains(w.Week))
                 .ToDictionaryAsync(w => (w.RosterId, w.Week), cancellationToken);
 
+            var now = time.GetUtcNow();
             var added = 0;
             var updated = 0;
 
@@ -74,12 +77,12 @@ namespace FantasyLeague.Data
             {
                 if (existing.TryGetValue((week.RosterId, week.Week), out var row))
                 {
-                    Apply(week, row);
+                    Apply(week, row, now);
                     updated++;
                 }
                 else
                 {
-                    db.WeekScores.Add(ToRow(leagueId, season, week));
+                    db.WeekScores.Add(ToRow(leagueId, season, week, now));
                     added++;
                 }
             }
@@ -111,8 +114,9 @@ namespace FantasyLeague.Data
         /// <param name="leagueId">League to apply change to</param>
         /// <param name="season">Season to modify</param>
         /// <param name="week">Teamweek data object</param>
+        /// <param name="now">When the row was computed</param>
         /// <returns>Weekscore object created</returns>
-        private static WeekScore ToRow(string leagueId, int season, TeamWeek week)
+        private static WeekScore ToRow(string leagueId, int season, TeamWeek week, DateTimeOffset now)
         {
             var row = new WeekScore
             {
@@ -122,7 +126,7 @@ namespace FantasyLeague.Data
                 RosterId = week.RosterId,
             };
 
-            Apply(week, row);
+            Apply(week, row, now);
             return row;
         }
 
@@ -131,7 +135,8 @@ namespace FantasyLeague.Data
         /// </summary>
         /// <param name="week">TeamWeek source of data</param>
         /// <param name="row">WeekScore target for data</param>
-        private static void Apply(TeamWeek week, WeekScore row)
+        /// <param name="now">When the row was computed</param>
+        private static void Apply(TeamWeek week, WeekScore row, DateTimeOffset now)
         {
             row.ActualPts = week.Actual;
             row.IdealPts = week.Ideal;
@@ -140,7 +145,7 @@ namespace FantasyLeague.Data
             row.PlayersPointsJson = ToPlayersJson(week.Players);
             row.SlotAveragesJson = JsonSerializer.Serialize(week.SlotAverages, Json);
             row.IsFinal = week.IsFinal;
-            row.ComputedUtc = DateTimeOffset.UtcNow;
+            row.ComputedUtc = now;
         }
 
         /// <summary>
@@ -151,10 +156,10 @@ namespace FantasyLeague.Data
         private static string ToJson(IReadOnlyList<PlayerId> players) => JsonSerializer.Serialize(players.Select(p => p.Value).ToArray(), Json);
 
         /// <summary>
-        /// Reads players from Json
+        /// Writes a list of players to Json
         /// </summary>
-        /// <param name="json">Json string of players to de-Json-ize</param>
-        /// <returns>List of players</returns>
+        /// <param name="players">List of players to Json-ize</param>
+        /// <returns>JSON-ized string of players</returns>
         private static string ToPlayersJson(IReadOnlyList<RosteredPlayer> players) =>
             JsonSerializer.Serialize(
                 players.Select(p => new StoredPlayer(p.Id.Value, p.Name, p.FantasyPositions, p.Points)).ToArray(),

@@ -49,26 +49,26 @@ namespace FantasyLeague.Sleeper
             {
                 throw new InvalidOperationException("The player map has not been refreshed.");
             }
-            Stopwatch stopwatch = Stopwatch.StartNew();
+            var stopwatch = Stopwatch.StartNew();
             logger.LogInformation("Begin building season snapshot.");
             var state = await reader.GetStateAsync(cancellationToken);
 
             var league = await reader.GetLeagueAsync(leagueId, cancellationToken);
 
-            var name = GetLeagueName(league!);
-            var slots = Slot.Parse(league!.RosterPositions!);
+            var name = SleeperMapper.ToLeagueName(league);
+            var slots = SleeperMapper.ToSlots(league);
             var users = await reader.GetUsersAsync(leagueId, cancellationToken);
             var rosters = await reader.GetRostersAsync(leagueId, cancellationToken);
-            var names = SleeperMapper.ToTeamNames(users!, rosters!);
-            var owners = rosters!.Where(r => r!.OwnerId is not null).ToDictionary(r => r!.RosterId, r => r!.OwnerId!);
+            var names = SleeperMapper.ToTeamNames(users, rosters);
+            var owners = SleeperMapper.ToRosterOwnerIds(rosters);
             var violations = new List<InvariantViolation>();
             var weeks = new List<TeamWeek>();
             var unresolved = new List<string>();
-            var storedWeeks = await stored.ReadAsync(leagueId, state!.Season, cancellationToken);
+            var storedWeeks = await stored.ReadAsync(leagueId, state.Season, cancellationToken);
             var storedByWeek = storedWeeks.ToLookup(w => w.Week);
-            for (int week = 1; week <= state!.Week; week++)
+            for (var week = 1; week <= state.Week; week++)
             {
-                var isFinal = IsFinal(week, state!.Week);
+                var isFinal = IsFinal(week, state.Week);
 
                 if (isFinal && storedByWeek.Contains(week))
                 {
@@ -112,14 +112,14 @@ namespace FantasyLeague.Sleeper
             var teamWeeks = new List<TeamWeek>();
             var unresolved = new List<string>();
             var violations = new List<InvariantViolation>();
-            foreach (var matchup in matchups!)
+            foreach (var matchup in matchups)
             {
-                var mapped = SleeperMapper.ToRosterWeek(matchup!, players.PlayerMap);
+                var mapped = SleeperMapper.ToRosterWeek(matchup, players.PlayerMap);
                 (var idealPoints, var idealRoster) = IdealLineupSolver.Solve(mapped.Players, slots);
 
                 var positions = mapped.Players.ToDictionary(p => p.Id.Value, p => p.FantasyPositions);
                 var slotAverages = SlotAverager.MakeSlotAverages(
-                    matchup!.Starters ?? [], matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
+                    matchup.Starters ?? [], matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
                     positions, slots);
 
                 if (slotAverages is null)
@@ -174,17 +174,5 @@ namespace FantasyLeague.Sleeper
         /// SQL and this reads it instead. Kept in one place so that swap is local.
         /// </remarks>
         private static bool IsFinal(int week, int currentWeek) => week < currentWeek;
-
-        /// <summary>
-        /// Gets the name of the league
-        /// </summary>
-        /// <param name="overrideLeagueName">Override league name passed to the server</param>
-        /// <param name="leagueDto">League dto object</param>
-        /// <returns>String to use as the name of the league</returns>
-        private static string GetLeagueName(LeagueDto leagueDto) => string.IsNullOrWhiteSpace(leagueDto.Name) ? DefaultLeagueName : leagueDto.Name!;
-        /// <summary>
-        /// Default league name to use if none is provided
-        /// </summary>
-        private static readonly string DefaultLeagueName = "Fantasy Football League";
     }
 }

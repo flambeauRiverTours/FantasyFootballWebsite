@@ -6,6 +6,8 @@ namespace FantasyLeague.Data
     /// <summary>
     /// Builds a context for the <c>dotnet ef</c> tools only.
     /// </summary>
+    /// <remarks>
+    /// <code>
     /// dotnet ef migrations add Name --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Data
     /// </code>
     /// </remarks>

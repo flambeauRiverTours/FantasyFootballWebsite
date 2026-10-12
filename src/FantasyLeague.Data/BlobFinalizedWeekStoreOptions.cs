@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace FantasyLeague.Data
 {
-    public sealed class BlobFinalizedWeekStoreOptions
+    internal sealed class BlobFinalizedWeekStoreOptions
     {
         /// <summary>
         /// Gets or sets the storage connection string. Falls back to
@@ -16,6 +14,7 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Gets or sets the container the map blob lives in.
         /// </summary>
+        [Required(AllowEmptyStrings = false)]
         public string ContainerName { get; set; } = "finalized-week-store";
     }
 }

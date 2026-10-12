@@ -2,7 +2,6 @@
 using System.Threading.RateLimiting;
 using Azure.Storage.Blobs;
 using FantasyLeague.Core;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -57,7 +56,9 @@ namespace FantasyLeague.Sleeper
             // usable without one
             services.AddOptions<PlayerMapOptions>()
                 .Configure<IServiceProvider>((options, provider) =>
-                    provider.GetService<IConfiguration>()?.GetSection("PlayerMap").Bind(options));
+                    provider.GetService<IConfiguration>()?.GetSection("PlayerMap").Bind(options))
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
 
             services.TryAddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
                 new TokenBucketRateLimiterOptions
@@ -72,6 +73,7 @@ namespace FantasyLeague.Sleeper
 
 
             services.TryAddTransient<RateLimitHandler>();
+            services.TryAddSingleton(TimeProvider.System);
 
             var builder = services.AddHttpClient<SleeperClient>(c =>
             {
@@ -79,6 +81,9 @@ namespace FantasyLeague.Sleeper
                 c.DefaultRequestHeaders.UserAgent.ParseAdd("bosty-base-site/1.0");
                 //No timeout - this is handled by the resilience policy below, which retries on timeouts and other transient failures.
             });
+
+            // Default logging logs the league ID - prevent this
+            builder.RemoveAllLoggers();
 
             builder.AddStandardResilienceHandler(o =>
             {
@@ -131,7 +136,10 @@ namespace FantasyLeague.Sleeper
         /// <returns><c>true</c> when retrying could plausibly succeed.</returns>
         private static bool ShouldRetry(Polly.Outcome<HttpResponseMessage> outcome)
         {
-            if (outcome.Exception is SleeperRateLimitExceededException) return false;
+            if (outcome.Exception is SleeperRateLimitExceededException)
+            {
+                return false;
+            }
 
             if (outcome.Result is { } response)
             {

@@ -52,6 +52,8 @@ This document states the standards for each programming domain for this project.
   - why: a silently dropped slot undercounts ideal undetectably
 - Only transient failures may fall back
   - why: a silent schema fallback once hid a bug for days
+- Cache writes log failures instead of throwing
+  - why: a failed cache write must not fail a page
 - Production code asserts both invariants
   - Starter points sum to the roster total
   - Ideal is never below actual per A9
@@ -60,6 +62,18 @@ This document states the standards for each programming domain for this project.
 **Logging**
 - Never log league or user IDs even inside URLs
   - why: they identify a real league and its members
+
+**Accepted exceptions**
+- EF entities and options classes keep public setters
+  - why: change tracking and configuration binding need them
+- `LeagueOptions.ExcludedOwnerIds` stays an `IList`
+  - why: the configuration binder fills a mutable list
+- Sigma and CV are `double`
+  - why: square roots are statistics not points
+- EF migrations stay generated public classes
+  - why: they are tool output not handwritten code
+- Timer triggers use UTC cron schedules
+  - why: the Linux consumption plan cannot set a time zone
 
 ## 2 · Front end
 

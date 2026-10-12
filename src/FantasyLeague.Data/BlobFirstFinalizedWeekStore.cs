@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using FantasyLeague.Core;
+﻿using FantasyLeague.Core;
 using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Data
@@ -14,7 +11,7 @@ namespace FantasyLeague.Data
     /// <param name="blob">Blob cache with the current season's data</param>
     /// <param name="logger">Logger to log with</param>
     /// <param name="time">TimeProvider used for time operations</param>
-    public sealed class BlobFirstFinalizedWeekStore(
+    internal sealed class BlobFirstFinalizedWeekStore(
     SqlFinalizedWeekStore sql,
     IBlobFinalizedWeekStore blob,
     ILogger<BlobFirstFinalizedWeekStore> logger,
@@ -60,8 +57,8 @@ namespace FantasyLeague.Data
         /// <returns>True if the season is the current season that should be written to the blob, otherwise false</returns>
         private bool SanityCheckSeasonForBlob(int season)
         {
-            DateTimeOffset seasonStart = new DateTimeOffset(season, 9, 1, 0, 0, 0, TimeSpan.Zero); //season start with some padding
-            DateTimeOffset seasonEnd = new DateTimeOffset(season + 1, 3, 1, 0, 0, 0, TimeSpan.Zero); //season end, with some padding
+            var seasonStart = new DateTimeOffset(season, 9, 1, 0, 0, 0, TimeSpan.Zero); //season start with some padding
+            var seasonEnd = new DateTimeOffset(season + 1, 3, 1, 0, 0, 0, TimeSpan.Zero); //season end, with some padding
             var now = time.GetUtcNow();
             if (DateTimeOffset.Compare(seasonStart, now) > 0 || DateTimeOffset.Compare(now, seasonEnd) > 0)
             {

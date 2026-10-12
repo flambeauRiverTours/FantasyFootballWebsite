@@ -3,7 +3,7 @@
     /// <summary>
     /// Represents one set of computations for one team for one week of one season in one league
     /// </summary>
-    public class WeekScore
+    internal class WeekScore
     {
         public string LeagueId { get; set; } = string.Empty;
         public int Season { get; set; } = 0;

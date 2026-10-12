@@ -12,15 +12,18 @@ namespace FantasyLeague.Core.Tests
     /// </summary>
     internal sealed class CountingSocket(string? body = null, TimeSpan delay = default) : HttpMessageHandler
     {
-        private int _attempts;
+        private int attempts;
 
-        public int Attempts => Volatile.Read(ref _attempts);
+        public int Attempts => Volatile.Read(ref attempts);
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Interlocked.Increment(ref _attempts);
-            if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken);
+            Interlocked.Increment(ref attempts);
+            if (delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
 
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -59,13 +62,35 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public async Task A_null_response_from_sleeper_is_rejected()
+        {
+            var (reader, _, provider) = Build(body: "null");
+            using (provider)
+            {
+                await reader.Invoking(r => r.GetLeagueAsync("L1", default).AsTask())
+                    .Should().ThrowAsync<InvalidDataException>();
+            }
+        }
+
+        [Fact]
+        public async Task A_null_entry_in_a_list_from_sleeper_is_rejected()
+        {
+            var (reader, _, provider) = Build(body: "[null]");
+            using (provider)
+            {
+                await reader.Invoking(r => r.GetMatchupsAsync("L1", 1, default).AsTask())
+                    .Should().ThrowAsync<InvalidDataException>();
+            }
+        }
+
+        [Fact]
         public async Task A_second_call_inside_the_window_does_not_reach_sleeper()
         {
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, default);
-                await reader.GetMatchupsAsync("L1", 1, default);
+                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(1);
             }
@@ -95,9 +120,9 @@ namespace FantasyLeague.Core.Tests
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, default);
-                await reader.GetMatchupsAsync("L1", 2, default);
-                await reader.GetMatchupsAsync("L1", 1, default);
+                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                await reader.GetMatchupsAsync("L1", 2, TestContext.Current.CancellationToken);
+                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(2, "week 1 was served from cache the second time");
             }
@@ -112,8 +137,8 @@ namespace FantasyLeague.Core.Tests
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, default);
-                await reader.GetMatchupsAsync("L2", 1, default);
+                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                await reader.GetMatchupsAsync("L2", 1, TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(2);
             }
@@ -128,11 +153,11 @@ namespace FantasyLeague.Core.Tests
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, default);
-                await reader.GetRostersAsync("L1", default);
-                await reader.GetUsersAsync("L1", default);
-                await reader.GetLeagueAsync("L1", default);
-                await reader.GetStateAsync(default);
+                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                await reader.GetRostersAsync("L1", TestContext.Current.CancellationToken);
+                await reader.GetUsersAsync("L1", TestContext.Current.CancellationToken);
+                await reader.GetLeagueAsync("L1", TestContext.Current.CancellationToken);
+                await reader.GetStateAsync(TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(5);
             }
@@ -146,11 +171,11 @@ namespace FantasyLeague.Core.Tests
             {
                 for (var i = 0; i < 2; i++)
                 {
-                    await reader.GetMatchupsAsync("L1", 1, default);
-                    await reader.GetRostersAsync("L1", default);
-                    await reader.GetUsersAsync("L1", default);
-                    await reader.GetLeagueAsync("L1", default);
-                    await reader.GetStateAsync(default);
+                    await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                    await reader.GetRostersAsync("L1", TestContext.Current.CancellationToken);
+                    await reader.GetUsersAsync("L1", TestContext.Current.CancellationToken);
+                    await reader.GetLeagueAsync("L1", TestContext.Current.CancellationToken);
+                    await reader.GetStateAsync(TestContext.Current.CancellationToken);
                 }
 
                 socket.Attempts.Should().Be(5, "the second pass should be entirely cached");
@@ -169,7 +194,7 @@ namespace FantasyLeague.Core.Tests
                 using var abandoning = new CancellationTokenSource();
 
                 var leaver = reader.GetMatchupsAsync("L1", 1, abandoning.Token).AsTask();
-                var stayer = reader.GetMatchupsAsync("L1", 1, default).AsTask();
+                var stayer = reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken).AsTask();
 
                 await abandoning.CancelAsync();
 

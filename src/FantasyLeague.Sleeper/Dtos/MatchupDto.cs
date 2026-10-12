@@ -16,8 +16,8 @@
         int? MatchupId,
         decimal? Points,
         decimal? CustomPoints,
-        List<string>? Players,
-        List<string>? Starters,
-        List<decimal>? StartersPoints,
-        Dictionary<string, decimal>? PlayersPoints);
+        IReadOnlyList<string>? Players,
+        IReadOnlyList<string>? Starters,
+        IReadOnlyList<decimal>? StartersPoints,
+        IReadOnlyDictionary<string, decimal>? PlayersPoints);
 }

@@ -17,7 +17,7 @@ namespace FantasyLeague.Data
         /// <param name="services">Service collection to add data to</param>
         /// <param name="connectionString">Connection string to the sql server</param>
         /// <returns>Updated services collection</returns>
-        public static IServiceCollection AddFantasyData(this IServiceCollection services, string connectionString)
+        public static IServiceCollection AddFantasyData(this IServiceCollection services, string? connectionString)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
@@ -35,7 +35,9 @@ namespace FantasyLeague.Data
             // bound through the provider rather than BindConfiguration
             services.AddOptions<BlobFinalizedWeekStoreOptions>()
                 .Configure<IServiceProvider>((options, provider) =>
-                    provider.GetService<IConfiguration>()?.GetSection("FinalizedWeekBlob").Bind(options));
+                    provider.GetService<IConfiguration>()?.GetSection("FinalizedWeekBlob").Bind(options))
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
 
             // AzureWebJobsStorage is already present wherever a Functions host runs
             services.TryAddSingleton<IBlobFinalizedWeekStore>(provider =>
@@ -51,6 +53,7 @@ namespace FantasyLeague.Data
 
                 return new BlobFinalizedWeekStore(
                     new BlobServiceClient(connectionString).GetBlobContainerClient(blobStorage.ContainerName),
+                    provider.GetRequiredService<TimeProvider>(),
                     provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>());
             });
 

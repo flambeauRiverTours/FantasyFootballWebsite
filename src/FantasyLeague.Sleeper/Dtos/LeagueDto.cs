@@ -22,5 +22,5 @@
         string? Name,
         string? Status,
         int? TotalRosters,
-        List<string>? RosterPositions);
+        IReadOnlyList<string>? RosterPositions);
 }

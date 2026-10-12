@@ -10,8 +10,13 @@ namespace FantasyLeague.Sleeper
     /// types at all: a Sleeper schema change lands here, not in the solver, the
     /// tests and the API contract at once.
     /// </remarks>
-    public static class SleeperMapper
+    internal static class SleeperMapper
     {
+        /// <summary>
+        /// The league name used when the commissioner set none.
+        /// </summary>
+        private const string DefaultLeagueName = "Fantasy Football League";
+
         /// <summary>The string Sleeper puts in <c>starters</c> for a slot nobody filled.</summary>
         private const string EmptySlot = "0";
 
@@ -35,7 +40,10 @@ namespace FantasyLeague.Sleeper
             foreach (var (id, player) in dump)
             {
                 var positions = player.FantasyPositions;
-                if (positions is not { Count: > 0 }) continue;
+                if (positions is not { Count: > 0 })
+                {
+                    continue;
+                }
 
                 map[id] = new PlayerRef(player.FullName ?? id, player.Team, positions);
             }
@@ -63,6 +71,43 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
+        /// The league's display name, or a default when the commissioner set none.
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns>A name that is never blank.</returns>
+        internal static string ToLeagueName(LeagueDto league) =>
+            string.IsNullOrWhiteSpace(league.Name) ? DefaultLeagueName : league.Name;
+
+        /// <summary>
+        /// The league's startable slots, in roster order.
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns>Every startable slot.</returns>
+        /// <exception cref="InvalidDataException">The league has no roster positions.</exception>
+        internal static IReadOnlyList<Slot> ToSlots(LeagueDto league) =>
+            Slot.Parse(league.RosterPositions
+                ?? throw new InvalidDataException("Sleeper returned a league with no roster positions."));
+
+        /// <summary>
+        /// Each owned roster's owner, keyed by roster.
+        /// </summary>
+        /// <param name="rosters">The rosters as Sleeper returned them.</param>
+        /// <returns>Owner user IDs by roster ID, omitting unowned rosters.</returns>
+        internal static IReadOnlyDictionary<int, string> ToRosterOwnerIds(IReadOnlyList<RosterDto> rosters)
+        {
+            var owners = new Dictionary<int, string>();
+            foreach (var roster in rosters)
+            {
+                if (roster.OwnerId is { } owner)
+                {
+                    owners[roster.RosterId] = owner;
+                }
+            }
+
+            return owners;
+        }
+
+        /// <summary>
         /// Picks a display name for one manager: their team name, else their
         /// handle, else the roster number.
         /// </summary>
@@ -79,8 +124,15 @@ namespace FantasyLeague.Sleeper
         internal static string ResolveTeamName(LeagueUserDto user, int rosterId)
         {
             var teamName = user.Metadata?.TeamName;
-            if (!string.IsNullOrWhiteSpace(teamName)) return teamName;
-            if (!string.IsNullOrWhiteSpace(user.DisplayName)) return user.DisplayName;
+            if (!string.IsNullOrWhiteSpace(teamName))
+            {
+                return teamName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(user.DisplayName))
+            {
+                return user.DisplayName;
+            }
 
             return $"Roster {rosterId}";
         }

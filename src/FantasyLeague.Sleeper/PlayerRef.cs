@@ -38,7 +38,7 @@
     /// not catch it, because undercounting is the direction that invariant cannot
     /// see.
     /// </remarks>
-    public sealed record RosterWeek(
+    internal sealed record RosterWeek(
         int RosterId,
         decimal Actual,
         decimal Points,

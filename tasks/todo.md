@@ -202,6 +202,18 @@ one feeds the next.
 - [ ] **T61** Validate the code against T60. One pass per domain; every gap is
       either fixed or recorded as an accepted exception with its reason, so the
       standards stay true rather than aspirational.
+      - [x] **1 · C# and .NET** — done 2026-10-12. Style rules now fail the
+            build (21 raised to warning; XML doc output on so IDE0005 runs);
+            no `!` left in `src`; every clock read goes through `TimeProvider`;
+            all options validated at start-up; fallbacks narrowed to transient
+            failures; single-project types made internal; the A3 test
+            un-skipped; Sleeper request URLs (carrying the league ID) no longer
+            logged. 346 tests pass. Exceptions recorded in the standards.
+            Sleeper DTOs now expose read-only collections, and the tests moved
+            from xunit 2 (deprecated) to xunit.v3, on the classic VSTest runner
+            (`IsTestingPlatformApplication=false`, so CI's `dotnet test` is
+            unchanged). Follow-ups: grep `TODO T61` for comments Jack is to
+            evaluate; `CS1591` (missing XML docs) is suppressed pending domain 7.
 - [ ] **T62** Rewrite the design for a prospective employer. Lead with the
       problem, the decisions and their trade-offs, and what was measured; keep
       the build-log history (corrections, amendments) one click away rather than
@@ -399,7 +411,7 @@ Listed here only so their implementation state is visible in one place.
 | ------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
 | **A1**  | Exclude "POON SQUAD" from every metric, matched on owner `user_id`       | done — filtered at the read boundary, verified in Azure                  |
 | **A2**  | League and user IDs stay out of the repo                                 | done — see F7 for the one mismatch                                       |
-| **A3**  | Keep the slot eligibility map general, not pruned to 2026                | **partly** — the map is general, the unknown-slot guard is still missing |
+| **A3**  | Keep the slot eligibility map general, not pruned to 2026                | done — the guard existed; its test was un-skipped on 2026-10-12          |
 | **A4**  | No season chain to walk yet                                              | done — first exercised August 2027                                       |
 | **A5**  | The `starters` alignment holds, verified not assumed                     | done                                                                     |
 | **A6**  | An unset team name is absent, not an empty string                        | done                                                                     |

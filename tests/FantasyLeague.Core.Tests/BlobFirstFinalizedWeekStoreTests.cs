@@ -45,7 +45,7 @@ namespace FantasyLeague.Core.Tests
         private static readonly TimeProvider TheOffseason = new FixedTimeProvider(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero));
 
         private static SqlFinalizedWeekStore SqlStore() =>
-            new(new InMemoryContextFactory(Guid.NewGuid().ToString()), NullLogger<SqlFinalizedWeekStore>.Instance);
+            new(new InMemoryContextFactory(Guid.NewGuid().ToString()), TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
         private static TeamWeek Week(decimal ideal = 120m) =>
             new(1, 1, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>());
@@ -54,11 +54,11 @@ namespace FantasyLeague.Core.Tests
         public async Task A_read_prefers_the_blob_over_sql()
         {
             var sql = SqlStore();
-            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], default);
+            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], TestContext.Current.CancellationToken);
             var blob = new FakeBlobFinalizedWeekStore([Week(ideal: 999m)]);
             var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
 
-            var read = await store.ReadAsync(League, 2026, default);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
             read[0].Ideal.Should().Be(999m);
@@ -70,11 +70,11 @@ namespace FantasyLeague.Core.Tests
             // no new decision needed here (A16): this is exactly what every
             // request already does today, with nothing built
             var sql = SqlStore();
-            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], default);
+            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], TestContext.Current.CancellationToken);
             var blob = new FakeBlobFinalizedWeekStore(stored: null);
             var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
 
-            var read = await store.ReadAsync(League, 2026, default);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
             read[0].Ideal.Should().Be(100m);
@@ -86,11 +86,11 @@ namespace FantasyLeague.Core.Tests
             // T58: otherwise the blob sits empty from deploy until the first
             // Tuesday finalize run — this is what makes it self-heal instead
             var sql = SqlStore();
-            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], default);
+            await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], TestContext.Current.CancellationToken);
             var blob = new FakeBlobFinalizedWeekStore(stored: null);
             var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
 
-            await store.ReadAsync(League, 2026, default);
+            await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             blob.Written.Should().NotBeNull();
             blob.Written.Should().ContainSingle();
@@ -103,11 +103,11 @@ namespace FantasyLeague.Core.Tests
             // same gate as a write: don't plant a stale blob for a season
             // nobody is actively polling
             var sql = SqlStore();
-            await sql.WriteAsync(League, 2026, [Week()], default);
+            await sql.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
             var blob = new FakeBlobFinalizedWeekStore(stored: null);
             var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
 
-            await store.ReadAsync(League, 2026, default);
+            await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             blob.Written.Should().BeNull();
         }
@@ -118,7 +118,7 @@ namespace FantasyLeague.Core.Tests
             var store = new BlobFirstFinalizedWeekStore(
                 SqlStore(), new FakeBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
 
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }
 
         [Fact]
@@ -129,9 +129,9 @@ namespace FantasyLeague.Core.Tests
             var store = new BlobFirstFinalizedWeekStore(
                 sql, new FakeBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
 
-            await store.WriteAsync(League, 2026, [Week()], default);
+            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
 
-            (await sql.ReadAsync(League, 2026, default)).Should().ContainSingle();
+            (await sql.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().ContainSingle();
         }
 
         [Fact]
@@ -141,7 +141,7 @@ namespace FantasyLeague.Core.Tests
             var store = new BlobFirstFinalizedWeekStore(
                 SqlStore(), blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
 
-            await store.WriteAsync(League, 2026, [Week(ideal: 155m)], default);
+            await store.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
 
             blob.Written.Should().NotBeNull();
             blob.Written![0].Ideal.Should().Be(155m);
@@ -156,7 +156,7 @@ namespace FantasyLeague.Core.Tests
             var store = new BlobFirstFinalizedWeekStore(
                 SqlStore(), blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
 
-            await store.WriteAsync(League, 2026, [Week()], default);
+            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
 
             blob.Written.Should().BeNull();
         }
@@ -165,10 +165,7 @@ namespace FantasyLeague.Core.Tests
     public class NullBlobFinalizedWeekStoreTests
     {
         [Fact]
-        public async Task It_reads_back_nothing()
-        {
-            (await new NullBlobFinalizedWeekStore().ReadAsync("L1", 2026, default)).Should().BeNull();
-        }
+        public async Task It_reads_back_nothing() => (await new NullBlobFinalizedWeekStore().ReadAsync("L1", 2026, TestContext.Current.CancellationToken)).Should().BeNull();
 
         [Fact]
         public async Task It_accepts_a_write_without_throwing()

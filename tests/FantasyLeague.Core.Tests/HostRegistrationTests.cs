@@ -134,12 +134,10 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_container_validates_on_build()
-        {
+        public void The_container_validates_on_build() =>
             // catches a missing registration or a singleton capturing something
             // scoped, at test time rather than at the first request
             FluentActions.Invoking(() => Provider()).Should().NotThrow();
-        }
 
         [Theory]
         [InlineData(typeof(ISeasonService))]

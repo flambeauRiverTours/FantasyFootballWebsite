@@ -107,7 +107,7 @@ namespace FantasyLeague.Core.Tests
         {
             var (client, handler) = Build();
 
-            await client.GetMatchupsAsync("L1", 18);
+            await client.GetMatchupsAsync("L1", 18, TestContext.Current.CancellationToken);
 
             handler.Requests[0].RequestUri!.AbsolutePath.Should().EndWith("/matchups/18");
         }
@@ -135,7 +135,7 @@ namespace FantasyLeague.Core.Tests
                 """{"season":"2026","season_type":"regular","week":3,"display_week":3}""",
                 out _);
 
-            var state = await client.GetStateAsync();
+            var state = await client.GetStateAsync(TestContext.Current.CancellationToken);
 
             state!.Season.Should().Be(2026);
             state.Week.Should().Be(3);
@@ -150,7 +150,7 @@ namespace FantasyLeague.Core.Tests
             // different thing entirely and returns a full payload of zeroes.
             var client = ClientReturning(HttpStatusCode.OK, "[]", out _);
 
-            var matchups = await client.GetMatchupsAsync("L1", 99);
+            var matchups = await client.GetMatchupsAsync("L1", 99, TestContext.Current.CancellationToken);
 
             matchups.Should().NotBeNull().And.BeEmpty();
         }
@@ -170,7 +170,7 @@ namespace FantasyLeague.Core.Tests
                 """,
                 out _);
 
-            var matchups = await client.GetMatchupsAsync("L1", 18);
+            var matchups = await client.GetMatchupsAsync("L1", 18, TestContext.Current.CancellationToken);
 
             matchups.Should().ContainSingle();
             matchups![0]!.Points.Should().Be(0m);
@@ -186,7 +186,7 @@ namespace FantasyLeague.Core.Tests
                 """{"4046":{"player_id":"4046","full_name":"Patrick Mahomes","team":"KC","fantasy_positions":["QB"]}}""",
                 out _);
 
-            var dump = await client.GetPlayersAsync();
+            var dump = await client.GetPlayersAsync(TestContext.Current.CancellationToken);
 
             dump.Should().ContainKey("4046");
             dump!["4046"]!.FantasyPositions.Should().Equal("QB");

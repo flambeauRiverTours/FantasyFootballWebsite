@@ -34,10 +34,25 @@ namespace FantasyLeague.Core.Tests
 
         private string BodyFor(string path)
         {
-            if (path.EndsWith("state/nfl", StringComparison.Ordinal)) return State;
-            if (path.EndsWith("players/nfl", StringComparison.Ordinal)) return Players;
-            if (path.EndsWith("/users", StringComparison.Ordinal)) return Users;
-            if (path.EndsWith("/rosters", StringComparison.Ordinal)) return Rosters;
+            if (path.EndsWith("state/nfl", StringComparison.Ordinal))
+            {
+                return State;
+            }
+
+            if (path.EndsWith("players/nfl", StringComparison.Ordinal))
+            {
+                return Players;
+            }
+
+            if (path.EndsWith("/users", StringComparison.Ordinal))
+            {
+                return Users;
+            }
+
+            if (path.EndsWith("/rosters", StringComparison.Ordinal))
+            {
+                return Rosters;
+            }
 
             var marker = path.LastIndexOf("/matchups/", StringComparison.Ordinal);
             if (marker >= 0)
@@ -142,7 +157,7 @@ namespace FantasyLeague.Core.Tests
             services.AddSleeperClient().ConfigurePrimaryHttpMessageHandler(TwoTeamsTwoWeeks);
             using var provider = services.BuildServiceProvider();
 
-            var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync("L1", default);
+            var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync("L1", TestContext.Current.CancellationToken);
 
             snapshot.Teams.Should().NotBeEmpty();
             provider.GetRequiredService<IPlayerMapRefresher>().LastRefreshedUtc.Should().NotBeNull();
@@ -168,7 +183,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Teams.Should().HaveCount(2);
                 snapshot.Teams.Select(t => t.RosterId).Should().Equal(1, 2);
@@ -183,7 +198,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Teams[0].Name.Should().Be("START TOMMY CUTLETS");
                 snapshot.Teams[1].Name.Should().Be("kuzma4prez");
@@ -196,7 +211,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.CurrentWeek.Should().Be(2);
                 snapshot.FinalThroughWeek.Should().Be(1);
@@ -212,7 +227,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.FinalThroughWeek.Should().Be(0);
                 snapshot.Teams.SelectMany(t => t.Weeks).Should().OnlyContain(w => !w.IsFinal);
@@ -225,7 +240,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
                 var weeks = snapshot.Teams[0].Weeks;
 
                 weeks.Single(w => w.Week == 1).IsFinal.Should().BeTrue();
@@ -242,7 +257,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Slots.Select(s => s.Code).Should().Equal("QB", "RB", "WR", "FLEX");
             }
@@ -263,7 +278,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
                 var week = snapshot.Teams[0].Weeks[0];
 
                 week.Actual.Should().Be(12m);
@@ -308,7 +323,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.UnresolvedPlayerIds.Should().Equal("signed_tuesday");
             }
@@ -332,7 +347,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.UnresolvedPlayerIds.Should().Equal("signed_tuesday");
             }
@@ -344,7 +359,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(OneWeek(Bodies.Matchup(1, 35m)));
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
                 snapshot.UnresolvedPlayerIds.Should().BeEmpty();
@@ -359,7 +374,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().ContainSingle()
                     .Which.Invariant.Should().Be(InvariantKind.StartersSumMatchesPoints);
@@ -374,7 +389,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 var violation = snapshot.Violations.Should().ContainSingle().Subject;
                 violation.Invariant.Should().Be(InvariantKind.StartersSumMatchesPoints);
@@ -391,7 +406,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
             }
@@ -405,7 +420,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
                 snapshot.Teams[0].Weeks[0].Actual.Should().Be(41m);
@@ -420,7 +435,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
                 snapshot.Teams[0].Weeks[0].Actual.Should().Be(500m);
@@ -436,7 +451,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().ContainSingle()
                     .Which.Invariant.Should().Be(InvariantKind.IdealNotBelowActual);
@@ -453,7 +468,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 var violation = snapshot.Violations.Should().ContainSingle().Subject;
                 violation.Week.Should().Be(2);
@@ -467,7 +482,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(OneWeek(Bodies.Matchup(9, 35m)));
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
 
                 snapshot.Teams[0].Name.Should().Be("Roster 9");
             }

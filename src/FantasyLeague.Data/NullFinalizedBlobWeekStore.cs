@@ -5,7 +5,7 @@ namespace FantasyLeague.Data
     /// <summary>
     /// Nullified implementation of IBlobFinalizedWeekStore used for unit testing
     /// </summary>
-    public class NullBlobFinalizedWeekStore : IBlobFinalizedWeekStore
+    internal class NullBlobFinalizedWeekStore : IBlobFinalizedWeekStore
     {
         /// <inheritdoc />
         public Task<IReadOnlyList<TeamWeek>?> ReadAsync(string leagueId, int season, CancellationToken ct) => Task.FromResult<IReadOnlyList<TeamWeek>?>(null);

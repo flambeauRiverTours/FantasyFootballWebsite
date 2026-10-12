@@ -2,7 +2,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.InMemory.Infrastructure.Internal;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FantasyLeague.Core.Tests
@@ -16,10 +16,10 @@ namespace FantasyLeague.Core.Tests
                 .Options);
     }
 
-    internal sealed class BrokenContextFactory : IDbContextFactory<FantasyDataContext>
+    internal sealed class BrokenContextFactory(Exception? error = null) : IDbContextFactory<FantasyDataContext>
     {
         public FantasyDataContext CreateDbContext() =>
-            throw new InvalidOperationException("no database");
+            throw error ?? new InvalidOperationException("no database");
     }
 
     public class SqlFinalizedWeekStoreTests
@@ -27,7 +27,7 @@ namespace FantasyLeague.Core.Tests
         private const string League = "L1";
 
         private static SqlFinalizedWeekStore Store() =>
-            new(new InMemoryContextFactory(Guid.NewGuid().ToString()),
+            new(new InMemoryContextFactory(Guid.NewGuid().ToString()), TimeProvider.System,
                 NullLogger<SqlFinalizedWeekStore>.Instance);
 
         private static TeamWeek Week(
@@ -45,18 +45,15 @@ namespace FantasyLeague.Core.Tests
                 isFinal, slotAverages ?? new Dictionary<string, decimal>());
 
         [Fact]
-        public async Task An_empty_store_reads_back_nothing()
-        {
-            (await Store().ReadAsync(League, 2026, default)).Should().BeEmpty();
-        }
+        public async Task An_empty_store_reads_back_nothing() => (await Store().ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
 
         [Fact]
         public async Task A_written_week_reads_back()
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2026, [Week()], default);
-            var read = await store.ReadAsync(League, 2026, default);
+            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
             read[0].RosterId.Should().Be(1);
@@ -68,8 +65,8 @@ namespace FantasyLeague.Core.Tests
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2026, [Week(actual: 123.45m, ideal: 167.89m)], default);
-            var read = await store.ReadAsync(League, 2026, default);
+            await store.WriteAsync(League, 2026, [Week(actual: 123.45m, ideal: 167.89m)], TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read[0].Actual.Should().Be(123.45m);
             read[0].Ideal.Should().Be(167.89m);
@@ -80,8 +77,8 @@ namespace FantasyLeague.Core.Tests
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2026, [Week()], default);
-            var read = await store.ReadAsync(League, 2026, default);
+            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read[0].Starters.Should().Equal(new PlayerId("s1"), new PlayerId("s2"));
             read[0].IdealLineup.Should().Equal(new PlayerId("s1"), new PlayerId("i9"));
@@ -96,9 +93,9 @@ namespace FantasyLeague.Core.Tests
                 [
                     new RosteredPlayer(new PlayerId("4046"), "Patrick Mahomes", ["QB"], 27.5m),
                     new RosteredPlayer(new PlayerId("1234"), "Multi Eligible", ["RB", "WR"], 8.25m),
-                ])], default);
+                ])], TestContext.Current.CancellationToken);
 
-            var read = await store.ReadAsync(League, 2026, default);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             // BeEquivalentTo, not Be: RosteredPlayer is a record whose list member
             // compares by reference, so two identical players are never ==
@@ -119,9 +116,9 @@ namespace FantasyLeague.Core.Tests
             {
                 ["QB"] = 21.5m,
                 ["SUPER FLEX"] = 14.25m,
-            })], default);
+            })], TestContext.Current.CancellationToken);
 
-            var read = await store.ReadAsync(League, 2026, default);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read[0].SlotAverages.Should().BeEquivalentTo(new Dictionary<string, decimal>
             {
@@ -136,10 +133,10 @@ namespace FantasyLeague.Core.Tests
             // T30 re-runs the backfill after a solver fix; that is designed, not accidental
             var store = Store();
 
-            await store.WriteAsync(League, 2026, [Week(ideal: 120m)], default);
-            await store.WriteAsync(League, 2026, [Week(ideal: 155m)], default);
+            await store.WriteAsync(League, 2026, [Week(ideal: 120m)], TestContext.Current.CancellationToken);
+            await store.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
 
-            var read = await store.ReadAsync(League, 2026, default);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
             read[0].Ideal.Should().Be(155m);
@@ -150,11 +147,9 @@ namespace FantasyLeague.Core.Tests
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2026,
-                [Week(rosterId: 1, week: 1), Week(rosterId: 2, week: 1), Week(rosterId: 1, week: 2)],
-                default);
+            await store.WriteAsync(League, 2026, [Week(rosterId: 1, week: 1), Week(rosterId: 2, week: 1), Week(rosterId: 1, week: 2)], TestContext.Current.CancellationToken);
 
-            (await store.ReadAsync(League, 2026, default)).Should().HaveCount(3);
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().HaveCount(3);
         }
 
         [Fact]
@@ -162,9 +157,9 @@ namespace FantasyLeague.Core.Tests
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2025, [Week()], default);
+            await store.WriteAsync(League, 2025, [Week()], TestContext.Current.CancellationToken);
 
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }
 
         [Fact]
@@ -173,9 +168,9 @@ namespace FantasyLeague.Core.Tests
             // roster ids repeat across leagues; the key is what keeps them apart
             var store = Store();
 
-            await store.WriteAsync("L1", 2026, [Week()], default);
+            await store.WriteAsync("L1", 2026, [Week()], TestContext.Current.CancellationToken);
 
-            (await store.ReadAsync("L2", 2026, default)).Should().BeEmpty();
+            (await store.ReadAsync("L2", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }
 
         [Fact]
@@ -183,9 +178,9 @@ namespace FantasyLeague.Core.Tests
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2026, [Week(isFinal: false)], default);
+            await store.WriteAsync(League, 2026, [Week(isFinal: false)], TestContext.Current.CancellationToken);
 
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }
 
         [Fact]
@@ -200,9 +195,21 @@ namespace FantasyLeague.Core.Tests
         {
             // the caller falls back to Sleeper: correct, just slower
             var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(), NullLogger<SqlFinalizedWeekStore>.Instance);
+                new BrokenContextFactory(new RetryLimitExceededException("still paused", new TimeoutException())),
+                TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_non_transient_read_failure_throws_rather_than_falling_back()
+        {
+            var store = new SqlFinalizedWeekStore(
+                new BrokenContextFactory(new InvalidOperationException("Invalid column name")),
+                TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+
+            await store.Invoking(s => s.ReadAsync(League, 2026, default))
+                .Should().ThrowAsync<InvalidOperationException>();
         }
 
         [Fact]
@@ -210,7 +217,7 @@ namespace FantasyLeague.Core.Tests
         {
             // a swallowed write means a finalized week is absent forever
             var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(), NullLogger<SqlFinalizedWeekStore>.Instance);
+                new BrokenContextFactory(), TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
             await store.Invoking(s => s.WriteAsync(League, 2026, [Week()], default))
                 .Should().ThrowAsync<InvalidOperationException>();
@@ -220,20 +227,16 @@ namespace FantasyLeague.Core.Tests
     public class NullFinalizedWeekStoreTests
     {
         [Fact]
-        public async Task It_reads_back_nothing()
-        {
-            (await new NullFinalizedWeekStore().ReadAsync("L1", 2026, default)).Should().BeEmpty();
-        }
+        public async Task It_reads_back_nothing() => (await new NullFinalizedWeekStore().ReadAsync("L1", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
 
         [Fact]
         public async Task It_accepts_a_write_and_keeps_none_of_it()
         {
             var store = new NullFinalizedWeekStore();
 
-            await store.WriteAsync("L1", 2026,
-                [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>())], default);
+            await store.WriteAsync("L1", 2026, [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>())], TestContext.Current.CancellationToken);
 
-            (await store.ReadAsync("L1", 2026, default)).Should().BeEmpty();
+            (await store.ReadAsync("L1", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }
 
     }

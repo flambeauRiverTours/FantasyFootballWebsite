@@ -56,8 +56,8 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler();
             using var http = ClientWith(limiter, socket);
 
-            await http.GetAsync("state/nfl");
-            await http.GetAsync("state/nfl");
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
 
             socket.Attempts.Should().Be(2);
         }
@@ -71,7 +71,7 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler();
             using var http = ClientWith(limiter, socket);
 
-            await http.GetAsync("state/nfl");
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
 
             await FluentActions.Awaiting(() => http.GetAsync("state/nfl"))
                 .Should().ThrowAsync<HttpRequestException>();
@@ -85,7 +85,7 @@ namespace FantasyLeague.Core.Tests
             // Distinct so the retry policy can exclude it, but still an
             // HttpRequestException so existing catch blocks are not surprised.
             using var limiter = Bucket(tokens: 1, queue: 0);
-            using (await limiter.AcquireAsync(1)) { }   // TokenLimit must be > 0, so drain it
+            using (await limiter.AcquireAsync(1, TestContext.Current.CancellationToken)) { }   // TokenLimit must be > 0, so drain it
             var socket = new CountingHandler();
             using var http = ClientWith(limiter, socket);
 
@@ -109,7 +109,7 @@ namespace FantasyLeague.Core.Tests
                 .Should().ThrowAsync<OperationCanceledException>();
 
             // The token survived, so a later call still gets through.
-            await http.GetAsync("state/nfl");
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
             socket.Attempts.Should().Be(1);
         }
     }
@@ -122,7 +122,10 @@ namespace FantasyLeague.Core.Tests
         private static ServiceProvider ProviderWith(CountingHandler socket, RateLimiter? limiter = null)
         {
             var services = new ServiceCollection();
-            if (limiter is not null) services.AddSingleton(limiter);
+            if (limiter is not null)
+            {
+                services.AddSingleton(limiter);
+            }
 
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                 .ConfigurePrimaryHttpMessageHandler(() => socket);
@@ -148,7 +151,7 @@ namespace FantasyLeague.Core.Tests
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = false,
             });
-            using (await limiter.AcquireAsync(1)) { }   // drain it; the bucket may not start empty
+            using (await limiter.AcquireAsync(1, TestContext.Current.CancellationToken)) { }   // drain it; the bucket may not start empty
             var socket = new CountingHandler();
             using var provider = ProviderWith(socket, limiter);
 
@@ -183,7 +186,7 @@ namespace FantasyLeague.Core.Tests
 
             try
             {
-                await Client(provider).GetAsync("state/nfl");
+                await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken);
             }
             catch
             {
@@ -200,7 +203,7 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler(HttpStatusCode.ServiceUnavailable);
             using var provider = ProviderWith(socket);
 
-            try { await Client(provider).GetAsync("state/nfl"); } catch { }
+            try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
 
             socket.Attempts.Should().BeGreaterThan(1, "503 is transient and worth repeating");
         }
@@ -212,7 +215,7 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler(HttpStatusCode.NotFound);
             using var provider = ProviderWith(socket);
 
-            try { await Client(provider).GetAsync("state/nfl"); } catch { }
+            try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
 
             socket.Attempts.Should().Be(1);
         }

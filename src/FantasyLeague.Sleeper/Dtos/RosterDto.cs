@@ -17,5 +17,5 @@
     internal sealed record RosterDto(
         int RosterId,
         string? OwnerId,
-        List<string>? CoOwners);
+        IReadOnlyList<string>? CoOwners);
 }

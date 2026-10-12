@@ -5,7 +5,7 @@ namespace FantasyLeague.Data
     /// <summary>
     /// Interface for the finalized week blob cache
     /// </summary>
-    public interface IBlobFinalizedWeekStore
+    internal interface IBlobFinalizedWeekStore
     {
         /// <summary>
         /// Reads data from the blob cache

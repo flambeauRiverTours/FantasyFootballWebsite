@@ -249,14 +249,28 @@ namespace FantasyLeague.Core.Tests
 
             void Search(int slotIndex, decimal running)
             {
-                if (running > best) best = running;
-                if (slotIndex >= slots.Count) return;
+                if (running > best)
+                {
+                    best = running;
+                }
+
+                if (slotIndex >= slots.Count)
+                {
+                    return;
+                }
 
                 Search(slotIndex + 1, running);   // leaving a slot empty is allowed
                 for (var i = 0; i < players.Count; i++)
                 {
-                    if (used[i]) continue;
-                    if (!slots[slotIndex].Accepts(players[i].FantasyPositions)) continue;
+                    if (used[i])
+                    {
+                        continue;
+                    }
+
+                    if (!slots[slotIndex].Accepts(players[i].FantasyPositions))
+                    {
+                        continue;
+                    }
 
                     used[i] = true;
                     Search(slotIndex + 1, running + players[i].Points);
@@ -414,7 +428,10 @@ namespace FantasyLeague.Core.Tests
                 lineup.Should().OnlyHaveUniqueItems($"roster {rosterId}");
                 lineup.Count.Should().BeLessThanOrEqualTo(slots.Count, $"roster {rosterId}");
 
-                if (ideal > actual) gaps++;
+                if (ideal > actual)
+                {
+                    gaps++;
+                }
             }
 
             // ideal >= actual alone would still pass if the solver just returned

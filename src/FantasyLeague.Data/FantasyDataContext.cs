@@ -6,15 +6,14 @@ namespace FantasyLeague.Data
     /// <summary>
     /// DBContext for the saved-off fantasy computations
     /// </summary>
-    public partial class FantasyDataContext : DbContext
+    internal partial class FantasyDataContext(DbContextOptions<FantasyDataContext> options) : DbContext(options)
     {
-        public FantasyDataContext(DbContextOptions<FantasyDataContext> options) : base(options) { }
 
         //DbSets of all data in the DB
-        public DbSet<League> Leagues { get; set; } = null!;
-        public DbSet<Player> Players { get; set; } = null!;
-        public DbSet<WeekScore> WeekScores { get; set; } = null!;
-        public DbSet<Team> Teams { get; set; } = null!;
+        public DbSet<League> Leagues => Set<League>();
+        public DbSet<Player> Players => Set<Player>();
+        public DbSet<WeekScore> WeekScores => Set<WeekScore>();
+        public DbSet<Team> Teams => Set<Team>();
 
         /// <summary>
         /// Creates the schema

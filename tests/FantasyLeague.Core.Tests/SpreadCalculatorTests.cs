@@ -10,26 +10,20 @@ namespace FantasyLeague.Core.Tests
     public class SpreadCalculatorAbsenceTests
     {
         [Fact]
-        public void No_weeks_at_all_is_null()
-        {
+        public void No_weeks_at_all_is_null() =>
             // Week zero, before any games have been played.
             SpreadCalculator.Calculate([]).Should().BeNull();
-        }
 
         [Fact]
-        public void One_week_is_null_not_zero()
-        {
+        public void One_week_is_null_not_zero() =>
             // Sigma of a single point is undefined, not zero. Returning 0.0 here
             // would put the newest, least-known team top of a consistency table.
             SpreadCalculator.Calculate([118.2m]).Should().BeNull();
-        }
 
         [Fact]
-        public void Three_weeks_is_null()
-        {
+        public void Three_weeks_is_null() =>
             // The minimum-weeks boundary, approached from below.
             SpreadCalculator.Calculate([118.2m, 96.4m, 131.0m]).Should().BeNull();
-        }
 
         [Fact]
         public void Four_weeks_is_a_number()
@@ -133,10 +127,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void Cv_is_sigma_over_the_mean()
-        {
-            SpreadCalculator.Calculate(Symmetric)!.Cv.Should().BeApproximately(0.2, 1e-12);
-        }
+        public void Cv_is_sigma_over_the_mean() => SpreadCalculator.Calculate(Symmetric)!.Cv.Should().BeApproximately(0.2, 1e-12);
 
         [Fact]
         public void Mean_min_max_and_weeks_describe_the_input()

@@ -15,7 +15,7 @@ namespace FantasyLeague.Core.Tests
         {
             var factory = new CountingContextFactory(Guid.NewGuid().ToString());
 
-            var sql = new SqlFinalizedWeekStore(factory, NullLogger<SqlFinalizedWeekStore>.Instance);
+            var sql = new SqlFinalizedWeekStore(factory, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
             var blobFirst = new BlobFirstFinalizedWeekStore(
                 sql, new NullBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, TimeProvider.System);
 
@@ -38,11 +38,11 @@ namespace FantasyLeague.Core.Tests
             // the free tier allows roughly 55 awake hours a month; a query per
             // request would never let it pause
             var (cached, factory) = Build();
-            await cached.WriteAsync(League, 2026, [Week()], default);
+            await cached.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
 
-            await cached.ReadAsync(League, 2026, default);
+            await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
             var afterFirst = factory.Created;
-            await cached.ReadAsync(League, 2026, default);
+            await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             factory.Created.Should().Be(afterFirst);
         }
@@ -51,10 +51,10 @@ namespace FantasyLeague.Core.Tests
         public async Task The_cached_answer_is_the_stored_answer()
         {
             var (cached, _) = Build();
-            await cached.WriteAsync(League, 2026, [Week(ideal: 133m)], default);
+            await cached.WriteAsync(League, 2026, [Week(ideal: 133m)], TestContext.Current.CancellationToken);
 
-            var first = await cached.ReadAsync(League, 2026, default);
-            var second = await cached.ReadAsync(League, 2026, default);
+            var first = await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+            var second = await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             first.Should().BeEquivalentTo(second);
             second[0].Ideal.Should().Be(133m);
@@ -66,12 +66,12 @@ namespace FantasyLeague.Core.Tests
             // without this the finalize timer writes a week nobody can see
             var (cached, _) = Build();
 
-            await cached.WriteAsync(League, 2026, [Week(ideal: 120m)], default);
-            (await cached.ReadAsync(League, 2026, default))[0].Ideal.Should().Be(120m);
+            await cached.WriteAsync(League, 2026, [Week(ideal: 120m)], TestContext.Current.CancellationToken);
+            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(120m);
 
-            await cached.WriteAsync(League, 2026, [Week(ideal: 155m)], default);
+            await cached.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
 
-            (await cached.ReadAsync(League, 2026, default))[0].Ideal.Should().Be(155m);
+            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(155m);
         }
 
         [Fact]
@@ -79,11 +79,11 @@ namespace FantasyLeague.Core.Tests
         {
             var (cached, _) = Build();
 
-            await cached.WriteAsync(League, 2025, [Week(ideal: 99m)], default);
-            await cached.WriteAsync(League, 2026, [Week(ideal: 111m)], default);
+            await cached.WriteAsync(League, 2025, [Week(ideal: 99m)], TestContext.Current.CancellationToken);
+            await cached.WriteAsync(League, 2026, [Week(ideal: 111m)], TestContext.Current.CancellationToken);
 
-            (await cached.ReadAsync(League, 2025, default))[0].Ideal.Should().Be(99m);
-            (await cached.ReadAsync(League, 2026, default))[0].Ideal.Should().Be(111m);
+            (await cached.ReadAsync(League, 2025, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(99m);
+            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(111m);
         }
     }
 

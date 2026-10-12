@@ -191,9 +191,6 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void No_teams_returns_empty_not_a_divide_by_zero()
-        {
-            SlotAverager.LeagueAverages([]).Should().BeEmpty();
-        }
+        public void No_teams_returns_empty_not_a_divide_by_zero() => SlotAverager.LeagueAverages([]).Should().BeEmpty();
     }
 }

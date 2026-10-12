@@ -40,6 +40,7 @@ namespace FantasyLeague.Sleeper
         SleeperClient client,
         IPlayerMapStore store,
         IOptions<PlayerMapOptions> options,
+        TimeProvider time,
         ILogger<PlayerMapRefresher> logger) : IPlayerMapRefresher
     {
         private readonly SemaphoreSlim gate = new(1, 1);
@@ -92,7 +93,7 @@ namespace FantasyLeague.Sleeper
         /// <param name="refreshedUtc">When the map was fetched.</param>
         /// <returns><c>true</c> when the map may still be served.</returns>
         private bool IsWithinMaxAge(DateTimeOffset refreshedUtc) =>
-            DateTimeOffset.UtcNow - refreshedUtc < options.Value.MaxAge;
+            time.GetUtcNow() - refreshedUtc < options.Value.MaxAge;
 
         /// <summary>
         /// Refreshes the PlayerMap by fetching the latest player data from the Sleeper API.
@@ -121,7 +122,7 @@ namespace FantasyLeague.Sleeper
         /// <exception cref="InvalidOperationException">Thrown when the player data cannot be retrieved.</exception>
         private async Task RefreshCoreAsync(CancellationToken cancellationToken)
         {
-            Stopwatch stopwatch = Stopwatch.StartNew();
+            var stopwatch = Stopwatch.StartNew();
             logger.LogInformation("Refreshing player map from Sleeper API.");
 
             var players = await client.GetPlayersAsync(cancellationToken);
@@ -134,7 +135,7 @@ namespace FantasyLeague.Sleeper
 
             // assign last: a failed refresh keeps yesterday's map
             playerMap = SleeperMapper.ToPlayerMap(players);
-            LastRefreshedUtc = DateTimeOffset.UtcNow;
+            LastRefreshedUtc = time.GetUtcNow();
 
             // count is the tripwire: a dump that quietly shrinks shows up here
             logger.LogInformation(

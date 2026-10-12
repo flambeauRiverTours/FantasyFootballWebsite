@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Azure;
 using Azure.Storage.Blobs;
 using FantasyLeague.Core;
@@ -20,9 +17,11 @@ namespace FantasyLeague.Data
     /// Handles the blob store of the cached current season
     /// </summary>
     /// <param name="container">Blob container stoed in</param>
+    /// <param name="time">Clock for the stored timestamp</param>
     /// <param name="logger">Logger to use</param>
-    public sealed class BlobFinalizedWeekStore(
+    internal sealed class BlobFinalizedWeekStore(
     BlobContainerClient container,
+    TimeProvider time,
     ILogger<BlobFinalizedWeekStore> logger) : IBlobFinalizedWeekStore
     {
         // one blob per (leagueId, season) — one blob in practice, per Scope above
@@ -42,7 +41,7 @@ namespace FantasyLeague.Data
             {
                 return null; // cold or never-written — caller falls back to SQL
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (RequestFailedException ex) when (IsTransient(ex))
             {
                 logger.LogWarning(ex, "Could not read the stored season; falling back to SQL.");
                 return null;
@@ -61,14 +60,26 @@ namespace FantasyLeague.Data
             {
                 await container.CreateIfNotExistsAsync(cancellationToken: ct);
                 using var buffer = new MemoryStream();
-                await JsonSerializer.SerializeAsync(buffer, new StoredSeason(DateTimeOffset.UtcNow, weeks), cancellationToken: ct);
+                await JsonSerializer.SerializeAsync(buffer, new StoredSeason(time.GetUtcNow(), weeks), cancellationToken: ct);
                 buffer.Position = 0;
                 await container.GetBlobClient(BlobName(leagueId, season)).UploadAsync(buffer, overwrite: true, ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (RequestFailedException ex) when (IsTransient(ex))
             {
                 logger.LogWarning(ex, "Could not store the finalized season; the next read falls back to SQL.");
             }
+
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Could not store the finalized season; the next read falls back to SQL.");
+            }
         }
+
+        /// <summary>
+        /// Decides whether a storage failure could succeed if tried again.
+        /// </summary>
+        /// <param name="ex">The storage failure.</param>
+        /// <returns><c>true</c> for no response, a timeout, throttling or a server error.</returns>
+        private static bool IsTransient(RequestFailedException ex) => ex.Status is 0 or 408 or 429 or >= 500;
     }
 }

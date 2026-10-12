@@ -17,7 +17,10 @@
             IReadOnlyDictionary<string, IReadOnlyList<string>> playerPositions,
             IReadOnlyList<Slot> startableSlots)
         {
-            if (starters.Count != startableSlots.Count) return null;   // rules changed mid-season
+            if (starters.Count != startableSlots.Count)
+            {
+                return null;   // rules changed mid-season
+            }
 
             var byCode = new Dictionary<string, (decimal Total, int Slots)>();
             for (var i = 0; i < starters.Count; i++)

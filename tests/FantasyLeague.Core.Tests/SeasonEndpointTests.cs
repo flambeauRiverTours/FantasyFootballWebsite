@@ -21,8 +21,15 @@ namespace FantasyLeague.Core.Tests
         private static bool TryReadSeason(string raw, out int? season)
         {
             season = null;
-            if (string.IsNullOrWhiteSpace(raw)) return true;
-            if (!int.TryParse(raw, out var parsed)) return false;
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return true;
+            }
+
+            if (!int.TryParse(raw, out var parsed))
+            {
+                return false;
+            }
 
             season = parsed;
             return true;
@@ -41,10 +48,7 @@ namespace FantasyLeague.Core.Tests
         [InlineData("abc")]
         [InlineData("20 26")]
         [InlineData("2026.5")]
-        public void An_unparseable_season_is_a_bad_request(string raw)
-        {
-            TryReadSeason(raw, out _).Should().BeFalse();
-        }
+        public void An_unparseable_season_is_a_bad_request(string raw) => TryReadSeason(raw, out _).Should().BeFalse();
 
         [Fact]
         public void A_well_formed_year_is_read()
@@ -171,10 +175,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void Nothing_is_reported_when_nothing_is_configured()
-        {
-            Unmatched(Snapshot((1, "Real Team", "u1"))).Should().BeEmpty();
-        }
+        public void Nothing_is_reported_when_nothing_is_configured() => Unmatched(Snapshot((1, "Real Team", "u1"))).Should().BeEmpty();
 
         [Fact]
         public void The_resolved_ids_drop_the_team_from_the_payload()
@@ -197,10 +198,7 @@ namespace FantasyLeague.Core.Tests
     public class LeagueOptionsExclusionTests
     {
         [Fact]
-        public void No_excluded_owners_are_configured_by_default()
-        {
-            new LeagueOptions().ExcludedOwnerIds.Should().BeEmpty();
-        }
+        public void No_excluded_owners_are_configured_by_default() => new LeagueOptions().ExcludedOwnerIds.Should().BeEmpty();
 
         [Fact]
         public void Excluded_owners_bind_from_configuration()

@@ -46,11 +46,22 @@
 
                 for (var mask = 0; mask < dp.Length; mask++)
                 {
-                    if (dp[mask] < 0) continue;
+                    if (dp[mask] < 0)
+                    {
+                        continue;
+                    }
+
                     for (var s = 0; s < numberOfSlots; s++)
                     {
-                        if ((mask & (1 << s)) != 0) continue;
-                        if (!slots[s].Accepts(player.FantasyPositions)) continue;
+                        if ((mask & (1 << s)) != 0)
+                        {
+                            continue;
+                        }
+
+                        if (!slots[s].Accepts(player.FantasyPositions))
+                        {
+                            continue;
+                        }
 
                         var m2 = mask | (1 << s);
                         if (dp[mask] + player.Points > next[m2])

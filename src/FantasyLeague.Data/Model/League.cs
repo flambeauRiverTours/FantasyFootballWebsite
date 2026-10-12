@@ -3,7 +3,7 @@
     /// <summary>
     /// Represents one season of one league
     /// </summary>
-    public class League
+    internal class League
     {
         public string LeagueId { get; set; } = string.Empty;
         /// <summary>
