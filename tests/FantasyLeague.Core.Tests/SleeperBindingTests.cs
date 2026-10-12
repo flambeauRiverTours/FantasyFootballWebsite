@@ -163,6 +163,18 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void An_empty_starter_slot_keeps_its_place_as_null()
+        {
+            // Sleeper sends the string "0"; the slot averages must still line up
+            var matchup = new MatchupDto(
+                RosterId: 2, MatchupId: 1, Points: 10m, CustomPoints: null,
+                Players: ["qb1"], Starters: ["qb1", "0", "wr1"], StartersPoints: [10m, 0m, 0m],
+                PlayersPoints: new Dictionary<string, decimal>());
+
+            SleeperMapper.ToSlotStarters(matchup).Should().Equal("qb1", null, "wr1");
+        }
+
+        [Fact]
         public void Without_an_override_the_scored_points_stand()
         {
             var matchup = new MatchupDto(

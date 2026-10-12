@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using FantasyLeague.Core;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Sleeper
@@ -18,6 +19,13 @@ namespace FantasyLeague.Sleeper
         /// <param name="cancellationToken">CancellationToken</param>
         /// <returns>Every roster's weeks, plus whatever did not add up.</returns>
         Task<SeasonSnapshot> BuildAsync(string leagueId, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Gets the season Sleeper considers current, without building it.
+        /// </summary>
+        /// <param name="cancellationToken">CancellationToken</param>
+        /// <returns>The current season's year.</returns>
+        Task<int> GetCurrentSeasonAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -28,19 +36,42 @@ namespace FantasyLeague.Sleeper
         SleeperReaderCache reader,
         IPlayerMapRefresher players,
         IFinalizedWeekStore stored,
+        HybridCache cache,
         ILogger<SeasonService> logger) : ISeasonService
     {
         /// <summary>Float drift tolerance for the starters-sum invariant.</summary>
         private const decimal Cent = 0.01m;
 
         /// <summary>
-        /// Builds a season snapshot for one league.
+        /// As long as the live response's max-age, so every poll inside it shares one build.
+        /// </summary>
+        private static readonly HybridCacheEntryOptions Snapshot = new() { Expiration = TimeSpan.FromSeconds(5) };
+
+        /// <inheritdoc />
+        /// <exception cref="InvalidOperationException">The player map has never been refreshed.</exception>
+        public async Task<SeasonSnapshot> BuildAsync(string leagueId, CancellationToken cancellationToken) =>
+            await cache.GetOrCreateAsync(
+                $"season:{leagueId}",
+                async ct =>
+                {
+                    var snapshot = await BuildUncachedAsync(leagueId, ct);
+                    Report(snapshot);
+                    return snapshot;
+                },
+                Snapshot,
+                cancellationToken: cancellationToken);
+
+        /// <inheritdoc />
+        public async Task<int> GetCurrentSeasonAsync(CancellationToken cancellationToken) =>
+            (await reader.GetStateAsync(cancellationToken)).Season;
+
+        /// <summary>
+        /// Assembles the season from Sleeper and the store.
         /// </summary>
         /// <param name="leagueId">League Id</param>
         /// <param name="cancellationToken">CancellationToken</param>
         /// <returns>Every roster's weeks, plus whatever did not add up.</returns>
-        /// <exception cref="InvalidOperationException">The player map has never been refreshed.</exception>
-        public async Task<SeasonSnapshot> BuildAsync(string leagueId, CancellationToken cancellationToken)
+        private async Task<SeasonSnapshot> BuildUncachedAsync(string leagueId, CancellationToken cancellationToken)
         {
             await players.EnsureCurrentAsync(cancellationToken);
 
@@ -68,7 +99,7 @@ namespace FantasyLeague.Sleeper
             var storedByWeek = storedWeeks.ToLookup(w => w.Week);
             for (var week = 1; week <= state.Week; week++)
             {
-                var isFinal = IsFinal(week, state.Week);
+                var isFinal = WeekFinality.IsFinal(week, state.Week);
 
                 if (isFinal && storedByWeek.Contains(week))
                 {
@@ -88,7 +119,7 @@ namespace FantasyLeague.Sleeper
 
             logger.LogInformation("Finished building season snapshot in {ElapsedMilliseconds}ms.", stopwatch.ElapsedMilliseconds);
 
-            return new SeasonSnapshot(name, state.Season, state.Week, Math.Max(0, state.Week - 1), slots, teams, unresolved.Distinct().ToList(), violations, owners);
+            return new SeasonSnapshot(name, state.Season, state.Week, WeekFinality.FinalThroughWeek(state.Week), slots, teams, unresolved.Distinct().ToList(), violations, owners);
         }
 
         /// <summary>
@@ -119,14 +150,14 @@ namespace FantasyLeague.Sleeper
 
                 var positions = mapped.Players.ToDictionary(p => p.Id.Value, p => p.FantasyPositions);
                 var slotAverages = SlotAverager.MakeSlotAverages(
-                    matchup.Starters ?? [], matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
+                    SleeperMapper.ToSlotStarters(matchup), matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
                     positions, slots);
 
                 if (slotAverages is null)
                 {
-                    // roster_positions changed mid-seaso
+                    // roster_positions changed after this week was played
                     logger.LogError(
-                        "Roster {RosterId} week {Week}: starters count does not match startable slots; excluded from radar attribution.",
+                        "Roster {RosterId} week {Week}: starters do not line up with the startable slots; excluded from radar attribution.",
                         mapped.RosterId, week);
                 }
 
@@ -164,15 +195,23 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
-        /// Decides whether a week's scores are settled.
+        /// Records every invariant breach and unresolved player, once per build
+        /// rather than once per request that reads it.
         /// </summary>
-        /// <param name="week">Week</param>
-        /// <param name="currentWeek">The week Sleeper considers current.</param>
-        /// <returns>True when the week is done.</returns>
-        /// <remarks>
-        /// Approximated from state until M3: T28's finalize timer stamps IsFinal in
-        /// SQL and this reads it instead. Kept in one place so that swap is local.
-        /// </remarks>
-        private static bool IsFinal(int week, int currentWeek) => week < currentWeek;
+        /// <param name="snapshot">The assembled season.</param>
+        private void Report(SeasonSnapshot snapshot)
+        {
+            foreach (var violation in snapshot.Violations)
+            {
+                logger.LogError(
+                    "Invariant {Invariant} failed for roster {RosterId} in week {Week}: expected {Expected}, got {Actual}.",
+                    violation.Invariant, violation.RosterId, violation.Week, violation.Expected, violation.Actual);
+            }
+
+            foreach (var playerId in snapshot.UnresolvedPlayerIds)
+            {
+                logger.LogWarning("Rostered player {PlayerId} is missing from the player map.", playerId);
+            }
+        }
     }
 }

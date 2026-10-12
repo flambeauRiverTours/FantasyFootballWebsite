@@ -1,12 +1,15 @@
 ﻿using System.Globalization;
-using FantasyLeague.Core;
 using FantasyLeague.Sleeper;
 
 namespace FantasyLeague.Console
 {
     /// <summary>
-    /// Renders a season snapshot as a fixed-width table.
+    /// Renders the season as a fixed-width table.
     /// </summary>
+    /// <remarks>
+    /// Every figure comes from the payload the site serves, so the console and
+    /// the page cannot disagree. Only the verification footer reads the snapshot.
+    /// </remarks>
     internal static class StandingsRenderer
     {
         private const int Name = 26;
@@ -15,35 +18,34 @@ namespace FantasyLeague.Console
         /// <summary>
         /// Writes the header, the standings and the verification footer.
         /// </summary>
-        /// <param name="snapshot">The season to render.</param>
+        /// <param name="payload">The season as the site serves it, already ranked.</param>
+        /// <param name="snapshot">The assembled season, for the invariant footer.</param>
         /// <param name="output">Where to write.</param>
-        /// <param name="asOfUtc">Timestamp for the header.</param>
-        public static void Render(SeasonSnapshot snapshot, TextWriter output, DateTimeOffset asOfUtc)
+        public static void Render(SeasonPayload payload, SeasonSnapshot snapshot, TextWriter output)
         {
-            var rows = snapshot.Teams
+            var rows = payload.Teams
                 .Select(t => new
                 {
                     t.Name,
-                    Points = t.Weeks.Sum(w => w.Actual),
-                    Ideal = t.Weeks.Sum(w => w.Ideal),
-                    Spread = SpreadCalculator.Calculate([.. t.Weeks.Where(w => w.IsFinal).Select(w => w.Actual)]),
+                    Points = t.Totals.Actual,
+                    t.Totals.Ideal,
+                    t.Totals.Sigma,
                 })
-                .OrderByDescending(r => r.Points)
                 .ToList();
 
             var lead = rows.Count == 0 ? 0m : rows[0].Points;
             var teamWeeks = snapshot.Teams.Sum(t => t.Weeks.Count);
 
             output.WriteLine(
-                $"season {snapshot.Season}   weeks 1-{snapshot.CurrentWeek}   " +
-                $"final through wk {snapshot.FinalThroughWeek}   {asOfUtc:yyyy-MM-dd HH:mm}Z");
+                $"season {payload.Season}   weeks 1-{payload.CurrentWeek}   " +
+                $"final through wk {payload.FinalThroughWeek}   {payload.AsOfUtc:yyyy-MM-dd HH:mm}Z");
             output.WriteLine();
             output.WriteLine($"{"TEAM",-Name}{"POINTS",9}{"SD",7}{"IDEAL",9}{"EFF",6}{"GAP",8}");
             output.WriteLine(new string('-', Rule));
 
             foreach (var r in rows)
             {
-                var sd = r.Spread is { } s ? s.Sigma.ToString("F1", CultureInfo.InvariantCulture) : "-";
+                var sd = r.Sigma is { } s ? s.ToString("F1", CultureInfo.InvariantCulture) : "-";
                 var eff = r.Ideal == 0 ? "-" : $"{(r.Points / r.Ideal * 100m).ToString("F0", CultureInfo.InvariantCulture)}%";
                 var gap = r.Points == lead ? "-" : (r.Points - lead).ToString("F1", CultureInfo.InvariantCulture);
 

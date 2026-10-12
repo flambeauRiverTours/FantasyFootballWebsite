@@ -22,14 +22,12 @@ namespace FantasyLeague.Sleeper
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
         /// <param name="asOfUtc">When the snapshot was assembled.</param>
-        /// <param name="requestedSeason">The season asked for, or null for the current one.</param>
         /// <param name="excludedRosterIds">Rosters to leave out entirely (A1).</param>
         /// <param name="overrideLeagueName">Name of the league</param>
         /// <returns>The response body.</returns>
         public static SeasonPayload ToIndividualSeasonPayload(
             SeasonSnapshot snapshot,
             DateTimeOffset asOfUtc,
-            int? requestedSeason = null,
             IReadOnlySet<int>? excludedRosterIds = null,
             string overrideLeagueName = "")
         {
@@ -46,7 +44,7 @@ namespace FantasyLeague.Sleeper
             return new SeasonPayload(
                 name,
                 snapshot.Season,
-                requestedSeason is null || requestedSeason == snapshot.Season,
+                true, // only the current season is served until T29 (A19)
                 snapshot.CurrentWeek,
                 snapshot.FinalThroughWeek,
                 asOfUtc,

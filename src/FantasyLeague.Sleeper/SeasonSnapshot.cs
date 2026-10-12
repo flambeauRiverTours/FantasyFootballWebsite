@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Core;
+﻿using System.ComponentModel;
+using FantasyLeague.Core;
 
 namespace FantasyLeague.Sleeper
 {
@@ -14,7 +15,11 @@ namespace FantasyLeague.Sleeper
     /// <param name="UnresolvedPlayerIds">Rostered ids the player map could not explain.</param>
     /// <param name="Violations">Invariant breaches found while assembling.</param>
     /// <param name="RosterOwnerIds">Roster id to owning user id. The only identifier stable across seasons, and what A1 matches on.</param>
-    /// <remarks>Reports facts; the caller decides policy. T16 asserts, T18 serves and logs, T28 refuses to freeze.</remarks>
+    /// <remarks>
+    /// Reports facts; the caller decides policy. Marked immutable so the cache
+    /// hands every caller the same instance rather than a serialized copy.
+    /// </remarks>
+    [ImmutableObject(true)]
     public sealed record SeasonSnapshot(
         string LeagueName,
         int Season,

@@ -53,7 +53,6 @@ namespace FantasyLeague.Data
 
                 return new BlobFinalizedWeekStore(
                     new BlobServiceClient(connectionString).GetBlobContainerClient(blobStorage.ContainerName),
-                    provider.GetRequiredService<TimeProvider>(),
                     provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>());
             });
 

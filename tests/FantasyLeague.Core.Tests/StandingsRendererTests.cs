@@ -25,7 +25,7 @@ namespace FantasyLeague.Core.Tests
         private static string Render(SeasonSnapshot snapshot)
         {
             var writer = new StringWriter();
-            StandingsRenderer.Render(snapshot, writer, AsOf);
+            StandingsRenderer.Render(SeasonPayloadMapper.ToIndividualSeasonPayload(snapshot, AsOf), snapshot, writer);
             return writer.ToString();
         }
 

@@ -138,6 +138,14 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
+        /// Reads the lineup in slot order, keeping each empty slot in its place.
+        /// </summary>
+        /// <param name="matchup">The roster's entry for that week.</param>
+        /// <returns>One entry per startable slot, null where Sleeper sent <c>"0"</c>.</returns>
+        internal static IReadOnlyList<string?> ToSlotStarters(MatchupDto matchup) =>
+            [.. (matchup.Starters ?? []).Select(id => id == EmptySlot ? null : id)];
+
+        /// <summary>
         /// Turns one matchup entry into the shape the solver and the invariants
         /// operate on.
         /// </summary>

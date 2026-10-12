@@ -27,22 +27,9 @@ namespace FantasyLeague.Core.Tests
         }
     }
 
-    /// <summary>Always reports the same instant, so the season gate is testable without waiting on the calendar.</summary>
-    internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-    }
-
     public class BlobFirstFinalizedWeekStoreTests
     {
         private const string League = "L1";
-
-        // 2026-09-20: inside the window SanityCheckSeasonForBlob treats as the
-        // 2026 season (Sept 1 2026 – Mar 1 2027).
-        private static readonly TimeProvider DuringTheSeason = new FixedTimeProvider(new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero));
-
-        // Mid-June: outside every season's window regardless of which year it names.
-        private static readonly TimeProvider TheOffseason = new FixedTimeProvider(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero));
 
         private static SqlFinalizedWeekStore SqlStore() =>
             new(new InMemoryContextFactory(Guid.NewGuid().ToString()), TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
@@ -55,8 +42,7 @@ namespace FantasyLeague.Core.Tests
         {
             var sql = SqlStore();
             await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], TestContext.Current.CancellationToken);
-            var blob = new FakeBlobFinalizedWeekStore([Week(ideal: 999m)]);
-            var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
+            var store = new BlobFirstFinalizedWeekStore(sql, new FakeBlobFinalizedWeekStore([Week(ideal: 999m)]));
 
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
@@ -67,12 +53,9 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task A_cold_blob_falls_through_to_sql()
         {
-            // no new decision needed here (A16): this is exactly what every
-            // request already does today, with nothing built
             var sql = SqlStore();
             await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], TestContext.Current.CancellationToken);
-            var blob = new FakeBlobFinalizedWeekStore(stored: null);
-            var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
+            var store = new BlobFirstFinalizedWeekStore(sql, new FakeBlobFinalizedWeekStore(stored: null));
 
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
@@ -81,84 +64,109 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public async Task A_cold_blob_during_the_season_is_primed_from_sql()
+        public async Task A_cold_blob_is_offered_what_sql_returned()
         {
             // T58: otherwise the blob sits empty from deploy until the first
-            // Tuesday finalize run — this is what makes it self-heal instead
+            // Tuesday finalize run. Whether it keeps it is the blob's decision.
             var sql = SqlStore();
             await sql.WriteAsync(League, 2026, [Week(ideal: 100m)], TestContext.Current.CancellationToken);
             var blob = new FakeBlobFinalizedWeekStore(stored: null);
-            var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
+            var store = new BlobFirstFinalizedWeekStore(sql, blob);
 
             await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
-            blob.Written.Should().NotBeNull();
-            blob.Written.Should().ContainSingle();
-            blob.Written![0].Ideal.Should().Be(100m);
-        }
-
-        [Fact]
-        public async Task A_cold_blob_outside_the_season_is_not_primed()
-        {
-            // same gate as a write: don't plant a stale blob for a season
-            // nobody is actively polling
-            var sql = SqlStore();
-            await sql.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
-            var blob = new FakeBlobFinalizedWeekStore(stored: null);
-            var store = new BlobFirstFinalizedWeekStore(sql, blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
-
-            await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
-
-            blob.Written.Should().BeNull();
+            blob.Written.Should().ContainSingle().Which.Ideal.Should().Be(100m);
         }
 
         [Fact]
         public async Task Nothing_anywhere_reads_back_empty_rather_than_null()
         {
-            var store = new BlobFirstFinalizedWeekStore(
-                SqlStore(), new FakeBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
+            var store = new BlobFirstFinalizedWeekStore(SqlStore(), new FakeBlobFinalizedWeekStore());
 
             (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }
 
         [Fact]
-        public async Task A_write_always_reaches_sql()
+        public async Task A_write_reaches_sql_and_the_blob()
         {
-            // SQL stays the durable copy regardless of the blob gate
             var sql = SqlStore();
-            var store = new BlobFirstFinalizedWeekStore(
-                sql, new FakeBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
-
-            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
-
-            (await sql.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().ContainSingle();
-        }
-
-        [Fact]
-        public async Task A_write_during_the_season_also_reaches_the_blob()
-        {
             var blob = new FakeBlobFinalizedWeekStore();
-            var store = new BlobFirstFinalizedWeekStore(
-                SqlStore(), blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, DuringTheSeason);
+            var store = new BlobFirstFinalizedWeekStore(sql, blob);
 
             await store.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
 
-            blob.Written.Should().NotBeNull();
-            blob.Written![0].Ideal.Should().Be(155m);
+            (await sql.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().ContainSingle();
+            blob.Written.Should().ContainSingle().Which.Ideal.Should().Be(155m);
+        }
+    }
+
+    /// <summary>
+    /// A20: the blob holds one season, the newest it has been given.
+    /// </summary>
+    public class BlobFinalizedWeekStoreTests
+    {
+        private const string League = "L1";
+
+        private static TeamWeek Week(decimal ideal) =>
+            new(1, 1, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>());
+
+        private static BlobFinalizedWeekStore Store(MemoryContainer container) =>
+            new(container, NullLogger<BlobFinalizedWeekStore>.Instance);
+
+        [Fact]
+        public async Task A_written_season_reads_back()
+        {
+            var store = Store(new MemoryContainer());
+            await store.WriteAsync(League, 2026, [Week(110m)], TestContext.Current.CancellationToken);
+
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            read.Should().ContainSingle().Which.Ideal.Should().Be(110m);
         }
 
         [Fact]
-        public async Task A_write_during_the_offseason_skips_the_blob()
+        public async Task A_read_for_another_season_misses()
         {
-            // guards against overwriting the current season's blob with a
-            // stray write while nothing is actually being played
-            var blob = new FakeBlobFinalizedWeekStore();
-            var store = new BlobFirstFinalizedWeekStore(
-                SqlStore(), blob, NullLogger<BlobFirstFinalizedWeekStore>.Instance, TheOffseason);
+            // a past season is SQL's, even if the blob happens to be warm
+            var store = Store(new MemoryContainer());
+            await store.WriteAsync(League, 2026, [Week(110m)], TestContext.Current.CancellationToken);
 
-            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
+            (await store.ReadAsync(League, 2025, TestContext.Current.CancellationToken)).Should().BeNull();
+        }
 
-            blob.Written.Should().BeNull();
+        [Fact]
+        public async Task An_older_season_never_evicts_a_newer_one()
+        {
+            // a backfill of 2025 must leave the live 2026 in place
+            var store = Store(new MemoryContainer());
+            await store.WriteAsync(League, 2026, [Week(110m)], TestContext.Current.CancellationToken);
+
+            await store.WriteAsync(League, 2025, [Week(90m)], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().ContainSingle()
+                .Which.Ideal.Should().Be(110m);
+        }
+
+        [Fact]
+        public async Task A_newer_season_replaces_the_old_one()
+        {
+            var store = Store(new MemoryContainer());
+            await store.WriteAsync(League, 2026, [Week(110m)], TestContext.Current.CancellationToken);
+
+            await store.WriteAsync(League, 2027, [Week(130m)], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync(League, 2027, TestContext.Current.CancellationToken)).Should().ContainSingle();
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeNull();
+        }
+
+        [Fact]
+        public async Task An_empty_season_is_not_stored()
+        {
+            var container = new MemoryContainer();
+
+            await Store(container).WriteAsync(League, 2026, [], TestContext.Current.CancellationToken);
+
+            container.Blobs.Should().BeEmpty();
         }
     }
 

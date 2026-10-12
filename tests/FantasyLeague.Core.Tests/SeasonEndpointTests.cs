@@ -189,7 +189,7 @@ namespace FantasyLeague.Core.Tests
                 new Dictionary<int, string> { [1] = "u1", [9] = "u9" });
 
             var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
-                snapshot, DateTimeOffset.UtcNow, null, Resolve(snapshot, "u9"));
+                snapshot, DateTimeOffset.UtcNow, Resolve(snapshot, "u9"));
 
             payload.Teams.Should().ContainSingle().Which.Name.Should().Be("Real Team");
         }

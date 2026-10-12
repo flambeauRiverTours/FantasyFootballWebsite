@@ -44,28 +44,21 @@ namespace FantasyLeague.Functions.Functions
                 requested = parsed;
             }
 
-            var snapshot = await seasons.BuildAsync(league.Value.CurrentLeagueId, ct);
-
-            LogViolations(snapshot);
-            LogUnresolvedPlayerIds(snapshot);
-
             var response = req.HttpContext.Response;
+            var current = await seasons.GetCurrentSeasonAsync(ct);
 
             // a year with no data is a well-formed request for something absent
-            if (requested != null && requested != snapshot.Season)
+            if (requested != null && requested != current)
             {
                 response.Headers.CacheControl = "no-store";
 
-                return new NotFoundObjectResult(
-                    SeasonPayloadMapper.ToSeasonsPayload(snapshot.Season));
+                return new NotFoundObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
             }
 
-            var isCurrent = requested == null || requested == snapshot.Season;
+            var snapshot = await seasons.BuildAsync(league.Value.CurrentLeagueId, ct);
             var etag = SeasonPayloadMapper.ComputeETag(snapshot);
 
-            response.Headers.CacheControl = isCurrent
-                ? "public, max-age=5"
-                : "public, max-age=31536000, immutable";
+            response.Headers.CacheControl = "public, max-age=5";
             response.Headers.ETag = etag;
 
             if (SeasonPayloadMapper.MatchesETag(req.Headers.IfNoneMatch, etag))
@@ -74,7 +67,7 @@ namespace FantasyLeague.Functions.Functions
             }
 
             return new OkObjectResult(SeasonPayloadMapper.ToIndividualSeasonPayload(
-                snapshot, time.GetUtcNow(), requested, ExcludedRosterIds(snapshot), league.Value.OverrideLeagueName));
+                snapshot, time.GetUtcNow(), ExcludedRosterIds(snapshot), league.Value.OverrideLeagueName));
         }
 
         /// <summary>
@@ -88,11 +81,11 @@ namespace FantasyLeague.Functions.Functions
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "seasons")] HttpRequest req,
             CancellationToken ct)
         {
-            var snapshot = await seasons.BuildAsync(league.Value.CurrentLeagueId, ct);
+            var current = await seasons.GetCurrentSeasonAsync(ct);
 
             req.HttpContext.Response.Headers.CacheControl = "public, max-age=300";
 
-            return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(snapshot.Season));
+            return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
         }
 
         /// <summary>
@@ -110,32 +103,6 @@ namespace FantasyLeague.Functions.Functions
             }
 
             return excluded.RosterIds;
-        }
-
-        /// <summary>
-        /// Records every invariant breach without failing the request.
-        /// </summary>
-        /// <param name="snapshot">The assembled season.</param>
-        private void LogViolations(SeasonSnapshot snapshot)
-        {
-            foreach (var violation in snapshot.Violations)
-            {
-                logger.LogError(
-                    "Invariant {Invariant} failed for roster {RosterId} in week {Week}: expected {Expected}, got {Actual}.",
-                    violation.Invariant, violation.RosterId, violation.Week, violation.Expected, violation.Actual);
-            }
-        }
-
-        /// <summary>
-        /// Records every rostered player the map could not explain.
-        /// </summary>
-        /// <param name="snapshot">The assembled season.</param>
-        private void LogUnresolvedPlayerIds(SeasonSnapshot snapshot)
-        {
-            foreach (var playerId in snapshot.UnresolvedPlayerIds)
-            {
-                logger.LogWarning("Rostered player {PlayerId} is missing from the player map.", playerId);
-            }
         }
     }
 }

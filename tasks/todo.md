@@ -214,6 +214,68 @@ one feeds the next.
             (`IsTestingPlatformApplication=false`, so CI's `dotnet test` is
             unchanged). Follow-ups: grep `TODO T61` for comments Jack is to
             evaluate; `CS1591` (missing XML docs) is suppressed pending domain 7.
+      - [ ] **1b · C# and .NET, high-level review** — approved 2026-10-12.
+            Suggested order: 1–4, then 5–8, then 18–26 in one pass.
+            **1–10 done 2026-10-12.** 358 tests pass, `dotnet format` clean,
+            console run against the live league. The console now reads
+            `League__CurrentLeagueId` (no longer `SLEEPER_LEAGUE_ID`) and
+            applies `ExcludedOwnerIds`. The blob moved to
+            `{league}/current.json`; the old `{league}/2026.json` is orphaned.
+            - Defects
+              1. Delete the custom `ShouldRetry`, so the standard predicate
+                 retries attempt timeouts and 500s; keep the rate-limit
+                 exclusion
+              2. Remove the unreachable `immutable` branch and the `requested`
+                 parameter of `ToIndividualSeasonPayload`; T29 restores it (A19)
+              3. `GetSeasons` builds a whole season to read `Season`
+              4. Log violations and unresolved players once per build, not on
+                 every request
+            - Simplify
+              5. Blob holds the current season only, SQL every season (A20):
+                 one blob per league with the season stamped inside; a read hits
+                 only on a matching season; past seasons read straight from SQL
+              6. Replace `SanityCheckSeasonForBlob`'s calendar window with a
+                 season comparison: the blob is only replaced by the same or a
+                 newer season, so a backfill cannot evict the live one
+              7. Define week finality once, in Core
+              8. `SlotAverager`: one code path, one meaning of null, no
+                 knowledge of Sleeper's `"0"`
+              9. The console reads the league ID through `LeagueOptions`
+              10. The console renders the payload's totals instead of computing
+                  its own
+            - Band-aids
+              11. Registration that depends on calling `AddFantasyData` before
+                  `AddSleeperClient`
+              12. `AddSleeperClient` registers far more than a client; split or
+                  rename
+              13. Duplicated: storage fallback factory, `IsTransient`, blob store
+                  skeleton, options-binding pattern
+              14. ETag from a hand-kept field list with a wrong comment;
+                  ignores the league name override and excluded rosters
+              15. Apply `OverrideLeagueName` when the snapshot is assembled
+              16. Unreachable null check in `PlayerMapRefresher`
+              17. Wrong "No timeout" comment on the `HttpClient`
+            - Naming
+              18. File and type mismatches, including `IBlobFinalziedWeekStore.cs`
+              19. `ActualPts`/`Actual`/`Points`; `Spread`/`Sigma`/consistency/`SD`
+              20. `ToIndividualSeasonPayload`/`ToSeasonsPayload`,
+                  `MakeSlotAverages`, `FinalizeWeek.Run`
+              21. `ct`/`cancellationToken`/`ct2`, `NFLState`, the Sleeper
+                  project name, the user agent, the `FantasyLeague.Console`
+                  namespace clash
+            - AI smells
+              22. Comments that drifted: cache TTLs, "per Scope above", "until
+                  M3", "float drift" on a decimal
+              23. Docs that restate the signature; use `<inheritdoc/>`
+              24. Typos
+              25. Null checks on non-nullable parameters, redundant EF calls,
+                  very long one-line bodies
+              26. Member order and indentation
+            - Dead code
+              27. Drop `League`, `Player` and `Team` with a migration (A19)
+              28. `StoredSeason.FinalizedUtc` is written, never read (item 5
+                  replaces it with `Season`, which is read)
+              29. F1 and F2 `Spread` bugs, already tracked
 - [ ] **T62** Rewrite the design for a prospective employer. Lead with the
       problem, the decisions and their trade-offs, and what was measured; keep
       the build-log history (corrections, amendments) one click away rather than
@@ -424,9 +486,11 @@ Listed here only so their implementation state is visible in one place.
 | **A13** | No commissioner overrides; `WeekScore` stores the actual only            | decided — T25                                                            |
 | **A14** | The stored key leads on `Season`, not `LeagueId`                         | decided — T25                                                            |
 | **A15** | Two Microsoft natives exempt from the licence allowlist                  | done                                                                     |
-| **A16** | Finalized weeks mirrored to blob, to remove SQL from the request path    | decided — **T58**                                                       |
+| **A16** | Finalized weeks mirrored to blob, to remove SQL from the request path    | done — **T58**                                                          |
 | **A17** | σ leaves the standings table for a panel of its own                      | table done — panel is **T59**                                           |
 | **A18** | A licence shipped as a file is declared by version, not exempted         | done — Apache.Arrow, in `.github/license-overrides.json`                |
+| **A19** | `League`, `Player` and `Team` dropped; `League` returns with T29         | decided — T61 1b, item 27                                               |
+| **A20** | The blob caches the current season; SQL keeps every season               | done — T61 1b, items 5–6                                                |
 
 ---
 

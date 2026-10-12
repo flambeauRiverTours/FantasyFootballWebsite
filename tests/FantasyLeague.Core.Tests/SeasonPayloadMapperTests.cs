@@ -48,22 +48,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void No_requested_season_means_the_current_one() => SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf).IsCurrent.Should().BeTrue();
-
-        [Fact]
-        public void Requesting_the_season_being_served_is_still_current()
-        {
-            SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf, requestedSeason: 2026)
-                .IsCurrent.Should().BeTrue();
-        }
-
-        [Fact]
-        public void Requesting_a_different_season_is_not_current()
-        {
-            // decides the cache headers and whether the page keeps polling
-            SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf, requestedSeason: 2025)
-                .IsCurrent.Should().BeFalse();
-        }
+        public void The_served_season_is_the_current_one() => SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf).IsCurrent.Should().BeTrue();
 
         [Fact]
         public void Slot_order_is_the_distinct_codes_not_every_slot()

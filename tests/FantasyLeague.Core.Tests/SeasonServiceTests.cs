@@ -249,6 +249,32 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public async Task Requests_inside_the_cache_window_share_one_build()
+        {
+            // one build per window is what keeps its error logs to one per window
+            var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
+            using (provider)
+            {
+                var first = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
+                var second = await service.BuildAsync("L1", TestContext.Current.CancellationToken);
+
+                second.Should().BeSameAs(first);
+            }
+        }
+
+        [Fact]
+        public async Task The_current_season_is_read_without_building_one()
+        {
+            var socket = TwoTeamsTwoWeeks();
+            socket.DefaultMatchups = "not json";
+            var (service, provider) = await BuildAsync(socket);
+            using (provider)
+            {
+                (await service.GetCurrentSeasonAsync(TestContext.Current.CancellationToken)).Should().Be(2026);
+            }
+        }
+
+        [Fact]
         public async Task The_slots_come_from_this_season_roster_positions()
         {
             var socket = TwoTeamsTwoWeeks();

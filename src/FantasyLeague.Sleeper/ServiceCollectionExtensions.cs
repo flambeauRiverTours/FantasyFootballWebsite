@@ -1,5 +1,4 @@
-﻿using System.Net;
-using System.Threading.RateLimiting;
+﻿using System.Threading.RateLimiting;
 using Azure.Storage.Blobs;
 using FantasyLeague.Core;
 using Microsoft.Extensions.Configuration;
@@ -133,24 +132,13 @@ namespace FantasyLeague.Sleeper
         /// Decides whether a failed attempt is worth repeating.
         /// </summary>
         /// <param name="outcome">The result or exception from the attempt.</param>
-        /// <returns><c>true</c> when retrying could plausibly succeed.</returns>
-        private static bool ShouldRetry(Polly.Outcome<HttpResponseMessage> outcome)
-        {
-            if (outcome.Exception is SleeperRateLimitExceededException)
-            {
-                return false;
-            }
-
-            if (outcome.Result is { } response)
-            {
-                return response.StatusCode is HttpStatusCode.TooManyRequests
-                    or HttpStatusCode.RequestTimeout
-                    or HttpStatusCode.ServiceUnavailable
-                    or HttpStatusCode.BadGateway
-                    or HttpStatusCode.GatewayTimeout;
-            }
-
-            return outcome.Exception is HttpRequestException or TimeoutException;
-        }
+        /// <returns><c>true</c> for the standard transient failures, except the local limiter's refusal.</returns>
+        /// <remarks>
+        /// The refusal is an <see cref="HttpRequestException"/>, which the standard
+        /// predicate retries. Retrying it only spends the queue.
+        /// </remarks>
+        private static bool ShouldRetry(Polly.Outcome<HttpResponseMessage> outcome) =>
+            outcome.Exception is not SleeperRateLimitExceededException
+            && HttpClientResiliencePredicates.IsTransient(outcome);
     }
 }

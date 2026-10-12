@@ -27,10 +27,45 @@ namespace FantasyLeague.Core.Tests
             throw new RequestFailedException(status, "failed");
     }
 
+    /// <summary>
+    /// A container that keeps its blobs in memory, for the paths that succeed.
+    /// </summary>
+    internal sealed class MemoryContainer : BlobContainerClient
+    {
+        public Dictionary<string, byte[]> Blobs { get; } = [];
+
+        public override BlobClient GetBlobClient(string blobName) => new MemoryBlob(Blobs, blobName);
+
+        public override Task<Response<BlobContainerInfo>> CreateIfNotExistsAsync(
+            PublicAccessType publicAccessType = PublicAccessType.None,
+            IDictionary<string, string>? metadata = null,
+            BlobContainerEncryptionScopeOptions? encryptionScopeOptions = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<Response<BlobContainerInfo>>(null!);
+    }
+
+    internal sealed class MemoryBlob(Dictionary<string, byte[]> blobs, string name) : BlobClient
+    {
+        public override Task<Response<BlobDownloadStreamingResult>> DownloadStreamingAsync(
+            BlobDownloadOptions? options = null, CancellationToken cancellationToken = default) =>
+            blobs.TryGetValue(name, out var bytes)
+                ? Task.FromResult(Response.FromValue(BlobsModelFactory.BlobDownloadStreamingResult(new MemoryStream(bytes)), null!))
+                : throw new RequestFailedException(404, "not found");
+
+        public override async Task<Response<BlobContentInfo>> UploadAsync(
+            Stream content, bool overwrite = false, CancellationToken cancellationToken = default)
+        {
+            using var copy = new MemoryStream();
+            await content.CopyToAsync(copy, cancellationToken);
+            blobs[name] = copy.ToArray();
+            return null!;
+        }
+    }
+
     public class BlobStoreFailureTests
     {
         private static BlobFinalizedWeekStore SeasonStore(int status) =>
-            new(new FailingContainer(status), TimeProvider.System, NullLogger<BlobFinalizedWeekStore>.Instance);
+            new(new FailingContainer(status), NullLogger<BlobFinalizedWeekStore>.Instance);
 
         private static BlobPlayerMapStore PlayerMapStore(int status) =>
             new(new FailingContainer(status), "players.json", NullLogger<BlobPlayerMapStore>.Instance);

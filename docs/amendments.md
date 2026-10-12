@@ -715,6 +715,74 @@ the version. When Dependabot next bumps Apache.Arrow, the job fails again until
 someone has read that version's licence file and updated the entry. That is a
 small cost for not waving through a licence change unread.
 
+## A19 · Three of the four tables are dropped
+
+2026-10-12. The T61 review found `League`, `Player` and `Team` defined in
+`FantasyDataContext`, created by the M3 migration, and never read or written.
+§08 still listed all four tables as if each held data.
+
+**`Player` was overtaken by A12.** The design gave the projected player map a
+table. What shipped keeps it in blob storage, because every cold instance has
+to load it before serving and blob storage never pauses. A table copy would be
+a second, slower source for the same map.
+
+**`Team` was overtaken by the request path.** Team names and owners are read
+from Sleeper's users and rosters, cached for an hour and five minutes, because
+names change whenever a manager feels like it. A1's exclusion matches on
+`user_id` from that same live data. §08 kept `OwnerUserId` to spare a future
+cross-season view a backfill, but there is nothing to backfill: Sleeper serves
+`user_id` with every season's users for as long as the chain exists.
+
+**`League` is not wrong, only early.** D8's season-chain walk upserts one row
+per season, and that walk is T29, waiting on August 2027. An empty table for a
+year is a schema whose shape nobody has tested. T29 creates it with its own
+migration, alongside the `Core` record and `SeasonOverrides` it also needs.
+
+**The same rule removes the completed-season branch in `GetSeason`.** It sets
+a year-long `immutable` cache header, but every request for a season other
+than the current one returns 404 before reaching it, because nothing serves
+prior seasons yet. T29 adds it back with data behind it.
+
+**What changes:** §08 shows `WeekScore`, with `League` marked as arriving with
+T29. One migration drops the three tables.
+
+## A20 · The blob caches the current season; SQL keeps every season
+
+2026-10-12. The T61 review asked whether SQL should go entirely, since A16's
+blob copy already serves the request path and a lost blob can be rebuilt from
+Sleeper. Decided: **no. SQL stays as the record of every season, and the blob
+holds exactly one season, the current one.**
+
+**This is A16's scope, restated as a rule.** A16 already said older seasons
+stay SQL-only. What the code did not have was a way to enforce it. It gated
+blob writes on a calendar window (September to March), which guesses at the
+season from today's date, and per-season blob names would let a past season
+land in the blob anyway.
+
+**The rule the code enforces instead:** one blob per league, with the season
+stamped inside it. A read is a hit only when the stored season is the one
+asked for. A write or a read-through replaces the blob only with the same or a
+newer season, so a backfill of an older one can never evict the live one.
+Every write still goes to SQL, so a season is archived the moment its last week
+finalizes, with no separate job.
+
+**Cost is not what decides it.** Both options are $0.00. A season is a few
+hundred kilobytes, and blob storage for all of them would cost a fraction of a
+cent a year. SQL's weekly wake for `FinalizeWeek` uses a few thousand of the
+free tier's 100k vCore-seconds a month.
+
+**What decides it:** a past season is immutable and read rarely, so it can
+afford SQL's 30 to 60 second resume, and its response is cached for a year
+(§09). The current season is polled every 30 seconds and cannot. SQL also
+makes cross-season questions, such as an all-time high week, a query rather
+than a walk over every blob.
+
+**The known weakness.** `WeekScore` keeps most of each week as JSON columns, so
+the table holds documents rather than relations. That is right for a store
+read whole by key (A14). It is also the first thing a reviewer reading the
+schema would question, and a cross-season feature is what would justify
+promoting any of it to real columns.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**
@@ -757,6 +825,12 @@ that are easy to make again.
 
 ---
 
+- **§08 listed four tables, and only `WeekScore` was ever used.** `Player`
+  became the blob player map, `Team` is read from Sleeper, and `League` waits
+  for T29. See **A19**.
+- **D7 said there was no blob layer, and §07 and §13 said SQL was not built.**
+  Both were overtaken by M3 and A16: SQL is provisioned, and the request path
+  reads a blob copy first.
 - **§04 put σ in the standings table, with an inline range mark.** At table
   size the mark was illegible, and it shipped without the figure it was meant
   to accompany. σ is out of the table pending its own panel. See **A17**.

@@ -6,7 +6,7 @@
 > **Corrected in place on 2026-09-13 against what was actually built.** This file
 > is now edited directly rather than re-synced; a re-sync would reinstate the
 > errors marked **Corrected** below. The reasoning behind each change is in
-> [`amendments.md`](amendments.md), keyed A1–A12.
+> [`amendments.md`](amendments.md), keyed A1–A20.
 >
 > 11 decisions · 1 risk · 8 open questions, 5 of them now answered.
 
@@ -244,8 +244,8 @@ question of which is right is **F4** in the task list.
 | users + rosters | 1 h | **5 min** | 0.20 |
 | league/{id} | 24 h | 24 h | <0.01 |
 | players/nfl (14.65 MB) | 24 h | 24 h | <0.01 |
-| weeks 1…n−1 | SQL, permanent | not built yet (M3) | — |
-| prior seasons | SQL, immutable | not built yet (M3) | — |
+| weeks 1…n−1 | SQL, permanent | **blob first, SQL behind it, 6 h in memory** (A16) | 0 |
+| prior seasons | SQL, immutable | **not served until T29** | — |
 | Peak steady state | ≈ 2.3 | | **≈ 12.2** |
 
 Still far inside the 50/min bucket, so nothing breaks. Two of the three are worth
@@ -266,22 +266,24 @@ Worth confirming against Sleeper's own guidance before launch: published advice 
 ## 08 · Data model
 
 ```
-League   (LeagueId PK, Season UNIQUE, Name, RosterPositionsJson,
-          PreviousLeagueId, UpdatedUtc)
-
-Team     (LeagueId, RosterId, TeamName, OwnerDisplayName, OwnerUserId,
-          PK (LeagueId, RosterId))
-
 WeekScore(LeagueId, Season, Week, RosterId,
           ActualPts, IdealPts,
-          StartersJson, PlayersPointsJson, IdealLineupJson,
+          StartersJson, PlayersPointsJson, IdealLineupJson, SlotAveragesJson,
           IsFinal, ComputedUtc,
           PK (Season, LeagueId, RosterId, Week))
 
-Player   (PlayerId PK, FullName, Team, PositionsJson, UpdatedUtc)
+League   (LeagueId PK, Season UNIQUE, Name, RosterPositionsJson,
+          PreviousLeagueId, UpdatedUtc)                 -- arrives with T29
 ```
 
-Four tables, down from five. `PlayerWeek` is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersPointsJson` on the row that needs it. **Corrected: this league has six rosters, five of them scoring (A1)** — so roughly 6 × 18 is 108 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes either way.
+**Corrected (A19): one table, not four.** `Player` was replaced by the player
+map in blob storage (A12), which every cold instance needs anyway. `Team` was
+never written: names and owners come from Sleeper's users and rosters, cached
+for an hour and five minutes (§07), and A1 matches on `user_id` from that same
+data. `League` belongs to the season-chain walk (D8) and is created by T29
+rather than left empty until then.
+
+`PlayerWeek`, one of the original five, is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersPointsJson` on the row that needs it. **Corrected: this league has six rosters, five of them scoring (A1)** — so roughly 6 × 18 is 108 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes either way.
 
 **Corrected · the key leads on `Season`, not `LeagueId`.** The composite is the
 same four columns; the order is what changed. A composite primary key is the
@@ -298,9 +300,13 @@ selectivity.
 
 **The positional radar (§11) needs no new storage.** Its axes come from the season's `RosterPositionsJson`, and its values come from `StartersJson` joined to `PlayersPointsJson` on rows that already exist. A feature that adds a chart and no columns is worth noticing.
 
+**Corrected: it added one.** Each row carries `SlotAveragesJson`, that week's points per slot, computed when the week is solved. The axes still come from `roster_positions`, which Sleeper serves with the league.
+
 Two columns exist only to make multiple seasons work. `PreviousLeagueId` is the link Sleeper puts on each league pointing at its prior incarnation, and it is what D8 walks. `Season` carries a unique index because this site serves exactly one league per year, which turns the year parameter into a single indexed lookup.
 
 `OwnerUserId` is not needed by anything in this document, and is here anyway. Sleeper's `user_id` is the only identifier stable across seasons — `roster_id` is reassigned and team names change every August — so it is the sole means by which a future cross-season view could say "this is the same manager". One column now; a painful backfill later.
+
+**Corrected (A19): there is no backfill to fear.** Sleeper serves every season's users with their `user_id`, for as long as the league chain exists, so a cross-season view can read it then. Storing it now copies data nothing reads.
 
 ### D7 — Azure SQL serverless on the free offer; no blob layer on day one
 
@@ -309,6 +315,8 @@ Chosen: the free Azure SQL offer — 100k vCore-seconds and 32 GB a month — an
 The free tier must auto-pause; that is how it stays free. Running 0.5 vCore continuously is roughly 1.3M vCore-seconds a month against a 100k allowance, so disabling pause is not an option, and a paused database takes 30–60 seconds to resume. On a Sunday, traffic keeps both the Function and the database warm and this never appears. On a Wednesday in March, the first visitor waits.
 
 v1 specified a JSON snapshot in blob storage to hide that wait. Cut — it added a resource and a second write path to the finalize job to solve a problem that may never annoy anyone. Show a loading state instead, and add the snapshot only if the wait turns out to bother you. The one argument that would bring it back is not latency but availability: if the free tier hits its monthly limit and pauses until the next cycle, a snapshot keeps the site serving. Build it when that happens.
+
+**Corrected (A16): it was built, for latency rather than availability.** The 30–60 second resume landed on the first visitor after every idle hour, which was not tolerable after all. `FinalizeWeek` now writes the season to SQL and to one blob, and the request path reads the blob first, so SQL is off it entirely once the blob is warm. **The two have different jobs (A20):** the blob caches the current season only, and SQL is the record of every season. A past season is read from SQL and pays the resume, which a once-a-season read can afford.
 
 Set the free-tier behaviour to *pause on limit*, not *continue and bill*. One runaway job should cost a paused database, not an invoice.
 
@@ -546,8 +554,8 @@ The σ tests are mostly about absence: zero weeks, one week, three weeks, four w
 |---|---|---|---|
 | Static Web Apps | Free | 100 GB bandwidth, custom domain + TLS | $0.00 |
 | Functions | **Flex Consumption (FC1)** | Free grant; this app uses ~14% of the execution allowance and ~4% of the GB-s | $0.00 |
-| Storage account | Standard_LRS | Required by Functions for runtime state and the deployment container; also holds the 840 KB player map (A12) | $0.00 |
-| Azure SQL | Serverless, free offer | 100k vCore-s, 32 GB — **not provisioned yet (M3)** | $0.00 |
+| Storage account | Standard_LRS | Required by Functions for runtime state and the deployment container; also holds the 840 KB player map (A12) and the season's finalized weeks (A16) | $0.00 |
+| Azure SQL | Serverless, free offer | 100k vCore-s, 32 GB — off the request path since A16 | $0.00 |
 | Log Analytics + App Insights | Pay-as-you-go | 5 GB/mo free — **cap ingest at 0.16 GB/day, not 1 GB/day** | $0.00 |
 | Steady state | | | $0.00 |
 

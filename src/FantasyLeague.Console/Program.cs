@@ -3,32 +3,40 @@ using FantasyLeague.Sleeper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// the library's own logs would interleave with the table
+// stderr, so the library's own logs never interleave with the table on stdout
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
+builder.Services.Configure<ConsoleLoggerOptions>(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 builder.Services.AddSleeperClient();
 
-using var host = builder.Build();
-
-var leagueId = Environment.GetEnvironmentVariable("SLEEPER_LEAGUE_ID");
-if (string.IsNullOrWhiteSpace(leagueId))
+// the League section the Functions host binds, e.g. League__CurrentLeagueId
+if (string.IsNullOrWhiteSpace(builder.Configuration["League:CurrentLeagueId"]))
 {
     Console.Write("League ID: ");
-    leagueId = Console.ReadLine();
+    builder.Configuration["League:CurrentLeagueId"] = Console.ReadLine()?.Trim();
 }
 
-// never parsed: Sleeper ids are numeric-looking strings too long for an int
-if (string.IsNullOrWhiteSpace(leagueId))
+if (string.IsNullOrWhiteSpace(builder.Configuration["League:CurrentLeagueId"]))
 {
     Console.Error.WriteLine("No league ID supplied.");
     return 1;
 }
 
-await host.Services.GetRequiredService<IPlayerMapRefresher>().EnsureCurrentAsync(default);
-var snapshot = await host.Services.GetRequiredService<ISeasonService>().BuildAsync(leagueId.Trim(), default);
+using var host = builder.Build();
 
-StandingsRenderer.Render(snapshot, System.Console.Out, host.Services.GetRequiredService<TimeProvider>().GetUtcNow());
+var league = host.Services.GetRequiredService<IOptions<LeagueOptions>>().Value;
+var snapshot = await host.Services.GetRequiredService<ISeasonService>().BuildAsync(league.CurrentLeagueId, default);
+var excluded = SeasonPayloadMapper.ResolveExcludedRosters(snapshot, league.ExcludedOwnerIds);
+var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
+    snapshot,
+    host.Services.GetRequiredService<TimeProvider>().GetUtcNow(),
+    excluded.RosterIds,
+    league.OverrideLeagueName);
+
+StandingsRenderer.Render(payload, snapshot, System.Console.Out);
 
 return snapshot.Violations.Count > 0 || snapshot.UnresolvedPlayerIds.Count > 0 ? 1 : 0;

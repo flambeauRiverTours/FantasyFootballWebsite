@@ -13,7 +13,7 @@ namespace FantasyLeague.Core.Tests
             new Dictionary<string, IReadOnlyList<string>>();
 
         private static IReadOnlyDictionary<string, decimal>? Averages(
-            string[] starters,
+            string?[] starters,
             Dictionary<string, decimal> points,
             IReadOnlyList<Slot> slots,
             IReadOnlyDictionary<string, IReadOnlyList<string>>? positions = null) =>
@@ -31,9 +31,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void An_empty_slot_string_zero_contributes_a_real_zero_and_still_counts()
+        public void An_empty_slot_contributes_a_real_zero_and_still_counts()
         {
-            var starters = new[] { "qb1", "rb1", "0", "wr1" };
+            var starters = new[] { "qb1", "rb1", null, "wr1" };
             var points = new Dictionary<string, decimal> { ["qb1"] = 20m, ["rb1"] = 10m, ["wr1"] = 8m };
 
             var averages = Averages(starters, points, TwoRbFlex);

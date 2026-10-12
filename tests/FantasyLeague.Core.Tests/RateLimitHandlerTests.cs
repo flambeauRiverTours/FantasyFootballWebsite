@@ -26,6 +26,28 @@ namespace FantasyLeague.Core.Tests
     }
 
     /// <summary>
+    /// Hangs on the first request until it is cancelled, then answers normally.
+    /// </summary>
+    internal sealed class StallOnceHandler : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (++Attempts == 1)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
+    /// <summary>
     /// The handler in isolation: does it spend a token, and does it refuse when
     /// there are none left?
     /// </summary>
@@ -206,6 +228,37 @@ namespace FantasyLeague.Core.Tests
             try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
 
             socket.Attempts.Should().BeGreaterThan(1, "503 is transient and worth repeating");
+        }
+
+        [Fact]
+        public async Task A_server_error_is_retried()
+        {
+            var socket = new CountingHandler(HttpStatusCode.InternalServerError);
+            using var provider = ProviderWith(socket);
+
+            try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
+
+            socket.Attempts.Should().BeGreaterThan(1);
+        }
+
+        [Fact]
+        public async Task An_attempt_that_times_out_is_retried()
+        {
+            // The pipeline's own per-attempt timeout throws TimeoutRejectedException,
+            // not TimeoutException, so a predicate naming the latter never retries it.
+            var socket = new StallOnceHandler();
+            var services = new ServiceCollection();
+            services.AddSleeperClient(o =>
+            {
+                o.Retry.Delay = TimeSpan.Zero;
+                o.AttemptTimeout.Timeout = TimeSpan.FromMilliseconds(200);
+            }).ConfigurePrimaryHttpMessageHandler(() => socket);
+            using var provider = services.BuildServiceProvider();
+
+            var response = await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken);
+
+            response.IsSuccessStatusCode.Should().BeTrue();
+            socket.Attempts.Should().Be(2);
         }
 
         [Fact]

@@ -16,8 +16,7 @@ namespace FantasyLeague.Core.Tests
             var factory = new CountingContextFactory(Guid.NewGuid().ToString());
 
             var sql = new SqlFinalizedWeekStore(factory, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
-            var blobFirst = new BlobFirstFinalizedWeekStore(
-                sql, new NullBlobFinalizedWeekStore(), NullLogger<BlobFirstFinalizedWeekStore>.Instance, TimeProvider.System);
+            var blobFirst = new BlobFirstFinalizedWeekStore(sql, new NullBlobFinalizedWeekStore());
 
             var cache = new ServiceCollection()
                 .AddHybridCache()
