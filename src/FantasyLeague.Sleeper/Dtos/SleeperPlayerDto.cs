@@ -5,7 +5,7 @@
     /// to player and runs to roughly 14 MB across about 12,200 entries.
     /// </summary>
     /// <remarks>
-    /// Only three fields survive the projection to <see cref="PlayerRef"/>. The
+    /// Only three fields survive the projection to <see cref="FantasyLeague.Core.PlayerRef"/>. The
     /// dump is dirtier than it looks: around 330 entries carry no
     /// <see cref="FantasyPositions"/> and around 30 no <see cref="FullName"/>, so
     /// both are treated as optional rather than assumed.

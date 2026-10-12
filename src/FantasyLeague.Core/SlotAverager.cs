@@ -1,5 +1,8 @@
 ﻿namespace FantasyLeague.Core
 {
+    /// <summary>
+    /// The radar's figures: points per startable slot, averaged per week, per season and across the league.
+    /// </summary>
     public static class SlotAverager
     {
         /// <summary>
@@ -14,7 +17,7 @@
         /// with the slots: a different count, or a starter ineligible for the slot
         /// at its position. Both mean the slot list changed after this week.
         /// </returns>
-        public static IReadOnlyDictionary<string, decimal>? MakeSlotAverages(
+        public static IReadOnlyDictionary<string, decimal>? WeekAverages(
             IReadOnlyList<string?> starters,
             IReadOnlyDictionary<string, decimal> playersPoints,
             IReadOnlyDictionary<string, IReadOnlyList<string>> playerPositions,
@@ -76,7 +79,7 @@
         /// </summary>
         /// <param name="values">Slot code and value pairs, any number per code.</param>
         /// <returns>The mean value per code.</returns>
-        private static Dictionary<string, decimal> Mean(IEnumerable<(string Code, decimal Value)> values) =>
+        private static IReadOnlyDictionary<string, decimal> Mean(IEnumerable<(string Code, decimal Value)> values) =>
             values
                 .GroupBy(v => v.Code)
                 .ToDictionary(g => g.Key, g => g.Average(v => v.Value));

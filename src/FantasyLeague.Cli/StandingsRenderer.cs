@@ -1,7 +1,7 @@
 ﻿using System.Globalization;
-using FantasyLeague.Sleeper;
+using FantasyLeague.Seasons;
 
-namespace FantasyLeague.Console
+namespace FantasyLeague.Cli
 {
     /// <summary>
     /// Renders the season as a fixed-width table.
@@ -13,7 +13,7 @@ namespace FantasyLeague.Console
     internal static class StandingsRenderer
     {
         private const int Name = 26;
-        private const int Rule = 65;
+        private const int Rule = 66;
 
         /// <summary>
         /// Writes the header, the standings and the verification footer.
@@ -27,33 +27,33 @@ namespace FantasyLeague.Console
                 .Select(t => new
                 {
                     t.Name,
-                    Points = t.Totals.Actual,
-                    t.Totals.Ideal,
+                    ActualPts = t.Totals.Actual,
+                    IdealPts = t.Totals.Ideal,
                     t.Totals.Sigma,
                 })
                 .ToList();
 
-            var lead = rows.Count == 0 ? 0m : rows[0].Points;
+            var lead = rows.Count == 0 ? 0m : rows[0].ActualPts;
             var teamWeeks = snapshot.Teams.Sum(t => t.Weeks.Count);
 
             output.WriteLine(
                 $"season {payload.Season}   weeks 1-{payload.CurrentWeek}   " +
                 $"final through wk {payload.FinalThroughWeek}   {payload.AsOfUtc:yyyy-MM-dd HH:mm}Z");
             output.WriteLine();
-            output.WriteLine($"{"TEAM",-Name}{"POINTS",9}{"SD",7}{"IDEAL",9}{"EFF",6}{"GAP",8}");
+            output.WriteLine($"{"TEAM",-Name}{"POINTS",9}{"SPREAD",8}{"IDEAL",9}{"EFF",6}{"GAP",8}");
             output.WriteLine(new string('-', Rule));
 
             foreach (var r in rows)
             {
-                var sd = r.Sigma is { } s ? s.ToString("F1", CultureInfo.InvariantCulture) : "-";
-                var eff = r.Ideal == 0 ? "-" : $"{(r.Points / r.Ideal * 100m).ToString("F0", CultureInfo.InvariantCulture)}%";
-                var gap = r.Points == lead ? "-" : (r.Points - lead).ToString("F1", CultureInfo.InvariantCulture);
+                var spread = r.Sigma is { } s ? s.ToString("F1", CultureInfo.InvariantCulture) : "-";
+                var eff = r.IdealPts == 0 ? "-" : $"{(r.ActualPts / r.IdealPts * 100m).ToString("F0", CultureInfo.InvariantCulture)}%";
+                var gap = r.ActualPts == lead ? "-" : (r.ActualPts - lead).ToString("F1", CultureInfo.InvariantCulture);
 
                 output.WriteLine(
                     $"{Fit(r.Name, Name),-Name}" +
-                    $"{r.Points.ToString("F1", CultureInfo.InvariantCulture),9}" +
-                    $"{sd,7}" +
-                    $"{r.Ideal.ToString("F1", CultureInfo.InvariantCulture),9}" +
+                    $"{r.ActualPts.ToString("F1", CultureInfo.InvariantCulture),9}" +
+                    $"{spread,8}" +
+                    $"{r.IdealPts.ToString("F1", CultureInfo.InvariantCulture),9}" +
                     $"{eff,6}{gap,8}");
             }
 

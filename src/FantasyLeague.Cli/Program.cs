@@ -1,10 +1,11 @@
-﻿using FantasyLeague.Console;
+﻿using FantasyLeague.Cli;
+using FantasyLeague.Core;
+using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -12,6 +13,11 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.Services.Configure<ConsoleLoggerOptions>(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 builder.Services.AddSleeperClient();
+builder.Services.AddSeasonService();
+
+// no database or storage account: rebuild every week and refetch the player map each run
+builder.Services.AddSingleton<IFinalizedWeekStore, NullFinalizedWeekStore>();
+builder.Services.AddSingleton<IPlayerMapStore, NullPlayerMapStore>();
 
 // the League section the Functions host binds, e.g. League__CurrentLeagueId
 if (string.IsNullOrWhiteSpace(builder.Configuration["League:CurrentLeagueId"]))
@@ -28,15 +34,11 @@ if (string.IsNullOrWhiteSpace(builder.Configuration["League:CurrentLeagueId"]))
 
 using var host = builder.Build();
 
-var league = host.Services.GetRequiredService<IOptions<LeagueOptions>>().Value;
-var snapshot = await host.Services.GetRequiredService<ISeasonService>().BuildAsync(league.CurrentLeagueId, default);
-var excluded = SeasonPayloadMapper.ResolveExcludedRosters(snapshot, league.ExcludedOwnerIds);
-var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
+var snapshot = await host.Services.GetRequiredService<ISeasonService>().BuildAsync(default);
+var payload = SeasonPayloadMapper.ToSeasonPayload(
     snapshot,
-    host.Services.GetRequiredService<TimeProvider>().GetUtcNow(),
-    excluded.RosterIds,
-    league.OverrideLeagueName);
+    host.Services.GetRequiredService<TimeProvider>().GetUtcNow());
 
-StandingsRenderer.Render(payload, snapshot, System.Console.Out);
+StandingsRenderer.Render(payload, snapshot, Console.Out);
 
 return snapshot.Violations.Count > 0 || snapshot.UnresolvedPlayerIds.Count > 0 ? 1 : 0;

@@ -56,7 +56,7 @@ namespace FantasyLeague.Core.Tests
             var second = await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             first.Should().BeEquivalentTo(second);
-            second[0].Ideal.Should().Be(133m);
+            second[0].IdealPts.Should().Be(133m);
         }
 
         [Fact]
@@ -66,11 +66,11 @@ namespace FantasyLeague.Core.Tests
             var (cached, _) = Build();
 
             await cached.WriteAsync(League, 2026, [Week(ideal: 120m)], TestContext.Current.CancellationToken);
-            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(120m);
+            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].IdealPts.Should().Be(120m);
 
             await cached.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
 
-            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(155m);
+            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].IdealPts.Should().Be(155m);
         }
 
         [Fact]
@@ -81,8 +81,8 @@ namespace FantasyLeague.Core.Tests
             await cached.WriteAsync(League, 2025, [Week(ideal: 99m)], TestContext.Current.CancellationToken);
             await cached.WriteAsync(League, 2026, [Week(ideal: 111m)], TestContext.Current.CancellationToken);
 
-            (await cached.ReadAsync(League, 2025, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(99m);
-            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].Ideal.Should().Be(111m);
+            (await cached.ReadAsync(League, 2025, TestContext.Current.CancellationToken))[0].IdealPts.Should().Be(99m);
+            (await cached.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].IdealPts.Should().Be(111m);
         }
     }
 

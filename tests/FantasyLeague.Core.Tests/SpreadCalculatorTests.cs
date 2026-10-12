@@ -15,6 +15,11 @@ namespace FantasyLeague.Core.Tests
             SpreadCalculator.Calculate([]).Should().BeNull();
 
         [Fact]
+        public void No_weeks_is_null_even_with_no_minimum() =>
+            // F2: the minimum guard alone let an empty list through to Min()
+            SpreadCalculator.Calculate([], minWeeks: 0).Should().BeNull();
+
+        [Fact]
         public void One_week_is_null_not_zero() =>
             // Sigma of a single point is undefined, not zero. Returning 0.0 here
             // would put the newest, least-known team top of a consistency table.
@@ -93,13 +98,22 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void All_zero_weeks_do_not_divide_by_zero()
         {
-            // Mean is zero, so the coefficient of variation has no denominator.
-            // Sigma is also zero here, so reporting a CV of zero is honest.
+            // Mean is zero, so the coefficient of variation has no denominator
             var spread = SpreadCalculator.Calculate([0m, 0m, 0m, 0m]);
 
             spread.Should().NotBeNull();
             spread!.Sigma.Should().Be(0.0);
-            spread.Cv.Should().Be(0.0);
+            spread.Cv.Should().BeNull();
+        }
+
+        [Fact]
+        public void Weeks_swinging_around_zero_are_not_called_perfectly_consistent()
+        {
+            // F1: a CV of 0.0 here would rank the least steady team as the steadiest
+            var spread = SpreadCalculator.Calculate([-10m, 10m, -10m, 10m]);
+
+            spread!.Sigma.Should().Be(10.0);
+            spread.Cv.Should().BeNull();
         }
     }
 
@@ -173,7 +187,7 @@ namespace FantasyLeague.Core.Tests
     public class SpreadCalculatorFinalityTests
     {
         private static TeamWeek Week(int week, decimal actual, bool isFinal) =>
-            new(RosterId: 1, Week: week, Actual: actual, Ideal: actual,
+            new(RosterId: 1, Week: week, ActualPts: actual, IdealPts: actual,
                 Starters: [], IdealLineup: [], Players: [], IsFinal: isFinal,
                 SlotAverages: new Dictionary<string, decimal>());
 
@@ -195,7 +209,7 @@ namespace FantasyLeague.Core.Tests
             ];
 
             var spread = SpreadCalculator.Calculate(
-                [.. season.Where(w => w.IsFinal).Select(w => w.Actual)]);
+                [.. season.Where(w => w.IsFinal).Select(w => w.ActualPts)]);
 
             spread.Should().NotBeNull();
             spread!.Weeks.Should().Be(4, "the in-progress week must not be counted");
@@ -230,7 +244,7 @@ namespace FantasyLeague.Core.Tests
             ];
 
             SpreadCalculator.Calculate(
-                [.. season.Where(w => w.IsFinal).Select(w => w.Actual)])
+                [.. season.Where(w => w.IsFinal).Select(w => w.ActualPts)])
                 .Should().BeNull();
         }
     }

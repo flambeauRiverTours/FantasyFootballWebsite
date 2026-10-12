@@ -783,6 +783,93 @@ read whole by key (A14). It is also the first thing a reviewer reading the
 schema would question, and a cross-season feature is what would justify
 promoting any of it to real columns.
 
+## A21 · Hosts compose, Data owns storage, policy is applied once
+
+2026-10-12. Three decisions from the T61 review (items 11 to 16), each
+replacing something that worked only by accident or by repetition.
+
+**Hosts compose; no library registers a fallback for another's interface.**
+`AddSleeperClient` used to register the client, the season service, the
+player map store and a null finalized-week store with `TryAdd`, so the
+Functions host worked only because it called `AddFantasyData` first. Now
+`AddSleeperClient` registers the client and its pipeline, `AddSeasonService`
+registers the season assembly and the player map, and `AddFantasyData`
+registers both stores. The console registers the two null stores itself. A
+host that forgets a store fails `ValidateOnBuild` at startup, not at the
+first request.
+
+**Core owns the store interfaces; Data owns every implementation.**
+`PlayerRef`, `StoredPlayerMap` and `IPlayerMapStore` moved to Core beside
+`IFinalizedWeekStore`, which already followed this pattern. Both blob stores
+now sit in Data and share one set of read, write and transient-failure rules
+and one storage configuration section (`BlobStorage`). Sleeper no longer
+references Azure Storage at all. Container and blob names are unchanged, so
+the stored data carries over.
+
+**League policy is applied when the season is built, and the ETag hashes
+the payload.** The name override and the excluded rosters (A1) were applied
+by each caller, and the ETag was built from a hand-kept list of fields that
+left both out, so changing either served a stale 304. `SeasonService` now
+applies both, once per build, and logs an unmatched owner once per build
+rather than once per request. The ETag is a hash of the response body minus
+`asOfUtc`, so anything the page can see changes the tag. `BuildAsync` builds
+the configured league and takes no league id, since the override belongs to
+that league alone. T29 adds a per-season variant when there is one.
+
+## A22 · The Sleeper project splits in two, and names settle
+
+2026-10-12. `FantasyLeague.Sleeper` held the Sleeper client and its DTOs, and
+also the application layer built on them: the season service, the player map
+refresher, the payload and the ETag. Its name undersold it, and the season
+service read wire DTOs directly.
+
+**Split along that line.** `FantasyLeague.Sleeper` keeps the client, the rate
+limit, the DTOs and the mapper, behind one public `ISleeperReader` that
+returns domain shapes: the NFL state, the league with its slots and teams,
+mapped roster-weeks and the projected player map. The DTOs stay internal to
+it. `FantasyLeague.Seasons` holds everything built on that reader. References
+run Core ← Sleeper ← Seasons ← hosts, with Data beside Sleeper.
+
+**Names that changed with it.**
+- Domain point totals end in `Pts`, matching the `WeekScore` columns:
+  `TeamWeek.ActualPts` and `IdealPts`, and `RosterWeek.ActualPts` beside
+  `ScoredPts`, Sleeper's own total before any override. The §09 payload keeps
+  `actual` and `ideal`, since it is the contract the page reads.
+- The current-season blob's name carries a schema number, so renaming a
+  `TeamWeek` field turns an old blob into a miss rather than a read of zeros.
+- The console harness is `FantasyLeague.Cli`, which also ends its namespace's
+  clash with `System.Console`, and its column for σ is headed `SPREAD`.
+- `NFL` stays capitalised in identifiers, cancellation tokens are always
+  `cancellationToken`, and one concept goes in a file named after it. All
+  three are now in the standards.
+
+## A23 · Two C# standards narrowed to what they were for
+
+2026-10-12. A final check of the code against the C# standards found two rules
+that, read literally, asked for changes that would make the code worse. Both
+were narrowed, and approved, rather than followed to the letter.
+
+**`Pts` covers roster point totals, not every number of points.** The rule
+came from naming `TeamWeek.ActualPts` and `IdealPts` after the `WeekScore`
+columns, and `RosterWeek.ScoredPts` beside them. Written as "point totals", it
+also reached `RosteredPlayer.Points`, one player's score in one week, where a
+bare `Pts` reads worse than the word it shortens. It now names roster totals
+only. The solver's result was renamed `IdealPts` under it, since that is a
+roster total.
+
+**Tests may use `!` without a comment.** Production code has none, and every
+one there needs a reason. Tests had 45, almost all straight after a
+`NotBeNull()` assertion or on a fixture the test controls. There, a wrong null
+fails the very test that relies on it, which is the protection the comment
+exists to provide; 45 comments would restate the assertion above each one. It
+is recorded under the standards' accepted exceptions.
+
+**The same check fixed four things in the code.** An unmatched excluded owner
+was logged by its Sleeper user id, which the logging rule and A2 forbid; it now
+logs a count. Build and refresh durations were timed with `Stopwatch` rather
+than the injected `TimeProvider`. `SleeperReader` built two domain records
+itself rather than through `SleeperMapper`. `SlotAverager` lacked a summary.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

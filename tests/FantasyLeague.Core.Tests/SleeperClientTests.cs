@@ -59,7 +59,7 @@ namespace FantasyLeague.Core.Tests
 
         private static Task Invoke(SleeperClient client, string method) => method switch
         {
-            "state" => client.GetStateAsync(),
+            "state" => client.GetNFLStateAsync(),
             "league" => client.GetLeagueAsync("L1"),
             "users" => client.GetUsersAsync("L1"),
             "rosters" => client.GetRostersAsync("L1"),
@@ -135,7 +135,7 @@ namespace FantasyLeague.Core.Tests
                 """{"season":"2026","season_type":"regular","week":3,"display_week":3}""",
                 out _);
 
-            var state = await client.GetStateAsync(TestContext.Current.CancellationToken);
+            var state = await client.GetNFLStateAsync(TestContext.Current.CancellationToken);
 
             state!.Season.Should().Be(2026);
             state.Week.Should().Be(3);
@@ -204,7 +204,7 @@ namespace FantasyLeague.Core.Tests
             // resilience policy is what decides which of these are retried.
             var client = ClientReturning(status, "{}", out _);
 
-            await FluentActions.Awaiting(() => client.GetStateAsync())
+            await FluentActions.Awaiting(() => client.GetNFLStateAsync())
                 .Should().ThrowAsync<HttpRequestException>();
         }
 
@@ -215,7 +215,7 @@ namespace FantasyLeague.Core.Tests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync();
 
-            await FluentActions.Awaiting(() => client.GetStateAsync(cts.Token))
+            await FluentActions.Awaiting(() => client.GetNFLStateAsync(cts.Token))
                 .Should().ThrowAsync<OperationCanceledException>();
         }
     }

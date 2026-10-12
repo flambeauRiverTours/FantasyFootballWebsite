@@ -14,13 +14,13 @@ namespace FantasyLeague.Core.Tests
 
         public int Reads { get; private set; }
 
-        public Task<IReadOnlyList<TeamWeek>?> ReadAsync(string leagueId, int season, CancellationToken ct)
+        public Task<IReadOnlyList<TeamWeek>?> ReadAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
             Reads++;
             return Task.FromResult(stored);
         }
 
-        public Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken ct)
+        public Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
             Written = weeks;
             return Task.CompletedTask;
@@ -47,7 +47,7 @@ namespace FantasyLeague.Core.Tests
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
-            read[0].Ideal.Should().Be(999m);
+            read[0].IdealPts.Should().Be(999m);
         }
 
         [Fact]
@@ -60,7 +60,7 @@ namespace FantasyLeague.Core.Tests
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
-            read[0].Ideal.Should().Be(100m);
+            read[0].IdealPts.Should().Be(100m);
         }
 
         [Fact]
@@ -75,7 +75,7 @@ namespace FantasyLeague.Core.Tests
 
             await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
-            blob.Written.Should().ContainSingle().Which.Ideal.Should().Be(100m);
+            blob.Written.Should().ContainSingle().Which.IdealPts.Should().Be(100m);
         }
 
         [Fact]
@@ -96,7 +96,7 @@ namespace FantasyLeague.Core.Tests
             await store.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
 
             (await sql.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().ContainSingle();
-            blob.Written.Should().ContainSingle().Which.Ideal.Should().Be(155m);
+            blob.Written.Should().ContainSingle().Which.IdealPts.Should().Be(155m);
         }
     }
 
@@ -121,7 +121,7 @@ namespace FantasyLeague.Core.Tests
 
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
-            read.Should().ContainSingle().Which.Ideal.Should().Be(110m);
+            read.Should().ContainSingle().Which.IdealPts.Should().Be(110m);
         }
 
         [Fact]
@@ -144,7 +144,7 @@ namespace FantasyLeague.Core.Tests
             await store.WriteAsync(League, 2025, [Week(90m)], TestContext.Current.CancellationToken);
 
             (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().ContainSingle()
-                .Which.Ideal.Should().Be(110m);
+                .Which.IdealPts.Should().Be(110m);
         }
 
         [Fact]

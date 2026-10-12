@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Sleeper;
+﻿using FantasyLeague.Seasons;
+using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,11 +31,11 @@ namespace FantasyLeague.Core.Tests
     {
         private static async Task<ISeasonService> BuildAsync(LeagueSocket socket, IFinalizedWeekStore store)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
+            var services = TestServices.Create();
             services.AddSingleton(store);
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
+            services.AddSeasonServiceWithNullStores();
 
             var provider = services.BuildServiceProvider();
             await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
@@ -56,7 +57,7 @@ namespace FantasyLeague.Core.Tests
         {
             var store = new RecordingWeekStore();
 
-            await (await BuildAsync(ThreeWeeks(), store)).BuildAsync("L1", TestContext.Current.CancellationToken);
+            await (await BuildAsync(ThreeWeeks(), store)).BuildAsync(TestContext.Current.CancellationToken);
 
             store.Reads.Should().Be(1, "one read per season, not one per week");
         }
@@ -67,10 +68,10 @@ namespace FantasyLeague.Core.Tests
             var stored = new TeamWeek(1, 1, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
             var store = new RecordingWeekStore([stored]);
 
-            var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync("L1", TestContext.Current.CancellationToken);
+            var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync(TestContext.Current.CancellationToken);
 
             var week1 = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Single(w => w.Week == 1);
-            week1.Actual.Should().Be(999m, "the stored value wins over Sleeper's");
+            week1.ActualPts.Should().Be(999m, "the stored value wins over Sleeper's");
         }
 
         [Fact]
@@ -80,17 +81,17 @@ namespace FantasyLeague.Core.Tests
             var stored = new TeamWeek(1, 3, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
             var store = new RecordingWeekStore([stored]);
 
-            var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync("L1", TestContext.Current.CancellationToken);
+            var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync(TestContext.Current.CancellationToken);
 
             var week3 = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Single(w => w.Week == 3);
-            week3.Actual.Should().NotBe(999m);
+            week3.ActualPts.Should().NotBe(999m);
         }
 
         [Fact]
         public async Task An_empty_store_rebuilds_every_week_from_Sleeper()
         {
             var snapshot = await (await BuildAsync(ThreeWeeks(), new RecordingWeekStore()))
-                .BuildAsync("L1", TestContext.Current.CancellationToken);
+                .BuildAsync(TestContext.Current.CancellationToken);
 
             snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Should().HaveCount(3);
         }
@@ -100,7 +101,7 @@ namespace FantasyLeague.Core.Tests
         {
             // what the widening was for: stored weeks must be re-solvable later
             var snapshot = await (await BuildAsync(ThreeWeeks(), new RecordingWeekStore()))
-                .BuildAsync("L1", TestContext.Current.CancellationToken);
+                .BuildAsync(TestContext.Current.CancellationToken);
 
             var week = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.First();
             week.Players.Should().NotBeEmpty();

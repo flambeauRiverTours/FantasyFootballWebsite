@@ -40,16 +40,18 @@ namespace FantasyLeague.Core.Tests
             path.Contains("/users", StringComparison.Ordinal) ||
             path.Contains("/rosters", StringComparison.Ordinal) ||
             path.Contains("/matchups/", StringComparison.Ordinal) ? "[]" :
-            "{\"league_id\":\"L1\",\"season\":\"2026\"}";
+            "{\"league_id\":\"L1\",\"season\":\"2026\",\"roster_positions\":[\"QB\"]}";
     }
 
     /// <summary>
-    /// The caching layer, exercised through the real pipeline so a cache miss
-    /// genuinely reaches a socket.
+    /// The reader and its cache, exercised through the real pipeline so a cache
+    /// miss genuinely reaches a socket.
     /// </summary>
-    public class SleeperReaderCacheTests
+    public class SleeperReaderTests
     {
-        private static (SleeperReaderCache Reader, CountingSocket Socket, ServiceProvider Provider) Build(
+        private static readonly IReadOnlyDictionary<string, PlayerRef> NoPlayers = new Dictionary<string, PlayerRef>();
+
+        private static (ISleeperReader Reader, CountingSocket Socket, ServiceProvider Provider) Build(
             string? body = null, TimeSpan delay = default)
         {
             var socket = new CountingSocket(body, delay);
@@ -58,7 +60,7 @@ namespace FantasyLeague.Core.Tests
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
 
             var provider = services.BuildServiceProvider();
-            return (provider.GetRequiredService<SleeperReaderCache>(), socket, provider);
+            return (provider.GetRequiredService<ISleeperReader>(), socket, provider);
         }
 
         [Fact]
@@ -67,7 +69,7 @@ namespace FantasyLeague.Core.Tests
             var (reader, _, provider) = Build(body: "null");
             using (provider)
             {
-                await reader.Invoking(r => r.GetLeagueAsync("L1", default).AsTask())
+                await reader.Invoking(r => r.GetLeagueAsync("L1", default))
                     .Should().ThrowAsync<InvalidDataException>();
             }
         }
@@ -78,7 +80,7 @@ namespace FantasyLeague.Core.Tests
             var (reader, _, provider) = Build(body: "[null]");
             using (provider)
             {
-                await reader.Invoking(r => r.GetMatchupsAsync("L1", 1, default).AsTask())
+                await reader.Invoking(r => r.GetWeekAsync("L1", 1, NoPlayers, default))
                     .Should().ThrowAsync<InvalidDataException>();
             }
         }
@@ -89,8 +91,8 @@ namespace FantasyLeague.Core.Tests
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
-                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(1);
             }
@@ -108,7 +110,7 @@ namespace FantasyLeague.Core.Tests
             using (provider)
             {
                 await Task.WhenAll(Enumerable.Range(0, 20)
-                    .Select(_ => reader.GetMatchupsAsync("L1", 1, default).AsTask()));
+                    .Select(_ => reader.GetWeekAsync("L1", 1, NoPlayers, default)));
 
                 socket.Attempts.Should().Be(1, "nineteen callers should have awaited the first fetch");
             }
@@ -120,9 +122,9 @@ namespace FantasyLeague.Core.Tests
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
-                await reader.GetMatchupsAsync("L1", 2, TestContext.Current.CancellationToken);
-                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 2, NoPlayers, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(2, "week 1 was served from cache the second time");
             }
@@ -137,8 +139,8 @@ namespace FantasyLeague.Core.Tests
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
-                await reader.GetMatchupsAsync("L2", 1, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L2", 1, NoPlayers, TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(2);
             }
@@ -147,17 +149,16 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task Each_endpoint_has_its_own_key()
         {
-            // Five endpoints, five distinct keys. A collision would serve one
-            // payload where another was asked for, and the deserialiser would
-            // most likely succeed at producing nonsense rather than throwing.
+            // Five endpoints, five distinct keys (the league reads league, users
+            // and rosters). A collision would serve one payload where another
+            // was asked for, and the deserialiser would most likely succeed at
+            // producing nonsense rather than throwing.
             var (reader, socket, provider) = Build();
             using (provider)
             {
-                await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
-                await reader.GetRostersAsync("L1", TestContext.Current.CancellationToken);
-                await reader.GetUsersAsync("L1", TestContext.Current.CancellationToken);
+                await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
                 await reader.GetLeagueAsync("L1", TestContext.Current.CancellationToken);
-                await reader.GetStateAsync(TestContext.Current.CancellationToken);
+                await reader.GetNFLStateAsync(TestContext.Current.CancellationToken);
 
                 socket.Attempts.Should().Be(5);
             }
@@ -171,11 +172,9 @@ namespace FantasyLeague.Core.Tests
             {
                 for (var i = 0; i < 2; i++)
                 {
-                    await reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken);
-                    await reader.GetRostersAsync("L1", TestContext.Current.CancellationToken);
-                    await reader.GetUsersAsync("L1", TestContext.Current.CancellationToken);
+                    await reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
                     await reader.GetLeagueAsync("L1", TestContext.Current.CancellationToken);
-                    await reader.GetStateAsync(TestContext.Current.CancellationToken);
+                    await reader.GetNFLStateAsync(TestContext.Current.CancellationToken);
                 }
 
                 socket.Attempts.Should().Be(5, "the second pass should be entirely cached");
@@ -193,8 +192,8 @@ namespace FantasyLeague.Core.Tests
             {
                 using var abandoning = new CancellationTokenSource();
 
-                var leaver = reader.GetMatchupsAsync("L1", 1, abandoning.Token).AsTask();
-                var stayer = reader.GetMatchupsAsync("L1", 1, TestContext.Current.CancellationToken).AsTask();
+                var leaver = reader.GetWeekAsync("L1", 1, NoPlayers, abandoning.Token);
+                var stayer = reader.GetWeekAsync("L1", 1, NoPlayers, TestContext.Current.CancellationToken);
 
                 await abandoning.CancelAsync();
 

@@ -1,5 +1,4 @@
-﻿using System.Text.Json;
-using Azure;
+﻿using Azure;
 using Azure.Storage.Blobs;
 using FantasyLeague.Core;
 using Microsoft.Extensions.Logging;
@@ -27,14 +26,14 @@ namespace FantasyLeague.Data
         ILogger<BlobFinalizedWeekStore> logger) : IBlobFinalizedWeekStore
     {
         /// <inheritdoc />
-        public async Task<IReadOnlyList<TeamWeek>?> ReadAsync(string leagueId, int season, CancellationToken ct)
+        public async Task<IReadOnlyList<TeamWeek>?> ReadAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
             try
             {
-                var stored = await ReadStoredAsync(leagueId, ct);
+                var stored = await BlobJson.ReadAsync<StoredSeason>(container.GetBlobClient(BlobName(leagueId)), cancellationToken);
                 return stored?.Season == season ? stored.Weeks : null;
             }
-            catch (RequestFailedException ex) when (IsTransient(ex))
+            catch (RequestFailedException ex) when (BlobJson.IsTransient(ex))
             {
                 logger.LogWarning(ex, "Could not read the stored season; falling back to SQL.");
                 return null;
@@ -42,7 +41,7 @@ namespace FantasyLeague.Data
         }
 
         /// <inheritdoc />
-        public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken ct)
+        public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
             if (weeks.Count == 0)
             {
@@ -52,7 +51,7 @@ namespace FantasyLeague.Data
 
             try
             {
-                var stored = await ReadStoredAsync(leagueId, ct);
+                var stored = await BlobJson.ReadAsync<StoredSeason>(container.GetBlobClient(BlobName(leagueId)), cancellationToken);
                 if (stored is not null && stored.Season > season)
                 {
                     // a backfill of an older season must not evict the live one
@@ -60,15 +59,9 @@ namespace FantasyLeague.Data
                     return;
                 }
 
-                await container.CreateIfNotExistsAsync(cancellationToken: ct);
-
-                using var buffer = new MemoryStream();
-                await JsonSerializer.SerializeAsync(buffer, new StoredSeason(season, weeks), cancellationToken: ct);
-                buffer.Position = 0;
-
-                await container.GetBlobClient(BlobName(leagueId)).UploadAsync(buffer, overwrite: true, ct);
+                await BlobJson.WriteAsync(container, BlobName(leagueId), new StoredSeason(season, weeks), cancellationToken);
             }
-            catch (RequestFailedException ex) when (IsTransient(ex))
+            catch (RequestFailedException ex) when (BlobJson.IsTransient(ex))
             {
                 logger.LogWarning(ex, "Could not store the finalized season; the next read falls back to SQL.");
             }
@@ -79,36 +72,16 @@ namespace FantasyLeague.Data
         }
 
         /// <summary>
+        /// The stored shape's version. Bump it whenever <see cref="TeamWeek"/>
+        /// changes, so an old blob is a cache miss rather than a misread.
+        /// </summary>
+        private const int Schema = 2;
+
+        /// <summary>
         /// Names the league's one blob.
         /// </summary>
         /// <param name="leagueId">The league.</param>
         /// <returns>The blob name.</returns>
-        private static string BlobName(string leagueId) => $"{leagueId}/current.json";
-
-        /// <summary>
-        /// Decides whether a storage failure could succeed if tried again.
-        /// </summary>
-        /// <param name="ex">The storage failure.</param>
-        /// <returns><c>true</c> for no response, a timeout, throttling or a server error.</returns>
-        private static bool IsTransient(RequestFailedException ex) => ex.Status is 0 or 408 or 429 or >= 500;
-
-        /// <summary>
-        /// Reads whatever season the blob holds.
-        /// </summary>
-        /// <param name="leagueId">The league.</param>
-        /// <param name="ct">CancellationToken.</param>
-        /// <returns>The stored season, or null when nothing has been stored.</returns>
-        private async Task<StoredSeason?> ReadStoredAsync(string leagueId, CancellationToken ct)
-        {
-            try
-            {
-                var response = await container.GetBlobClient(BlobName(leagueId)).DownloadStreamingAsync(cancellationToken: ct);
-                return await JsonSerializer.DeserializeAsync<StoredSeason>(response.Value.Content, cancellationToken: ct);
-            }
-            catch (RequestFailedException ex) when (ex.Status == 404)
-            {
-                return null;
-            }
-        }
+        private static string BlobName(string leagueId) => $"{leagueId}/current.v{Schema}.json";
     }
 }

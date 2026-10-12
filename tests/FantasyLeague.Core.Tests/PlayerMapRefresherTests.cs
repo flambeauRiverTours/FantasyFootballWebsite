@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Text;
+using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,7 +68,7 @@ namespace FantasyLeague.Core.Tests
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
 
-            var client = services.BuildServiceProvider().GetRequiredService<SleeperClient>();
+            var client = services.BuildServiceProvider().GetRequiredService<ISleeperReader>();
 
             return new PlayerMapRefresher(
                 client,
@@ -150,7 +151,7 @@ namespace FantasyLeague.Core.Tests
             var refresher = Build(new ScriptedSocket(ScriptedSocket.Json("null")));
 
             await FluentActions.Awaiting(() => refresher.RefreshAsync(default))
-                .Should().ThrowAsync<InvalidOperationException>();
+                .Should().ThrowAsync<InvalidDataException>();
         }
 
         [Fact]
@@ -166,7 +167,7 @@ namespace FantasyLeague.Core.Tests
             var stamp = refresher.LastRefreshedUtc;
 
             await FluentActions.Awaiting(() => refresher.RefreshAsync(default))
-                .Should().ThrowAsync<InvalidOperationException>();
+                .Should().ThrowAsync<InvalidDataException>();
 
             refresher.PlayerMap.Should().HaveCount(3);
             refresher.LastRefreshedUtc.Should().Be(stamp);
@@ -235,8 +236,9 @@ namespace FantasyLeague.Core.Tests
         public void The_refresher_is_a_singleton()
         {
             // the map it holds is shared state
-            var services = new ServiceCollection();
+            var services = TestServices.Create();
             services.AddSleeperClient();
+            services.AddSeasonServiceWithNullStores();
             using var provider = services.BuildServiceProvider();
 
             provider.GetRequiredService<IPlayerMapRefresher>()

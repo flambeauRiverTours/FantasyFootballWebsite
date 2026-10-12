@@ -52,6 +52,21 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
+        /// Projects the dump, keeping how many players it held as a tripwire.
+        /// </summary>
+        /// <param name="dump">The parsed <c>/v1/players/nfl</c> response.</param>
+        /// <returns>The slim map and the dump's size.</returns>
+        internal static PlayerDump ToPlayerDump(IReadOnlyDictionary<string, SleeperPlayerDto> dump) =>
+            new(dump.Count, ToPlayerMap(dump));
+
+        /// <summary>
+        /// Keeps the two fields of the NFL state anything downstream reads.
+        /// </summary>
+        /// <param name="state">The state as Sleeper returned it.</param>
+        /// <returns>The current season and week.</returns>
+        internal static NFLState ToNFLState(NFLStateDto state) => new(state.Season, state.Week);
+
+        /// <summary>
         /// Resolves each roster to the name it should be shown under.
         /// </summary>
         /// <param name="users">The league's users.</param>
@@ -205,6 +220,8 @@ namespace FantasyLeague.Sleeper
                 players,
                 starters,
                 matchup.StartersPoints ?? [],
+                ToSlotStarters(matchup),
+                matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
                 unresolved);
         }
     }

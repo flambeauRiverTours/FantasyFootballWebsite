@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FantasyLeague.Core\FantasyLeague.Core.csproj" />
+    <ProjectReference Include="..\FantasyLeague.Seasons\FantasyLeague.Seasons.csproj" />
     <ProjectReference Include="..\FantasyLeague.Sleeper\FantasyLeague.Sleeper.csproj" />
   </ItemGroup>
 

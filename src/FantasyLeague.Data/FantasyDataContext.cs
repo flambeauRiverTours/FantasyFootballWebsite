@@ -4,81 +4,26 @@ using Microsoft.EntityFrameworkCore;
 namespace FantasyLeague.Data
 {
     /// <summary>
-    /// DBContext for the saved-off fantasy computations
+    /// The SQL record of every finalized week (A20).
     /// </summary>
-    internal partial class FantasyDataContext(DbContextOptions<FantasyDataContext> options) : DbContext(options)
+    /// <param name="options">Provider and connection, from the host or the design-time factory.</param>
+    internal sealed class FantasyDataContext(DbContextOptions<FantasyDataContext> options) : DbContext(options)
     {
-
-        //DbSets of all data in the DB
-        public DbSet<League> Leagues => Set<League>();
-        public DbSet<Player> Players => Set<Player>();
-        public DbSet<WeekScore> WeekScores => Set<WeekScore>();
-        public DbSet<Team> Teams => Set<Team>();
-
         /// <summary>
-        /// Creates the schema
+        /// Gets one row per roster per week.
         /// </summary>
-        /// <param name="modelBuilder">Modelbuilder object</param>
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            modelBuilder.Entity<League>(leagueEntity =>
-            {
-                leagueEntity.ToTable("Leagues");
+        public DbSet<WeekScore> WeekScores => Set<WeekScore>();
 
-                leagueEntity.HasKey(e => e.LeagueId);
-                leagueEntity.HasIndex(e => e.Season).IsUnique();
-                leagueEntity.Property(e => e.Name).IsRequired();
-                leagueEntity.Property(e => e.RosterPositionsJson).HasColumnType("nvarchar(max)").IsRequired();
-                leagueEntity.Property(e => e.UpdatedUtc).IsRequired();
-
-                leagueEntity.Property(e => e.PreviousLeagueId); //not required - null for first year of league
-
-            });
-
-            modelBuilder.Entity<Player>(player =>
-            {
-                player.ToTable("Players");
-
-                player.HasKey(e => e.PlayerId);
-                player.Property(e => e.FullName).IsRequired();
-                player.Property(e => e.PositionsJson).IsRequired();
-                player.Property(e => e.UpdatedUtc).IsRequired();
-
-                player.Property(e => e.Team); //not required - non-rostered players
-            });
-
-            modelBuilder.Entity<Team>(team =>
-            {
-                team.ToTable("Teams");
-
-                team.HasKey(e => new { e.LeagueId, e.RosterId });
-                team.Property(e => e.LeagueId).IsRequired();
-                team.Property(e => e.RosterId).IsRequired();
-                team.Property(e => e.TeamName).IsRequired();
-                team.Property(e => e.OwnerDisplayName).IsRequired();
-                team.Property(e => e.OwnerUserId).IsRequired();
-            });
-
+        /// <inheritdoc />
+        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
             modelBuilder.Entity<WeekScore>(weekScore =>
             {
                 weekScore.ToTable("WeekScores");
 
+                // leads on Season: every read is one season's (A14)
                 weekScore.HasKey(e => new { e.Season, e.LeagueId, e.RosterId, e.Week });
-                weekScore.Property(e => e.Season).IsRequired();
-                weekScore.Property(e => e.LeagueId).IsRequired();
-                weekScore.Property(e => e.RosterId).IsRequired();
-                weekScore.Property(e => e.Week).IsRequired();
-                weekScore.Property(e => e.StartersJson).HasColumnType("nvarchar(max)").IsRequired();
-                weekScore.Property(e => e.PlayersPointsJson).HasColumnType("nvarchar(max)").IsRequired();
-                weekScore.Property(e => e.ActualPts).HasPrecision(9, 2).IsRequired();
-                weekScore.Property(e => e.IdealPts).HasPrecision(9, 2).IsRequired();
-                weekScore.Property(e => e.IdealLineupJson).HasColumnType("nvarchar(max)").IsRequired();
-                weekScore.Property(e => e.SlotAveragesJson).HasColumnType("nvarchar(max)").IsRequired();
-                weekScore.Property(e => e.IsFinal).IsRequired();
-                weekScore.Property(e => e.ComputedUtc).IsRequired();
+                weekScore.Property(e => e.ActualPts).HasPrecision(9, 2);
+                weekScore.Property(e => e.IdealPts).HasPrecision(9, 2);
             });
-
-            base.OnModelCreating(modelBuilder);
-        }
     }
 }

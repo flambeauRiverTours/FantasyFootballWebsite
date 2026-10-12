@@ -20,10 +20,11 @@ This document states the standards for each programming domain for this project.
   - No clock or randomness
   - No logging
 - Project references point inward only
-  - Hosts reference `FantasyLeague.Data` and `FantasyLeague.Sleeper`
-  - Those two reference `FantasyLeague.Core`
+  - Hosts reference `Seasons` `Sleeper` and `Data`
+  - `FantasyLeague.Seasons` references `FantasyLeague.Sleeper`
+  - Every library references `FantasyLeague.Core`
   - Core references nothing in the solution
-- Wire DTOs never reach Core
+- Wire DTOs never leave `FantasyLeague.Sleeper`
   - why: Sleeper can change shape without touching domain code
 - One explicit mapper turns DTOs into domain records
   - why: absent fields and overrides are decided in one place
@@ -44,6 +45,15 @@ This document states the standards for each programming domain for this project.
 **Naming**
 - Private fields use `camelCase` with no underscore prefix
   - why: matches the primary constructor parameters used throughout
+- One concept per file named after its main type
+  - Companions may share it
+  - Its null implementation or its enum
+- Roster point totals end in `Pts`
+  - why: matches the stored columns and reads unambiguously
+- Cancellation tokens are named `cancellationToken`
+  - Lambda parameters are named `token`
+- NFL stays capitalised in identifiers
+  - why: reads as the league not a word
 
 **Errors**
 - Options are validated at startup with `ValidateOnStart`
@@ -74,6 +84,8 @@ This document states the standards for each programming domain for this project.
   - why: they are tool output not handwritten code
 - Timer triggers use UTC cron schedules
   - why: the Linux consumption plan cannot set a time zone
+- Tests may use `!` without a comment
+  - why: a wrong null fails the test that relies on it
 
 ## 2 · Front end
 

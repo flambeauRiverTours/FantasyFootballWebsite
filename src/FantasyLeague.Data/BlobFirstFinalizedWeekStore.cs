@@ -13,27 +13,27 @@ namespace FantasyLeague.Data
         IBlobFinalizedWeekStore blob) : IFinalizedWeekStore
     {
         /// <inheritdoc />
-        public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken ct)
+        public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
-            var cached = await blob.ReadAsync(leagueId, season, ct);
+            var cached = await blob.ReadAsync(leagueId, season, cancellationToken);
             if (cached is not null)
             {
                 return cached;
             }
 
-            var fromSql = await sql.ReadAsync(leagueId, season, ct);
+            var fromSql = await sql.ReadAsync(leagueId, season, cancellationToken);
 
             // primes a cold blob after a deploy rather than waiting for Tuesday
-            await blob.WriteAsync(leagueId, season, fromSql, ct);
+            await blob.WriteAsync(leagueId, season, fromSql, cancellationToken);
 
             return fromSql;
         }
 
         /// <inheritdoc />
-        public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken ct)
+        public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
-            await sql.WriteAsync(leagueId, season, weeks, ct);
-            await blob.WriteAsync(leagueId, season, weeks, ct);
+            await sql.WriteAsync(leagueId, season, weeks, cancellationToken);
+            await blob.WriteAsync(leagueId, season, weeks, cancellationToken);
         }
     }
 }

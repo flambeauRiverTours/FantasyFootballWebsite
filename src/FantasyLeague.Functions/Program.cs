@@ -1,5 +1,6 @@
 ﻿using Azure.Monitor.OpenTelemetry.Exporter;
 using FantasyLeague.Data;
+using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
@@ -25,11 +26,10 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
         .UseAzureMonitorExporter();
 }
 
-builder.Services.AddFantasyData(builder.Configuration.GetConnectionString("FantasyLeague"));
-
-// Registers the configured league and the client together with its resilience
-// pipeline and rate limit; the host does not need to know how it is assembled.
+// each library registers only what it owns, so the order of these does not matter
 builder.Services.AddSleeperClient();
+builder.Services.AddSeasonService();
+builder.Services.AddFantasyData(builder.Configuration.GetConnectionString("FantasyLeague"));
 builder.Services.Configure<ServiceProviderOptions>(o =>
 {
     o.ValidateOnBuild = true;

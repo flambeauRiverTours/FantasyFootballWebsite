@@ -1,17 +1,12 @@
 ﻿using System.Threading.RateLimiting;
-using Azure.Storage.Blobs;
-using FantasyLeague.Core;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Sleeper
 {
     /// <summary>
-    /// Extension methods for <see cref="IServiceCollection"/> to add the <see cref="SleeperClient"/> service.
+    /// Registers the Sleeper client and the reader in front of it.
     /// </summary>
     public static class ServiceCollectionExtensions
     {
@@ -25,9 +20,9 @@ namespace FantasyLeague.Sleeper
         private const int QueueLimit = 20;
 
         /// <summary>
-        /// Registers <see cref="SleeperClient"/> together with the whole outbound
-        /// pipeline: resilience on the outside, this application's rate limit on
-        /// the inside.
+        /// Registers <see cref="ISleeperReader"/> and the client behind it, together
+        /// with the whole outbound pipeline: resilience on the outside, this
+        /// application's rate limit on the inside.
         /// </summary>
         /// <param name="services">The service collection.</param>
         /// <param name="configureResilience">
@@ -44,21 +39,6 @@ namespace FantasyLeague.Sleeper
             this IServiceCollection services,
             Action<HttpStandardResilienceOptions>? configureResilience = null)
         {
-
-            services.AddOptions<LeagueOptions>()
-                .BindConfiguration("League")
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
-
-            // bound through the provider rather than BindConfiguration: a bare
-            // ServiceCollection has no IConfiguration, and every default here is
-            // usable without one
-            services.AddOptions<PlayerMapOptions>()
-                .Configure<IServiceProvider>((options, provider) =>
-                    provider.GetService<IConfiguration>()?.GetSection("PlayerMap").Bind(options))
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
-
             services.TryAddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
                 new TokenBucketRateLimiterOptions
                 {
@@ -70,18 +50,16 @@ namespace FantasyLeague.Sleeper
                     AutoReplenishment = true,
                 }));
 
-
             services.TryAddTransient<RateLimitHandler>();
-            services.TryAddSingleton(TimeProvider.System);
 
             var builder = services.AddHttpClient<SleeperClient>(c =>
             {
                 c.BaseAddress = new Uri("https://api.sleeper.app/v1/");
-                c.DefaultRequestHeaders.UserAgent.ParseAdd("bosty-base-site/1.0");
-                //No timeout - this is handled by the resilience policy below, which retries on timeouts and other transient failures.
+                c.DefaultRequestHeaders.UserAgent.ParseAdd("ideal-points/1.0");
+                // the resilience pipeline's 30 s total timeout fires well inside HttpClient's own 100 s
             });
 
-            // Default logging logs the league ID - prevent this
+            // the default logger writes request URLs, and every league URL carries the league id (A2)
             builder.RemoveAllLoggers();
 
             builder.AddStandardResilienceHandler(o =>
@@ -95,35 +73,8 @@ namespace FantasyLeague.Sleeper
 
             builder.AddHttpMessageHandler<RateLimitHandler>();
 
-            //Add the hybrid cache to the service collection, so that it can be used by the SleeperClient and other services.
             services.AddHybridCache();
-            services.TryAddTransient<SleeperReaderCache>();
-
-            // AzureWebJobsStorage is already present wherever a Functions host runs;
-            // with no connection string at all the map simply is not persisted
-            services.TryAddSingleton<IPlayerMapStore>(provider =>
-            {
-                var playerMap = provider.GetRequiredService<IOptions<PlayerMapOptions>>().Value;
-                var connectionString = playerMap.ConnectionString
-                    ?? provider.GetService<IConfiguration>()?["AzureWebJobsStorage"];
-
-                if (string.IsNullOrWhiteSpace(connectionString))
-                {
-                    return new NullPlayerMapStore();
-                }
-
-                return new BlobPlayerMapStore(
-                    new BlobServiceClient(connectionString).GetBlobContainerClient(playerMap.ContainerName),
-                    playerMap.BlobName,
-                    provider.GetRequiredService<ILogger<BlobPlayerMapStore>>());
-            });
-
-            //TryAdd, so a host with a database registers the SQL adapter instead and the console keeps rebuilding from Sleeper
-            services.TryAddSingleton<IFinalizedWeekStore, NullFinalizedWeekStore>();
-
-            // singleton: the map it holds is shared state
-            services.TryAddSingleton<IPlayerMapRefresher, PlayerMapRefresher>();
-            services.TryAddTransient<ISeasonService, SeasonService>();
+            services.TryAddTransient<ISleeperReader, SleeperReader>();
 
             return builder;
         }

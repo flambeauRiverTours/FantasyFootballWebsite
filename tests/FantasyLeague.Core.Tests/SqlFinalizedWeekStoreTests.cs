@@ -68,8 +68,8 @@ namespace FantasyLeague.Core.Tests
             await store.WriteAsync(League, 2026, [Week(actual: 123.45m, ideal: 167.89m)], TestContext.Current.CancellationToken);
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
-            read[0].Actual.Should().Be(123.45m);
-            read[0].Ideal.Should().Be(167.89m);
+            read[0].ActualPts.Should().Be(123.45m);
+            read[0].IdealPts.Should().Be(167.89m);
         }
 
         [Fact]
@@ -139,7 +139,7 @@ namespace FantasyLeague.Core.Tests
             var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
 
             read.Should().ContainSingle();
-            read[0].Ideal.Should().Be(155m);
+            read[0].IdealPts.Should().Be(155m);
         }
 
         [Fact]

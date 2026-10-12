@@ -1,4 +1,4 @@
-﻿using FantasyLeague.Sleeper;
+﻿using FantasyLeague.Seasons;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -17,14 +17,14 @@ namespace FantasyLeague.Functions.Functions
         /// Refetches the dump and replaces the stored map.
         /// </summary>
         /// <param name="timer">The schedule that fired.</param>
-        /// <param name="ct">CancellationToken.</param>
+        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the map has been replaced.</returns>
         [Function("RefreshPlayerMap")]
         public async Task RefreshPlayerMap(
             [TimerTrigger("0 30 9 * * *")] TimerInfo timer,
-            CancellationToken ct)
+            CancellationToken cancellationToken)
         {
-            await players.RefreshAsync(ct);
+            await players.RefreshAsync(cancellationToken);
 
             logger.LogInformation(
                 "Player map refresh complete. Next: {Next}.", timer.ScheduleStatus?.Next);

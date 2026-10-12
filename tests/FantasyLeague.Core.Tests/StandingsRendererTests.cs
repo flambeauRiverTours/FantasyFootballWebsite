@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
-using FantasyLeague.Console;
-using FantasyLeague.Sleeper;
+using FantasyLeague.Cli;
+using FantasyLeague.Seasons;
 using FluentAssertions;
 
 namespace FantasyLeague.Core.Tests
@@ -20,12 +20,12 @@ namespace FantasyLeague.Core.Tests
             IReadOnlyList<string>? unresolved = null,
             IReadOnlyList<InvariantViolation>? violations = null) =>
             new("Name", 2026, currentWeek, finalThroughWeek, Slot.Parse(["QB", "RB", "FLEX"]),
-                teams ?? [], unresolved ?? [], violations ?? [], new Dictionary<int, string>());
+                teams ?? [], unresolved ?? [], violations ?? [], new HashSet<int>());
 
         private static string Render(SeasonSnapshot snapshot)
         {
             var writer = new StringWriter();
-            StandingsRenderer.Render(SeasonPayloadMapper.ToIndividualSeasonPayload(snapshot, AsOf), snapshot, writer);
+            StandingsRenderer.Render(SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf), snapshot, writer);
             return writer.ToString();
         }
 

@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace FantasyLeague.Sleeper
+namespace FantasyLeague.Seasons
 {
     /// <summary>
     /// The one league this site serves, bound from the <c>League</c> configuration section.
@@ -35,7 +35,7 @@ namespace FantasyLeague.Sleeper
         public IList<string> ExcludedOwnerIds { get; } = [];
 
         /// <summary>
-        /// Gets or set the string to use as the league name, regardless of what's on sleeper's server
+        /// Gets or sets a name to show instead of the one set in Sleeper. Empty uses Sleeper's.
         /// </summary>
         public string OverrideLeagueName { get; set; } = string.Empty;
     }

@@ -29,7 +29,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("rb1", 18m, "RB"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(38m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(38m);
         }
 
         [Fact]
@@ -43,8 +43,8 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("rb1", 18m, "RB"),
             };
 
-            IdealLineupSolver.Solve(players, Roster.Slots("FLEX", "WR")).Points.Should().Be(38m);
-            IdealLineupSolver.Solve(players, Roster.Slots("WR", "FLEX")).Points.Should().Be(38m);
+            IdealLineupSolver.Solve(players, Roster.Slots("FLEX", "WR")).IdealPts.Should().Be(38m);
+            IdealLineupSolver.Solve(players, Roster.Slots("WR", "FLEX")).IdealPts.Should().Be(38m);
         }
 
         [Fact]
@@ -54,8 +54,8 @@ namespace FantasyLeague.Core.Tests
             var a = Roster.Player("wr1", 20m, "WR");
             var b = Roster.Player("rb1", 18m, "RB");
 
-            IdealLineupSolver.Solve([a, b], slots).Points
-                .Should().Be(IdealLineupSolver.Solve([b, a], slots).Points);
+            IdealLineupSolver.Solve([a, b], slots).IdealPts
+                .Should().Be(IdealLineupSolver.Solve([b, a], slots).IdealPts);
         }
 
         [Fact]
@@ -89,7 +89,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("hybrid", 12m, "RB", "WR"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(26m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(26m);
         }
 
         [Fact]
@@ -105,7 +105,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("wr1", 18m, "WR"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(67m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(67m);
         }
 
         [Fact]
@@ -154,7 +154,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("rb1", 0m, "RB"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(18m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(18m);
         }
     }
 
@@ -309,7 +309,7 @@ namespace FantasyLeague.Core.Tests
             {
                 var (players, slots) = Random(rng);
 
-                IdealLineupSolver.Solve(players, slots).Points
+                IdealLineupSolver.Solve(players, slots).IdealPts
                     .Should().Be(BruteForce(players, slots), $"case {i} should match brute force");
             }
         }
@@ -467,7 +467,7 @@ namespace FantasyLeague.Core.Tests
                 var rosterId = entry.GetProperty("roster_id").GetInt32();
                 var players = Roster(entry, positions, _ => 1m);
 
-                IdealLineupSolver.Solve(players, slots).Points
+                IdealLineupSolver.Solve(players, slots).IdealPts
                     .Should().Be(expected[rosterId], $"roster {rosterId}");
             }
         }
@@ -490,7 +490,7 @@ namespace FantasyLeague.Core.Tests
 
                 var players = Roster(entry, positions, _ => 1m);
 
-                IdealLineupSolver.Solve(players, slots).Points
+                IdealLineupSolver.Solve(players, slots).IdealPts
                     .Should().BeGreaterThanOrEqualTo(started, $"roster {rosterId}");
             }
         }

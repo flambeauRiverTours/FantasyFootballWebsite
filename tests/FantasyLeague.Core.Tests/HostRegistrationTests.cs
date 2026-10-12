@@ -1,4 +1,6 @@
-﻿using FantasyLeague.Sleeper;
+﻿using FantasyLeague.Data;
+using FantasyLeague.Seasons;
+using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +19,7 @@ namespace FantasyLeague.Core.Tests
             var services = new ServiceCollection();
             services.AddSingleton<IConfiguration>(configuration);
             services.AddLogging();
-            services.AddSleeperClient();
+            services.AddSeasonService();
 
             return services.BuildServiceProvider();
         }
@@ -58,7 +60,7 @@ namespace FantasyLeague.Core.Tests
                 services.AddSingleton<IConfiguration>(
                     new ConfigurationBuilder().AddEnvironmentVariables().Build());
                 services.AddLogging();
-                services.AddSleeperClient();
+                services.AddSeasonService();
 
                 using var provider = services.BuildServiceProvider();
                 Resolve(provider).CurrentLeagueId.Should().Be("env-league");
@@ -112,25 +114,49 @@ namespace FantasyLeague.Core.Tests
 
     public class HostCompositionTests
     {
-        private static ServiceProvider Provider(bool validate = true)
+        private static readonly ServiceProviderOptions Validated = new() { ValidateOnBuild = true, ValidateScopes = true };
+
+        private static ServiceProvider Provider()
         {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["League:CurrentLeagueId"] = "1234567890123456789",
-                })
-                .Build();
-
-            var services = new ServiceCollection();
-            services.AddSingleton<IConfiguration>(configuration);
-            services.AddLogging();
+            var services = TestServices.Create(("League:CurrentLeagueId", "1234567890123456789"));
             services.AddSleeperClient();
+            services.AddSeasonServiceWithNullStores();
 
-            return services.BuildServiceProvider(new ServiceProviderOptions
+            return services.BuildServiceProvider(Validated);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void The_functions_composition_works_in_either_order(bool dataFirst)
+        {
+            // nothing overlaps, so nothing depends on who registers first
+            var services = TestServices.Create();
+            if (dataFirst)
             {
-                ValidateOnBuild = validate,
-                ValidateScopes = validate,
-            });
+                services.AddFantasyData("Server=unused;Database=unused");
+            }
+
+            services.AddSleeperClient();
+            services.AddSeasonService();
+            if (!dataFirst)
+            {
+                services.AddFantasyData("Server=unused;Database=unused");
+            }
+
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IFinalizedWeekStore>().Should().NotBeOfType<NullFinalizedWeekStore>();
+        }
+
+        [Fact]
+        public void A_host_that_registers_no_stores_fails_at_build_rather_than_at_the_first_request()
+        {
+            var services = TestServices.Create();
+            services.AddSleeperClient();
+            services.AddSeasonService();
+
+            FluentActions.Invoking(() => services.BuildServiceProvider(Validated)).Should().Throw<AggregateException>();
         }
 
         [Fact]

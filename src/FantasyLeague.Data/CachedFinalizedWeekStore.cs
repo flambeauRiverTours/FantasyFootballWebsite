@@ -5,37 +5,29 @@ using Microsoft.Extensions.Logging;
 namespace FantasyLeague.Data
 {
     /// <summary>
-    /// Cache in front of the current week, to avoid successive db trips
+    /// Keeps each season's finalized weeks in memory in front of the blob and SQL.
     /// </summary>
-    /// <param name="inner">DB object for the finalized week</param>
-    /// <param name="cache">Hybrid cache object</param>
-    /// <param name="logger"></param>
-    internal sealed class CachedFinalizedWeekStore(BlobFirstFinalizedWeekStore inner, HybridCache cache,
+    /// <param name="inner">The blob-first store behind it.</param>
+    /// <param name="cache">The in-memory cache.</param>
+    /// <param name="logger">Logger.</param>
+    internal sealed class CachedFinalizedWeekStore(
+        BlobFirstFinalizedWeekStore inner,
+        HybridCache cache,
         ILogger<CachedFinalizedWeekStore> logger) : IFinalizedWeekStore
     {
+        /// <summary>
+        /// Finalized weeks change once a week, and every write clears the cache.
+        /// </summary>
         private static readonly HybridCacheEntryOptions Finalized = new() { Expiration = TimeSpan.FromHours(6) };
 
-        /// <summary>
-        /// Reads from the cache
-        /// </summary>
-        /// <param name="leagueId">League id to read from</param>
-        /// <param name="season">Season to read from</param>
-        /// <param name="cancellationToken">CT for the trip</param>
-        /// <returns>List of teamweeks in the cache/otehrwise read from db</returns>
+        /// <inheritdoc />
         public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season,
             CancellationToken cancellationToken) =>
             await cache.GetOrCreateAsync($"finalized:{leagueId}:{season}",
-                ct => new ValueTask<IReadOnlyList<TeamWeek>>(inner.ReadAsync(leagueId, season, ct)),
+                token => new ValueTask<IReadOnlyList<TeamWeek>>(inner.ReadAsync(leagueId, season, token)),
                 Finalized, tags: [Tag(leagueId)], cancellationToken: cancellationToken);
 
-        /// <summary>
-        /// Writes to the caches
-        /// </summary>
-        /// <param name="leagueId">League to write to</param>
-        /// <param name="season">Season to write to</param>
-        /// <param name="weeks">List of weeks to write</param>
-        /// <param name="cancellationToken">CT for the await operations</param>
-        /// <returns>Nothing</returns>
+        /// <inheritdoc />
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks,
             CancellationToken cancellationToken)
         {
@@ -46,6 +38,11 @@ namespace FantasyLeague.Data
             logger.LogInformation("Dropped cached weeks for league after a write.");
         }
 
+        /// <summary>
+        /// Tags every cached season of a league, so one write clears them all.
+        /// </summary>
+        /// <param name="leagueId">The league.</param>
+        /// <returns>The tag.</returns>
         private static string Tag(string leagueId) => $"finalized:{leagueId}";
     }
 }

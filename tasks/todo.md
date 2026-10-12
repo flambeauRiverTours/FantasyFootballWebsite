@@ -45,7 +45,7 @@ GitHub to Entra with no secret in the repo, and three workflows.
 | T04     | Slot parsing and eligibility                 | done — **A3's unknown-slot guard still missing**, its test sits skipped                                         |
 | T05     | Bitmask DP solver                            | done                                                                                                            |
 | T06     | Solver fixtures and tests                    | **blocked on data** — B1–B4                                                                                     |
-| T07–T08 | Consistency maths and edge cases             | done — F1, F2 open                                                                                              |
+| T07–T08 | Consistency maths and edge cases             | done — F1, F2 fixed 2026-10-12                                                                                  |
 | T09–T13 | DTOs, client, rate limit, resilience, cache  | done — F4 open                                                                                                  |
 | T14     | Player dump job                              | done, **and extended**: blob-backed store and daily timer (A12)                                                 |
 | T15–T16 | Season assembly, console harness             | done                                                                                                            |
@@ -214,13 +214,32 @@ one feeds the next.
             (`IsTestingPlatformApplication=false`, so CI's `dotnet test` is
             unchanged). Follow-ups: grep `TODO T61` for comments Jack is to
             evaluate; `CS1591` (missing XML docs) is suppressed pending domain 7.
-      - [ ] **1b · C# and .NET, high-level review** — approved 2026-10-12.
+      - [x] **1b · C# and .NET, high-level review** — approved and done 2026-10-12.
             Suggested order: 1–4, then 5–8, then 18–26 in one pass.
             **1–10 done 2026-10-12.** 358 tests pass, `dotnet format` clean,
             console run against the live league. The console now reads
             `League__CurrentLeagueId` (no longer `SLEEPER_LEAGUE_ID`) and
             applies `ExcludedOwnerIds`. The blob moved to
             `{league}/current.json`; the old `{league}/2026.json` is orphaned.
+            **11–17 done 2026-10-12** (A21). 366 tests pass, `dotnet format`
+            clean, console re-run live with identical output. Item 16 was a
+            wrong finding: `GetPlayersAsync` does return null for a literal
+            `null` body. The check stays and now throws `InvalidDataException`
+            like the reader cache.
+            **18–21 done 2026-10-12** (A22). The Sleeper project split into
+            `Sleeper` and `Seasons`; the console project is `FantasyLeague.Cli`.
+            366 tests pass, `dotnet format` clean, CLI re-run live with
+            identical figures. The old `src/FantasyLeague.Console` folder holds
+            only build output and could not be removed while locked; delete it.
+            **22–27 done 2026-10-12.** Doc comments rewritten where they restated
+            the signature or had drifted, implementations use `<inheritdoc/>`,
+            typos fixed, redundant EF configuration removed, long one-line
+            bodies wrapped, member order fixed. Migration `DropUnusedTables`
+            drops `Leagues`, `Players` and `Teams` (A19); the next deploy's
+            `migrate` job applies it. 366 tests pass, `dotnet format` clean, no
+            pending model changes.
+            **28–29 done 2026-10-12.** 28 needed nothing further (item 5 removed
+            `FinalizedUtc`). F1 and F2 fixed below; 368 tests pass.
             - Defects
               1. Delete the custom `ShouldRetry`, so the standard predicate
                  retries attempt timeouts and 500s; keep the rate-limit
@@ -378,13 +397,13 @@ clear what would and would not have input.
 
 Nothing here blocks anything.
 
-- [ ] **F1 · `Cv` reports 0.0 when the mean is zero but sigma is not.**
+- [x] **F1 · `Cv` reports 0.0 when the mean is zero but sigma is not.** Done 2026-10-12: `Cv` is null whenever the mean is zero, all-zero weeks included, matching what the chart already did client-side.
       `[-10, 10, -10, 10]` gives sigma 10 and CV 0.0, claiming perfect
       consistency for a team swinging ten points a week. It needs weekly totals
       that go negative, so it takes scoring settings this league may not have.
       The fix is one line: make `Cv` a `double?` and return null when the mean is
       zero, exactly as sigma returns null below four weeks.
-- [ ] **F2 · `Calculate([], 0)` throws "Sequence contains no elements".**
+- [x] **F2 · `Calculate([], 0)` throws "Sequence contains no elements".** Done 2026-10-12.
       Unreachable at the default `minWeeks: 4`, so it is only a caller error with
       a confusing message. `finalWeeks.Count == 0` in the guard settles it.
 - [ ] **F4 · The cache TTLs move the request budget from 2.2 to 12.2 req/min.**
@@ -489,8 +508,11 @@ Listed here only so their implementation state is visible in one place.
 | **A16** | Finalized weeks mirrored to blob, to remove SQL from the request path    | done — **T58**                                                          |
 | **A17** | σ leaves the standings table for a panel of its own                      | table done — panel is **T59**                                           |
 | **A18** | A licence shipped as a file is declared by version, not exempted         | done — Apache.Arrow, in `.github/license-overrides.json`                |
-| **A19** | `League`, `Player` and `Team` dropped; `League` returns with T29         | decided — T61 1b, item 27                                               |
+| **A19** | `League`, `Player` and `Team` dropped; `League` returns with T29         | done — migration `DropUnusedTables`, applied on next deploy             |
 | **A20** | The blob caches the current season; SQL keeps every season               | done — T61 1b, items 5–6                                                |
+| **A21** | Hosts compose, Data owns storage, policy is applied once                 | done — T61 1b, items 11–16                                              |
+| **A22** | Sleeper splits into Sleeper and Seasons; naming rules settle             | done — T61 1b, items 18–21                                              |
+| **A23** | `Pts` covers roster totals; tests may use `!` uncommented                | done — in `docs/standards.md`                                           |
 
 ---
 

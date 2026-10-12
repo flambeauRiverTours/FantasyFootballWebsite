@@ -9,14 +9,18 @@ using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Data
 {
+    /// <summary>
+    /// Registers every store: SQL for finalized weeks, and blob storage for the
+    /// current season and the player map.
+    /// </summary>
     public static class ServiceCollectionExtensions
     {
         /// <summary>
-        /// Adds fantasy data to the services
+        /// Registers <see cref="IFinalizedWeekStore"/> and <see cref="IPlayerMapStore"/>.
         /// </summary>
-        /// <param name="services">Service collection to add data to</param>
-        /// <param name="connectionString">Connection string to the sql server</param>
-        /// <returns>Updated services collection</returns>
+        /// <param name="services">The service collection.</param>
+        /// <param name="connectionString">The SQL connection string.</param>
+        /// <returns>The same service collection.</returns>
         public static IServiceCollection AddFantasyData(this IServiceCollection services, string? connectionString)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
@@ -31,38 +35,52 @@ namespace FantasyLeague.Data
                     sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)));
 
             services.AddHybridCache();
+            services.TryAddSingleton(TimeProvider.System);
 
-            // bound through the provider rather than BindConfiguration
-            services.AddOptions<BlobFinalizedWeekStoreOptions>()
-                .Configure<IServiceProvider>((options, provider) =>
-                    provider.GetService<IConfiguration>()?.GetSection("FinalizedWeekBlob").Bind(options))
+            services.AddOptions<BlobStorageOptions>()
+                .BindConfiguration("BlobStorage")
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
-            // AzureWebJobsStorage is already present wherever a Functions host runs
-            services.TryAddSingleton<IBlobFinalizedWeekStore>(provider =>
-            {
-                var blobStorage = provider.GetRequiredService<IOptions<BlobFinalizedWeekStoreOptions>>().Value;
-                var connectionString = blobStorage.ConnectionString
-                    ?? provider.GetService<IConfiguration>()?["AzureWebJobsStorage"];
+            services.AddSingleton<IBlobFinalizedWeekStore>(provider =>
+                Container(provider, o => o.FinalizedWeekContainer) is { } container
+                    ? new BlobFinalizedWeekStore(container, provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>())
+                    : new NullBlobFinalizedWeekStore());
 
-                if (string.IsNullOrWhiteSpace(connectionString))
-                {
-                    return new NullBlobFinalizedWeekStore();
-                }
-
-                return new BlobFinalizedWeekStore(
-                    new BlobServiceClient(connectionString).GetBlobContainerClient(blobStorage.ContainerName),
-                    provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>());
-            });
-
-            services.TryAddSingleton(TimeProvider.System);
+            services.AddSingleton<IPlayerMapStore>(provider =>
+                Container(provider, o => o.PlayerMapContainer) is { } container
+                    ? new BlobPlayerMapStore(
+                        container,
+                        provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.PlayerMapBlob,
+                        provider.GetRequiredService<ILogger<BlobPlayerMapStore>>())
+                    : new NullPlayerMapStore());
 
             services.AddSingleton<SqlFinalizedWeekStore>();
             services.AddSingleton<BlobFirstFinalizedWeekStore>();
             services.AddSingleton<IFinalizedWeekStore, CachedFinalizedWeekStore>();
 
             return services;
+        }
+
+        /// <summary>
+        /// Opens a container on the configured account.
+        /// </summary>
+        /// <param name="provider">The service provider.</param>
+        /// <param name="name">Picks the container's name from the options.</param>
+        /// <returns>The container, or null when no storage account is configured.</returns>
+        /// <remarks>
+        /// Falls back to <c>AzureWebJobsStorage</c>, which is already present
+        /// wherever a Functions host runs.
+        /// </remarks>
+        private static BlobContainerClient? Container(IServiceProvider provider, Func<BlobStorageOptions, string> name)
+        {
+            var options = provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value;
+            var connectionString = options.ConnectionString
+                ?? provider.GetRequiredService<IConfiguration>()["AzureWebJobsStorage"];
+
+            return string.IsNullOrWhiteSpace(connectionString)
+                ? null
+                : new BlobServiceClient(connectionString).GetBlobContainerClient(name(options));
         }
     }
 }

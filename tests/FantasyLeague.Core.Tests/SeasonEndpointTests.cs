@@ -1,4 +1,4 @@
-﻿using FantasyLeague.Sleeper;
+﻿using FantasyLeague.Seasons;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,31 +60,28 @@ namespace FantasyLeague.Core.Tests
 
     public class ExcludedRosterResolutionTests
     {
-        private static SeasonSnapshot Snapshot(params (int RosterId, string Name, string OwnerId)[] rosters) =>
-            new("", 2026, 1, 0, Slot.Parse(["QB"]),
-                [.. rosters.Select(r => new TeamSeason(r.RosterId, r.Name, []))],
-                [], [],
-                rosters.ToDictionary(r => r.RosterId, r => r.OwnerId));
+        private static IReadOnlyDictionary<int, string> Owners(params (int RosterId, string Name, string OwnerId)[] rosters) =>
+            rosters.ToDictionary(r => r.RosterId, r => r.OwnerId);
 
-        private static IReadOnlySet<int> Resolve(SeasonSnapshot snapshot, params string[] excludedOwnerIds) =>
-            SeasonPayloadMapper.ResolveExcludedRosters(snapshot, excludedOwnerIds).RosterIds;
+        private static IReadOnlySet<int> Resolve(IReadOnlyDictionary<int, string> owners, params string[] excludedOwnerIds) =>
+            ExcludedRosters.Resolve(owners, excludedOwnerIds).RosterIds;
 
-        private static IReadOnlyList<string> Unmatched(SeasonSnapshot snapshot, params string[] excludedOwnerIds) =>
-            SeasonPayloadMapper.ResolveExcludedRosters(snapshot, excludedOwnerIds).UnmatchedOwnerIds;
+        private static IReadOnlyList<string> Unmatched(IReadOnlyDictionary<int, string> owners, params string[] excludedOwnerIds) =>
+            ExcludedRosters.Resolve(owners, excludedOwnerIds).UnmatchedOwnerIds;
 
         [Fact]
         public void An_owner_id_resolves_to_this_seasons_roster()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+            var owners = Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
 
-            Resolve(snapshot, "u9").Should().Equal(9);
+            Resolve(owners, "u9").Should().Equal(9);
         }
 
         [Fact]
         public void A_rename_does_not_smuggle_the_team_back_in()
         {
             // A1's whole reason for matching on user id
-            var renamed = Snapshot((1, "Real Team", "u1"), (9, "Suddenly A Serious Name", "u9"));
+            var renamed = Owners((1, "Real Team", "u1"), (9, "Suddenly A Serious Name", "u9"));
 
             Resolve(renamed, "u9").Should().Equal(9);
         }
@@ -93,7 +90,7 @@ namespace FantasyLeague.Core.Tests
         public void The_same_owner_on_a_different_roster_number_still_resolves()
         {
             // roster ids are reassigned between seasons; user ids are not
-            var nextSeason = Snapshot((3, "POON SQUAD", "u9"), (4, "Real Team", "u1"));
+            var nextSeason = Owners((3, "POON SQUAD", "u9"), (4, "Real Team", "u1"));
 
             Resolve(nextSeason, "u9").Should().Equal(3);
         }
@@ -101,81 +98,75 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void No_configured_exclusions_excludes_nobody()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+            var owners = Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
 
-            Resolve(snapshot).Should().BeEmpty();
+            Resolve(owners).Should().BeEmpty();
         }
 
         [Fact]
         public void An_owner_id_that_matches_no_roster_is_ignored()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"));
+            var owners = Owners((1, "Real Team", "u1"));
 
-            Resolve(snapshot, "u-nobody").Should().BeEmpty();
+            Resolve(owners, "u-nobody").Should().BeEmpty();
         }
 
         [Fact]
         public void Owner_ids_are_matched_exactly()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+            var owners = Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
 
-            Resolve(snapshot, "U9").Should().BeEmpty("ids are opaque strings, not case-insensitive names");
+            Resolve(owners, "U9").Should().BeEmpty("ids are opaque strings, not case-insensitive names");
         }
 
         [Fact]
         public void Two_excluded_owners_both_resolve()
         {
-            var snapshot = Snapshot((1, "A", "u1"), (2, "B", "u2"), (3, "C", "u3"));
+            var owners = Owners((1, "A", "u1"), (2, "B", "u2"), (3, "C", "u3"));
 
-            Resolve(snapshot, "u1", "u3").Should().BeEquivalentTo([1, 3]);
+            Resolve(owners, "u1", "u3").Should().BeEquivalentTo([1, 3]);
         }
 
         [Fact]
-        public void A_roster_with_no_owner_cannot_be_excluded_and_does_not_throw()
-        {
-            // an orphaned roster is absent from RosterOwnerIds entirely
-            var snapshot = new SeasonSnapshot("", 2026, 1, 0, Slot.Parse(["QB"]),
-                [new TeamSeason(5, "Orphan", [])], [], [],
-                new Dictionary<int, string>());
-
-            Resolve(snapshot, "u9").Should().BeEmpty();
-        }
+        public void A_roster_with_no_owner_cannot_be_excluded_and_does_not_throw() =>
+            // an orphaned roster is absent from the owner map entirely
+            Resolve(new Dictionary<int, string>(), "u9").Should().BeEmpty();
 
         [Fact]
         public void An_owner_id_that_matches_no_roster_is_reported()
         {
             // a typo would otherwise leave the team in every metric, silently
-            var snapshot = Snapshot((1, "Real Team", "u1"));
+            var owners = Owners((1, "Real Team", "u1"));
 
-            Unmatched(snapshot, "u9").Should().Equal("u9");
+            Unmatched(owners, "u9").Should().Equal("u9");
         }
 
         [Fact]
         public void A_matched_owner_id_is_not_reported()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+            var owners = Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
 
-            Unmatched(snapshot, "u9").Should().BeEmpty();
+            Unmatched(owners, "u9").Should().BeEmpty();
         }
 
         [Fact]
         public void Only_the_unmatched_id_is_reported_from_a_mixed_list()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+            var owners = Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
 
-            Unmatched(snapshot, "u9", "u-typo").Should().Equal("u-typo");
+            Unmatched(owners, "u9", "u-typo").Should().Equal("u-typo");
         }
 
         [Fact]
         public void A_wrongly_cased_id_is_reported_rather_than_quietly_matched()
         {
-            var snapshot = Snapshot((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
+            var owners = Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9"));
 
-            Unmatched(snapshot, "U9").Should().Equal("U9");
+            Unmatched(owners, "U9").Should().Equal("U9");
         }
 
         [Fact]
-        public void Nothing_is_reported_when_nothing_is_configured() => Unmatched(Snapshot((1, "Real Team", "u1"))).Should().BeEmpty();
+        public void Nothing_is_reported_when_nothing_is_configured() => Unmatched(Owners((1, "Real Team", "u1"))).Should().BeEmpty();
 
         [Fact]
         public void The_resolved_ids_drop_the_team_from_the_payload()
@@ -186,10 +177,9 @@ namespace FantasyLeague.Core.Tests
                     new TeamSeason(9, "POON SQUAD", [new TeamWeek(9, 1, 0m, 0m, [], [], [], true, new Dictionary<string, decimal>())]),
                 ],
                 [], [],
-                new Dictionary<int, string> { [1] = "u1", [9] = "u9" });
+                Resolve(Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9")), "u9"));
 
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
-                snapshot, DateTimeOffset.UtcNow, Resolve(snapshot, "u9"));
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, DateTimeOffset.UtcNow);
 
             payload.Teams.Should().ContainSingle().Which.Name.Should().Be("Real Team");
         }
@@ -215,7 +205,7 @@ namespace FantasyLeague.Core.Tests
             var services = new ServiceCollection();
             services.AddSingleton<IConfiguration>(configuration);
             services.AddLogging();
-            services.AddSleeperClient();
+            services.AddSeasonService();
 
             using var provider = services.BuildServiceProvider();
 

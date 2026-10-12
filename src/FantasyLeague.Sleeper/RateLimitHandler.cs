@@ -10,7 +10,7 @@ namespace FantasyLeague.Sleeper
         : HttpRequestException(message);
 
     /// <summary>
-    /// A delegating handler that enforces the local rate limit for Sleeper API requests.  
+    /// A delegating handler that enforces the local rate limit for Sleeper API requests.
     /// </summary>
     /// <param name="limiter">The rate limiter to use.</param>
     internal sealed class RateLimitHandler(RateLimiter limiter) : DelegatingHandler

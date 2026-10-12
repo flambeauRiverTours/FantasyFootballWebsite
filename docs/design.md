@@ -6,7 +6,7 @@
 > **Corrected in place on 2026-09-13 against what was actually built.** This file
 > is now edited directly rather than re-synced; a re-sync would reinstate the
 > errors marked **Corrected** below. The reasoning behind each change is in
-> [`amendments.md`](amendments.md), keyed A1–A20.
+> [`amendments.md`](amendments.md), keyed A1–A23.
 >
 > 11 decisions · 1 risk · 8 open questions, 5 of them now answered.
 
@@ -521,9 +521,11 @@ A stated assumption deserves a cheap assertion, not faith. The week loses its ra
 
 ```
 src/
-  FantasyLeague.Core/          ideal-lineup solver, consistency maths — no Azure deps
-  FantasyLeague.Sleeper/       typed client, rate-limit handler, DTOs
-  FantasyLeague.Data/          EF Core context, migrations
+  FantasyLeague.Core/          ideal-lineup solver, consistency maths, store interfaces — no Azure deps
+  FantasyLeague.Sleeper/       typed client, rate-limit handler, DTOs, the reader that maps them (A22)
+  FantasyLeague.Seasons/       season assembly, player map refresh, payload and ETag (A22)
+  FantasyLeague.Data/          EF Core context, migrations, every blob store (A21)
+  FantasyLeague.Cli/           the console harness
   FantasyLeague.Functions/     HTTP + Timer triggers, DI wiring
 web/                           Vite · React · TypeScript · D3
 tests/

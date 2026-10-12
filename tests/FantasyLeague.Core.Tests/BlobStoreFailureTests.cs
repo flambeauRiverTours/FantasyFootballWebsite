@@ -2,7 +2,6 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using FantasyLeague.Data;
-using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -118,5 +117,24 @@ namespace FantasyLeague.Core.Tests
             await PlayerMapStore(status).Invoking(s => s.WriteAsync(map, default))
                 .Should().NotThrowAsync();
         }
+    }
+    public class BlobPlayerMapStoreTests
+    {
+        [Fact]
+        public async Task A_stored_map_reads_back()
+        {
+            var store = new BlobPlayerMapStore(new MemoryContainer(), "players.json", NullLogger<BlobPlayerMapStore>.Instance);
+            var map = new StoredPlayerMap(
+                DateTimeOffset.UnixEpoch,
+                new Dictionary<string, PlayerRef> { ["4046"] = new("Patrick Mahomes", "KC", ["QB"]) });
+
+            await store.WriteAsync(map, TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(TestContext.Current.CancellationToken);
+
+            read!.Players["4046"].FantasyPositions.Should().Equal("QB");
+        }
+
+        [Fact]
+        public async Task Nothing_stored_reads_back_null() => (await new BlobPlayerMapStore(new MemoryContainer(), "players.json", NullLogger<BlobPlayerMapStore>.Instance).ReadAsync(TestContext.Current.CancellationToken)).Should().BeNull();
     }
 }

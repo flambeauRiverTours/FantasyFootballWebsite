@@ -8,7 +8,7 @@
     /// <param name="Week">The week Sleeper considers current.</param>
     /// <param name="DisplayWeek">The week shown in the app, which can lag <paramref name="Week"/> around a rollover.</param>
     /// <param name="PreviousSeason">The season before this one.</param>
-    internal sealed record NflStateDto(
+    internal sealed record NFLStateDto(
         int Season,
         string? SeasonType,
         int Week,

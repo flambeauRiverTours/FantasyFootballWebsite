@@ -72,7 +72,7 @@ namespace FantasyLeague.Core.Tests
         {
             // Sleeper sends "2026", not 2026. Without
             // JsonNumberHandling.AllowReadingFromString this throws.
-            var state = Read<NflStateDto>(
+            var state = Read<NFLStateDto>(
                 """{"season":"2026","season_type":"regular","week":1,"display_week":1,"previous_season":"2025"}""");
 
             state.Season.Should().Be(2026);
@@ -159,7 +159,7 @@ namespace FantasyLeague.Core.Tests
                 Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
-                .Actual.Should().Be(91m);
+                .ActualPts.Should().Be(91m);
         }
 
         [Fact]
@@ -182,7 +182,7 @@ namespace FantasyLeague.Core.Tests
                 Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
-                .Actual.Should().Be(88.4m);
+                .ActualPts.Should().Be(88.4m);
         }
 
         [Fact]

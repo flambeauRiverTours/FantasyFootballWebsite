@@ -7,12 +7,25 @@ using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Data
 {
+    /// <summary>
+    /// One rostered player inside <see cref="WeekScore.PlayersPointsJson"/>.
+    /// </summary>
+    /// <param name="Id">Sleeper's player id.</param>
+    /// <param name="Name">The player's name.</param>
+    /// <param name="Positions">The player's fantasy positions.</param>
+    /// <param name="Points">What the player scored that week.</param>
     internal sealed record StoredPlayer(
         string Id,
         string Name,
         IReadOnlyList<string> Positions,
         decimal Points);
 
+    /// <summary>
+    /// Every season's finalized weeks, in SQL (A20).
+    /// </summary>
+    /// <param name="contexts">Creates a context per call.</param>
+    /// <param name="time">Clock for each row's write time.</param>
+    /// <param name="logger">Logger.</param>
     internal sealed class SqlFinalizedWeekStore(
         IDbContextFactory<FantasyDataContext> contexts,
         TimeProvider time,
@@ -20,13 +33,11 @@ namespace FantasyLeague.Data
     {
         private static readonly JsonSerializerOptions Json = new();
 
-        /// <summary>
-        /// Reads a given set of team weeks for a league and season
-        /// </summary>
-        /// <param name="leagueId">League Id</param>
-        /// <param name="season">Season year</param>
-        /// <param name="cancellationToken"></param>
-        /// <returns>List of teamweeks for the year and league</returns>
+        /// <inheritdoc />
+        /// <remarks>
+        /// A database still waking after its retries returns empty, so the
+        /// season is rebuilt from Sleeper rather than the request failing.
+        /// </remarks>
         public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
             try
@@ -47,14 +58,7 @@ namespace FantasyLeague.Data
             }
         }
 
-        /// <summary>
-        /// Writes a given set of weeks to the db
-        /// </summary>
-        /// <param name="leagueId">Leage to write to</param>
-        /// <param name="season">Season to write to</param>
-        /// <param name="weeks">Week data to write</param>
-        /// <param name="cancellationToken"></param>
-        /// <returns>Nothing - await async op</returns>
+        /// <inheritdoc />
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
             if (weeks.Count == 0)
@@ -93,10 +97,10 @@ namespace FantasyLeague.Data
         }
 
         /// <summary>
-        /// Creates a new TeamWeek object based on the input WeekScore
+        /// Reads a row back into the domain.
         /// </summary>
-        /// <param name="row">WeekScore object to use</param>
-        /// <returns>Teamweek object</returns>
+        /// <param name="row">The stored row.</param>
+        /// <returns>The week it holds.</returns>
         private static TeamWeek ToDomain(WeekScore row) =>
             new(row.RosterId,
                 row.Week,
@@ -109,13 +113,13 @@ namespace FantasyLeague.Data
                 FromSlotJson(row.SlotAveragesJson));
 
         /// <summary>
-        /// Creates a WeekScore db object based on an input teamweek
+        /// Creates the row for a week not yet stored.
         /// </summary>
-        /// <param name="leagueId">League to apply change to</param>
-        /// <param name="season">Season to modify</param>
-        /// <param name="week">Teamweek data object</param>
-        /// <param name="now">When the row was computed</param>
-        /// <returns>Weekscore object created</returns>
+        /// <param name="leagueId">The league.</param>
+        /// <param name="season">The season year.</param>
+        /// <param name="week">The week to store.</param>
+        /// <param name="now">When the row is written.</param>
+        /// <returns>The new row.</returns>
         private static WeekScore ToRow(string leagueId, int season, TeamWeek week, DateTimeOffset now)
         {
             var row = new WeekScore
@@ -131,15 +135,15 @@ namespace FantasyLeague.Data
         }
 
         /// <summary>
-        /// Applies teamweek to the WeekScore
+        /// Copies a week's values onto its row, new or existing.
         /// </summary>
-        /// <param name="week">TeamWeek source of data</param>
-        /// <param name="row">WeekScore target for data</param>
-        /// <param name="now">When the row was computed</param>
+        /// <param name="week">The week to store.</param>
+        /// <param name="row">The row to update.</param>
+        /// <param name="now">When the row is written.</param>
         private static void Apply(TeamWeek week, WeekScore row, DateTimeOffset now)
         {
-            row.ActualPts = week.Actual;
-            row.IdealPts = week.Ideal;
+            row.ActualPts = week.ActualPts;
+            row.IdealPts = week.IdealPts;
             row.StartersJson = ToJson(week.Starters);
             row.IdealLineupJson = ToJson(week.IdealLineup);
             row.PlayersPointsJson = ToPlayersJson(week.Players);
@@ -149,44 +153,49 @@ namespace FantasyLeague.Data
         }
 
         /// <summary>
-        /// Tranlates player objects to Json
+        /// Writes player ids as a JSON array.
         /// </summary>
-        /// <param name="players">Plays to Json-ize</param>
-        /// <returns>Json string</returns>
-        private static string ToJson(IReadOnlyList<PlayerId> players) => JsonSerializer.Serialize(players.Select(p => p.Value).ToArray(), Json);
+        /// <param name="players">The ids.</param>
+        /// <returns>The JSON.</returns>
+        private static string ToJson(IReadOnlyList<PlayerId> players) =>
+            JsonSerializer.Serialize(players.Select(p => p.Value).ToArray(), Json);
 
         /// <summary>
-        /// Writes a list of players to Json
+        /// Writes rostered players and their points as JSON.
         /// </summary>
-        /// <param name="players">List of players to Json-ize</param>
-        /// <returns>JSON-ized string of players</returns>
+        /// <param name="players">The players.</param>
+        /// <returns>The JSON.</returns>
         private static string ToPlayersJson(IReadOnlyList<RosteredPlayer> players) =>
             JsonSerializer.Serialize(
                 players.Select(p => new StoredPlayer(p.Id.Value, p.Name, p.FantasyPositions, p.Points)).ToArray(),
                 Json);
 
         /// <summary>
-        /// Gets rosterd players from Json
+        /// Reads rostered players and their points from JSON.
         /// </summary>
-        /// <param name="json">Json player string</param>
-        /// <returns>Rostered players</returns>
-        private static IReadOnlyList<RosteredPlayer> FromPlayersJson(string json) => string.IsNullOrWhiteSpace(json)
-                ? [] : [.. (JsonSerializer.Deserialize<StoredPlayer[]>(json, Json) ?? [])
+        /// <param name="json">The stored JSON.</param>
+        /// <returns>The players.</returns>
+        private static IReadOnlyList<RosteredPlayer> FromPlayersJson(string json) =>
+            string.IsNullOrWhiteSpace(json)
+                ? []
+                : [.. (JsonSerializer.Deserialize<StoredPlayer[]>(json, Json) ?? [])
                     .Select(p => new RosteredPlayer(new PlayerId(p.Id), p.Name, p.Positions, p.Points))];
 
         /// <summary>
-        /// Gets plays Ids from Json
+        /// Reads player ids from a JSON array.
         /// </summary>
-        /// <param name="json">String player json</param>
-        /// <returns>List of player Ids</returns>
-        private static IReadOnlyList<PlayerId> FromJson(string json) => string.IsNullOrWhiteSpace(json) ? []
+        /// <param name="json">The stored JSON.</param>
+        /// <returns>The ids.</returns>
+        private static IReadOnlyList<PlayerId> FromJson(string json) =>
+            string.IsNullOrWhiteSpace(json)
+                ? []
                 : [.. (JsonSerializer.Deserialize<string[]>(json, Json) ?? []).Select(v => new PlayerId(v))];
 
         /// <summary>
-        /// Reads per-slot averages from Json
+        /// Reads per-slot averages from JSON.
         /// </summary>
-        /// <param name="json">Json slot-average string</param>
-        /// <returns>Per-slot averages, or empty when the row predates M6 or the week carried none</returns>
+        /// <param name="json">The stored JSON.</param>
+        /// <returns>Per-slot averages, empty for a row written before they existed or a week excluded from the radar.</returns>
         private static IReadOnlyDictionary<string, decimal> FromSlotJson(string json) =>
             string.IsNullOrWhiteSpace(json)
                 ? new Dictionary<string, decimal>()

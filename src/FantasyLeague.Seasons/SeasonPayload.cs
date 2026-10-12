@@ -1,10 +1,10 @@
-﻿namespace FantasyLeague.Sleeper
+﻿namespace FantasyLeague.Seasons
 {
     /// <summary>
     /// The §09 response body for one season. Table and chart derive from this one
     /// payload, so they cannot disagree.
     /// </summary>
-    /// <param name="LeagueName">The name of the league</param>
+    /// <param name="LeagueName">The league's name, after any configured override.</param>
     /// <param name="Season">The season these weeks belong to.</param>
     /// <param name="IsCurrent">Whether this is the live season. Decides the cache headers and whether the page polls.</param>
     /// <param name="CurrentWeek">The week Sleeper considers current.</param>
@@ -70,13 +70,4 @@
         decimal Actual,
         decimal Ideal,
         bool IsFinal);
-
-    /// <summary>
-    /// The §09 response body for <c>/api/seasons</c>.
-    /// </summary>
-    /// <param name="Current">The live season.</param>
-    /// <param name="Available">Every season that can be served, newest first. One entry until D8's chain walk lands.</param>
-    public sealed record SeasonsPayload(
-        int Current,
-        IReadOnlyList<int> Available);
 }
