@@ -4,7 +4,9 @@ using System.Text.Json;
 using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Core.Tests
 {
@@ -315,8 +317,67 @@ namespace FantasyLeague.Core.Tests
         }
     }
 
+    /// <summary>
+    /// Keeps every log entry at warning or above, for tests that count them.
+    /// </summary>
+    internal sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public List<string> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new Capturing(Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Capturing(List<string> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (IsEnabled(logLevel))
+                {
+                    lock (entries)
+                    {
+                        entries.Add(formatter(state, exception));
+                    }
+                }
+            }
+        }
+    }
+
     public class SeasonServiceReportingTests
     {
+        [Fact]
+        public async Task A_problem_is_logged_once_however_often_the_season_is_rebuilt()
+        {
+            // a build every 5 s would otherwise repeat the same warning all Sunday
+            var logs = new CapturingLoggerProvider();
+            var services = TestServices.Create();
+            services.AddLogging(b => b.AddProvider(logs));
+            services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
+                    .ConfigurePrimaryHttpMessageHandler(() => OneWeek(Bodies.Matchup(
+                        rosterId: 1,
+                        points: 99m,
+                        players: ["qb1", "rb1", "wr1", "ghost"])));
+            services.AddSeasonServiceWithNullStores();
+            using var provider = services.BuildServiceProvider();
+
+            for (var build = 0; build < 3; build++)
+            {
+                await provider.GetRequiredService<HybridCache>().RemoveAsync("season:L1", TestContext.Current.CancellationToken);
+                await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
+            }
+
+            logs.Entries.Should().ContainSingle(e => e.Contains("ghost"));
+            logs.Entries.Where(e => e.StartsWith("Invariant", StringComparison.Ordinal))
+                .Should().HaveCount(2, "two invariants fail, each logged once");
+        }
+
         private static async Task<(ISeasonService Service, ServiceProvider Provider)> BuildAsync(LeagueSocket socket)
         {
             var services = TestServices.Create();

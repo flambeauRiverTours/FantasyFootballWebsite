@@ -54,6 +54,7 @@ namespace FantasyLeague.Seasons
     /// <param name="cache">Holds a built season for the cache window.</param>
     /// <param name="options">The configured league and its local rules.</param>
     /// <param name="time">Clock for the build's duration.</param>
+    /// <param name="reported">What this instance has already logged.</param>
     /// <param name="logger">Logger.</param>
     internal sealed class SeasonService(
         ISleeperReader sleeper,
@@ -62,6 +63,7 @@ namespace FantasyLeague.Seasons
         HybridCache cache,
         IOptions<LeagueOptions> options,
         TimeProvider time,
+        ReportedProblems reported,
         ILogger<SeasonService> logger) : ISeasonService
     {
         /// <summary>Tolerance for both invariants: Sleeper reports points to the cent.</summary>
@@ -265,20 +267,20 @@ namespace FantasyLeague.Seasons
         }
 
         /// <summary>
-        /// Records every invariant breach and unresolved player, once per build
-        /// rather than once per request that reads it.
+        /// Logs each invariant breach and unresolved player the first time this
+        /// instance sees it, rather than on every build.
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
         private void Report(SeasonSnapshot snapshot)
         {
-            foreach (var violation in snapshot.Violations)
+            foreach (var violation in snapshot.Violations.Where(v => reported.IsNew($"invariant:{v.Invariant}:{v.RosterId}:{v.Week}")))
             {
                 logger.LogError(
                     "Invariant {Invariant} failed for roster {RosterId} in week {Week}: Sleeper scored {SleeperPts}, compared against {ComparedPts}.",
                     violation.Invariant, violation.RosterId, violation.Week, violation.SleeperPts, violation.ComparedPts);
             }
 
-            foreach (var playerId in snapshot.UnresolvedPlayerIds)
+            foreach (var playerId in snapshot.UnresolvedPlayerIds.Where(id => reported.IsNew($"player:{id}")))
             {
                 logger.LogWarning("Rostered player {PlayerId} is missing from the player map.", playerId);
             }

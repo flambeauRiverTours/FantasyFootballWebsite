@@ -428,10 +428,11 @@ one feeds the next.
             empty-column guard (rows from before `AddSlotAveragesJson`); an
             empty lineup or player column now throws. The per-build timing
             line is Debug. 378 tests pass, `dotnet format` clean.
-            Left: 22–23, folded into domain 7. Noticed while doing 25:
-            `SeasonService.Report` still logs every unresolved player and
-            invariant breach on every build, so one unknown player is a warning
-            every 5 s under load.
+            Left: 22–23, folded into domain 7.
+            **Report logging fixed 2026-10-13** (found while doing 25): each
+            unresolved player and invariant breach is logged once per instance,
+            through a singleton `ReportedProblems`, instead of on every 5 s
+            build. 379 tests pass; the new test fails with the check disabled.
             - Kluges
               1. ~~A missing storage account silently registers no-op blob stores~~
               2. ~~`Program.cs` comment names a catch that moved~~
