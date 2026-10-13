@@ -32,7 +32,6 @@ namespace FantasyLeague.Sleeper
         /// with the whole outbound pipeline: resilience on the outside, this
         /// application's rate limit on the inside.
         /// </summary>
-        /// <param name="services">The service collection.</param>
         /// <param name="configureResilience">
         /// Optional overrides applied after the defaults below, for a host that
         /// needs different settings or a test that cannot wait out real backoff.

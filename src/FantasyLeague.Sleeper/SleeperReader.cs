@@ -16,25 +16,19 @@ namespace FantasyLeague.Sleeper
         /// <summary>
         /// Gets the season and week Sleeper considers current.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The current NFL season and week.</returns>
         Task<NFLState> GetNFLStateAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Gets a league's name, slots and teams.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The league as this season's standings need it.</returns>
         Task<SleeperLeague> GetLeagueAsync(string leagueId, CancellationToken cancellationToken);
 
         /// <summary>
         /// Gets every roster's week, joined to the player map.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
-        /// <param name="week">The week.</param>
         /// <param name="playerMap">The projected player map.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>One entry per roster.</returns>
         Task<IReadOnlyList<RosterWeek>> GetWeekAsync(
             string leagueId,
@@ -46,7 +40,6 @@ namespace FantasyLeague.Sleeper
         /// Fetches the 14 MB player dump and projects it to the slim map. Never cached:
         /// the daily refresh is the only caller.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>Every startable player by id.</returns>
         /// <exception cref="InvalidDataException">Sleeper answered with no players at all.</exception>
         Task<IReadOnlyDictionary<string, PlayerRef>> GetPlayersAsync(CancellationToken cancellationToken);
@@ -153,7 +146,6 @@ namespace FantasyLeague.Sleeper
         /// <param name="key">The cache key.</param>
         /// <param name="fetch">Calls Sleeper on a miss.</param>
         /// <param name="options">How long the response lives.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The cached or fetched response.</returns>
         /// <remarks>
         /// HybridCache hands back a freshly deserialized copy of anything it

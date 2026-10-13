@@ -22,7 +22,6 @@
         /// <summary>
         /// Reads the stored map.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The stored map, or null when nothing has been stored or the store is unreachable.</returns>
         Task<StoredPlayerMap?> ReadAsync(CancellationToken cancellationToken);
 
@@ -30,7 +29,6 @@
         /// Replaces the stored map.
         /// </summary>
         /// <param name="map">The map to store.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the map has been written.</returns>
         Task WriteAsync(StoredPlayerMap map, CancellationToken cancellationToken);
     }

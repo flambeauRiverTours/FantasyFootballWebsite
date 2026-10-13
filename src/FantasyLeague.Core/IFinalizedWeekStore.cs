@@ -16,7 +16,6 @@
         /// </summary>
         /// <param name="leagueId">The league the season belongs to.</param>
         /// <param name="season">The season year.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>
         /// Every finalized week held for that season, empty when none are stored.
         /// </returns>
@@ -31,7 +30,6 @@
         /// <param name="leagueId">The league the season belongs to.</param>
         /// <param name="season">The season year.</param>
         /// <param name="weeks">The weeks to store, every one of them final.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the weeks have been stored.</returns>
         /// <exception cref="ArgumentException">A week is still in progress; nothing is stored.</exception>
         /// <remarks>

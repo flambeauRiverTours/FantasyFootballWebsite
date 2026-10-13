@@ -12,7 +12,6 @@ namespace FantasyLeague.Seasons
         /// Registers <see cref="ISeasonService"/> and <see cref="IPlayerMapRefresher"/>,
         /// bound to the configured league.
         /// </summary>
-        /// <param name="services">The service collection.</param>
         /// <returns>The same service collection.</returns>
         /// <remarks>
         /// Needs <c>AddSleeperClient</c>, plus an <c>IFinalizedWeekStore</c> and an

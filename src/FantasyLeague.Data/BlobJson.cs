@@ -14,7 +14,6 @@ namespace FantasyLeague.Data
         /// </summary>
         /// <typeparam name="T">The stored shape.</typeparam>
         /// <param name="blob">The blob.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The stored value, or null when the blob does not exist.</returns>
         public static async Task<T?> ReadAsync<T>(BlobClient blob, CancellationToken cancellationToken)
             where T : class
@@ -37,7 +36,6 @@ namespace FantasyLeague.Data
         /// <param name="container">The container.</param>
         /// <param name="blobName">The blob's name.</param>
         /// <param name="value">The value to store.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The number of bytes written.</returns>
         public static async Task<long> WriteAsync<T>(BlobContainerClient container, string blobName, T value, CancellationToken cancellationToken)
         {

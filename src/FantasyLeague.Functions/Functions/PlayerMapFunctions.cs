@@ -8,7 +8,6 @@ namespace FantasyLeague.Functions.Functions
     /// Keeps the stored player map current.
     /// </summary>
     /// <param name="players">The refresher.</param>
-    /// <param name="logger">Logger.</param>
     public sealed class PlayerMapFunctions(
         IPlayerMapRefresher players,
         ILogger<PlayerMapFunctions> logger)
@@ -17,7 +16,6 @@ namespace FantasyLeague.Functions.Functions
         /// Refetches the dump and replaces the stored map.
         /// </summary>
         /// <param name="timer">The schedule that fired.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the map has been replaced.</returns>
         [Function("RefreshPlayerMap")]
         public async Task RefreshPlayerMap(

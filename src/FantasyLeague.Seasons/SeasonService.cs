@@ -17,14 +17,12 @@ namespace FantasyLeague.Seasons
         /// Builds the configured league's current season, with the league's
         /// name override and exclusions applied.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>Every roster's weeks, plus whatever did not add up.</returns>
         Task<SeasonSnapshot> BuildAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Gets the season Sleeper considers current, without building it.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The current season's year.</returns>
         Task<int> GetCurrentSeasonAsync(CancellationToken cancellationToken);
     }
@@ -55,7 +53,6 @@ namespace FantasyLeague.Seasons
     /// <param name="options">The configured league and its local rules.</param>
     /// <param name="time">Clock for the build's duration.</param>
     /// <param name="reported">What this instance has already logged.</param>
-    /// <param name="logger">Logger.</param>
     internal sealed class SeasonService(
         ISleeperReader sleeper,
         IPlayerMapRefresher players,
@@ -95,7 +92,6 @@ namespace FantasyLeague.Seasons
         /// Assembles the season from Sleeper and the store.
         /// </summary>
         /// <param name="configured">The league and its local rules.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>Every roster's weeks, plus whatever did not add up.</returns>
         private async Task<SeasonSnapshot> BuildUncachedAsync(LeagueOptions configured, CancellationToken cancellationToken)
         {
@@ -146,11 +142,9 @@ namespace FantasyLeague.Seasons
         /// <summary>
         /// Reads every week so far: finalized ones from the store, the rest from Sleeper.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <param name="state">The current season and week.</param>
         /// <param name="slots">Startable slots for this season.</param>
         /// <param name="playerMap">The player map Sleeper's weeks are joined to.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>Every roster's weeks, with what did not resolve or add up.</returns>
         private async Task<SeasonWeeks> ReadWeeksAsync(
             string leagueId,
@@ -187,7 +181,6 @@ namespace FantasyLeague.Seasons
         /// Solves one roster's week and attributes its points to slots.
         /// </summary>
         /// <param name="mapped">The roster's week from Sleeper.</param>
-        /// <param name="week">The week.</param>
         /// <param name="slots">Startable slots for this season.</param>
         /// <param name="isFinal">Whether the week's scores are settled.</param>
         /// <returns>The week as the domain holds it.</returns>
@@ -246,7 +239,6 @@ namespace FantasyLeague.Seasons
         /// </summary>
         /// <param name="mapped">The mapped week.</param>
         /// <param name="idealPts">Ideal points from the solver.</param>
-        /// <param name="week">The week.</param>
         /// <returns>Whatever failed, or empty.</returns>
         private static IReadOnlyList<InvariantViolation> Check(RosterWeek mapped, decimal idealPts, int week)
         {

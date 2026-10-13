@@ -13,7 +13,6 @@ namespace FantasyLeague.Data
     /// <param name="sql">Every season's finalized weeks.</param>
     /// <param name="blob">The current season only. It decides for itself which season that is.</param>
     /// <param name="cache">The in-memory cache.</param>
-    /// <param name="logger">Logger.</param>
     internal sealed class FinalizedWeekStore(
         SqlFinalizedWeekStore sql,
         BlobFinalizedWeekStore blob,
@@ -67,9 +66,7 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Reads the blob, falling back to SQL and priming the blob with what SQL held.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <param name="season">The season.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The season's finalized weeks, empty when none are stored.</returns>
         private async Task<IReadOnlyList<TeamWeek>> ReadThroughAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
@@ -89,7 +86,6 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Tags every cached season of a league, so one write clears them all.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <returns>The tag.</returns>
         private static string Tag(string leagueId) => $"finalized:{leagueId}";
 

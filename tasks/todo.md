@@ -501,14 +501,14 @@ one feeds the next.
             381 tests pass, `dotnet format` clean, the Bicep builds and lints
             clean, the workflows parse. Not yet deployed.
             **Before merging, by hand:**
-            - [ ] Grant the CI principal Role Based Access Control
+            - [x] Grant the CI principal Role Based Access Control
                   Administrator on the resource group, with the condition in
                   runbook step 4. Without it the deploy turns shared keys off
                   and then fails to grant the roles that replace them, leaving
                   the app unable to reach storage.
             - [ ] After the first green deploy, delete the
                   `AZURE_STATIC_WEB_APPS_API_TOKEN` GitHub secret.
-            - [ ] Deploy `infra/budget.bicep` once with the existing budget's
+            - [x] Deploy `infra/budget.bicep` once with the existing budget's
                   start date (runbook, step 6), so the existing budget's alert
                   moves to fifty cents. The pipeline no longer touches it (A31).
       - [ ] **4b · Infrastructure, high-level review** — 16 items, 2026-10-13.
@@ -531,11 +531,11 @@ one feeds the next.
             reaches SQL with no rule for its address. The firewall steps are
             gone. The first test run hit a paused database and showed the
             design-time factory had no retry; it now has the app's.
-            - [ ] Delete the remote `test/sql-firewall` branch (my delete was
+            - [x] Delete the remote `test/sql-firewall` branch (my delete was
                   blocked): `git push origin --delete test/sql-firewall`
-            - [ ] A portal-made rule, `ClientIPAddress_20260914052117`, is on
-                  the SQL server outside the Bicep. Delete it if that address
-                  no longer needs direct access.
+            - [x] `ClientIPAddress_20260914052117` on the SQL server is kept:
+                  it is Jack's address, for running the API locally against
+                  Azure SQL. It sits outside the Bicep on purpose.
             Open:
             16. The queue and table storage roles may be unneeded with timer
                 triggers only; check after the first identity deploy
@@ -603,6 +603,32 @@ one feeds the next.
                project's tests
             394 C# and 188 web tests pass; `dotnet format`, Prettier, lint and
             `tsc` clean.
+      - [x] **7 · Documentation and git** — done 2026-10-13.
+            Passing already: Corrected markers, D and A numbers with reasons,
+            TODOs tied to tasks, XML summaries on every internal member.
+            - Git: the repository squash-merges only (PR title as the commit,
+              body as the message); CI checks PR titles and branch names; a PR
+              template asks how the change was verified; Dependabot commits
+              use `build:` and `ci:`. History before today is left as it is.
+            - A1–A12 carry their settled dates.
+            - README is one screen (52 lines, from 161): live link,
+              architecture, running locally, documents. It no longer tells
+              anyone to use user-secrets, which nothing reads. `web/README.md`
+              replaced the Vite template text.
+            - Terse rewrite of the reader-facing docs: design (641 to 582
+              lines), runbook (461 to 379), field manual (469 to 430), fixtures
+              README. Code blocks, identifiers and Corrected markers checked
+              unchanged by script. Records (amendments, lessons, todo) keep
+              their voice.
+            - Found and fixed on the way: a literal carriage return inside the
+              field manual's T31 YAML (`tr -d ''`), a stale "Standing traps"
+              pointer, the design's "1 risk", its §10 sentence on the live
+              ideal, and its M3-is-next status line.
+            - Code docs (domain 3 items 22–23): 59 `<param>` lines that only
+              restated a name removed (CS1573 off, with the reason); the two
+              narrative remarks on team names rewritten; CS1591 now enforced
+              for `src/`, tests exempt.
+            394 tests pass, build and `dotnet format` clean.
 - [ ] **T62** Rewrite the design for a prospective employer. Lead with the
       problem, the decisions and their trade-offs, and what was measured; keep
       the build-log history (corrections, amendments) one click away rather than

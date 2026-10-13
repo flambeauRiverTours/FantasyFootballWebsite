@@ -105,11 +105,8 @@ namespace FantasyLeague.Sleeper
         /// <param name="rosterId">Their roster, used for the last-resort name.</param>
         /// <returns>A non-empty display name.</returns>
         /// <remarks>
-        /// The design expects an unset team name to arrive as an empty string. It
-        /// does not: for two of six managers in this league the <c>team_name</c>
-        /// key is absent from <c>metadata</c> entirely, and <c>metadata</c> itself
-        /// can be null. All three cases have to collapse to the same fallback,
-        /// which is what <see cref="string.IsNullOrWhiteSpace"/> buys.
+        /// An unset team name arrives as an absent key, a null <c>metadata</c>, or
+        /// an empty string (A6). All three fall back alike.
         /// </remarks>
         internal static string ResolveTeamName(LeagueUserDto user, int rosterId)
         {

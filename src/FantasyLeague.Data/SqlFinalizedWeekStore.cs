@@ -11,7 +11,6 @@ namespace FantasyLeague.Data
     /// </summary>
     /// <param name="contexts">Creates a context per call.</param>
     /// <param name="time">Clock for each row's write time.</param>
-    /// <param name="logger">Logger.</param>
     internal sealed class SqlFinalizedWeekStore(
         IDbContextFactory<FantasyDataContext> contexts,
         TimeProvider time,
@@ -106,7 +105,6 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Creates the row for a week not yet stored.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <param name="season">The season year.</param>
         /// <param name="week">The week to store.</param>
         /// <param name="now">When the row is written.</param>

@@ -14,7 +14,6 @@ namespace FantasyLeague.Seasons
         /// <summary>
         /// Fetches a fresh map from Sleeper and stores it, whatever the age of the current one.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the map has been replaced.</returns>
         Task RefreshAsync(CancellationToken cancellationToken);
 
@@ -22,7 +21,6 @@ namespace FantasyLeague.Seasons
         /// Makes sure a map no older than the configured maximum age is loaded,
         /// reading the store before falling back to Sleeper.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The map of player id to player.</returns>
         /// <exception cref="InvalidDataException">No usable map was stored and Sleeper answered with no players.</exception>
         Task<IReadOnlyDictionary<string, PlayerRef>> EnsureCurrentAsync(CancellationToken cancellationToken);
@@ -35,7 +33,6 @@ namespace FantasyLeague.Seasons
     /// <param name="store">Where the map is kept between instances.</param>
     /// <param name="options">The maximum age.</param>
     /// <param name="time">Clock for the map's age.</param>
-    /// <param name="logger">Logger.</param>
     internal sealed class PlayerMapRefresher(
         ISleeperReader sleeper,
         IPlayerMapStore store,
@@ -116,7 +113,6 @@ namespace FantasyLeague.Seasons
         /// <summary>
         /// Fetches the dump, projects it and stores the result. Callers hold the gate.
         /// </summary>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The new map.</returns>
         /// <exception cref="InvalidDataException">Sleeper answered with no players at all.</exception>
         private async Task<StoredPlayerMap> RefreshCoreAsync(CancellationToken cancellationToken)

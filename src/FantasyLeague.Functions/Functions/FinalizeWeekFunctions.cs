@@ -12,7 +12,6 @@ namespace FantasyLeague.Functions.Functions
     /// <param name="seasons">Season assembly for the configured league.</param>
     /// <param name="storedWeeks">Where finalized weeks are kept.</param>
     /// <param name="league">The configured league. Never taken from the trigger.</param>
-    /// <param name="logger">Logger.</param>
     public sealed class FinalizeWeekFunctions(
         ISeasonService seasons,
         IFinalizedWeekStore storedWeeks,
@@ -24,7 +23,6 @@ namespace FantasyLeague.Functions.Functions
         /// Tuesday from September to February, once Monday night's game is over.
         /// </summary>
         /// <param name="timer">The timer's schedule.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the weeks are stored.</returns>
         [Function("FinalizeWeek")]
         public async Task FinalizeWeek(

@@ -19,7 +19,6 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Registers <see cref="IFinalizedWeekStore"/> and <see cref="IPlayerMapStore"/>.
         /// </summary>
-        /// <param name="services">The service collection.</param>
         /// <param name="connectionString">The SQL connection string.</param>
         /// <returns>The same service collection.</returns>
         public static IServiceCollection AddFantasyData(this IServiceCollection services, string? connectionString)

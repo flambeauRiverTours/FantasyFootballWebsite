@@ -30,7 +30,6 @@ namespace FantasyLeague.Functions.Functions
         /// Serves one season.
         /// </summary>
         /// <param name="req">The request. Only <c>season</c> is read.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The season payload, 400 for a malformed year, 404 for one with no data.</returns>
         [Function("GetSeason")]
         public async Task<IActionResult> GetSeason(
@@ -81,7 +80,6 @@ namespace FantasyLeague.Functions.Functions
         /// Serves the seasons that can be asked for.
         /// </summary>
         /// <param name="req">The request. Nothing is read from it.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The current season and every season with data.</returns>
         [Function("GetSeasons")]
         public async Task<IActionResult> GetSeasons(

@@ -300,6 +300,12 @@ This document states the standards for each programming domain for this project.
   - why: tracked tasks keep TODOs from rotting
 - Internal backend APIs carry XML doc summaries too
   - why: most of the code is internal by design
+  - The compiler checks public members (CS1591); tests are exempt, their names document them
+- A doc comment adds what the signature does not say
+  - No `<param>` that restates a name or type
+  - History belongs in the amendments, not in remarks
+- Documentation is terse and declarative
+  - why: a reviewer reads facts and reasons, not narrative
 
 **Git**
 - Commits follow Conventional Commits
@@ -309,7 +315,10 @@ This document states the standards for each programming domain for this project.
   - `ci` and `chore`
   - why: history reads as a changelog
 - Branches are named `type/short-description` using commit types
+  - CI checks the PR title and branch name
 - Pull requests say how the change was verified
   - why: reviewers can check evidence rather than trust claims
-- Pull requests are squash merged
+  - The PR template asks for it
+- Pull requests are squash merged, with the PR title as the commit
   - why: one commit per change keeps `main` bisectable
+  - The repository allows no other merge

@@ -80,6 +80,8 @@ Re-capture after each week finalizes.
 
 ## A1 · One dummy team is excluded from every metric
 
+Settled 2026-09-10.
+
 **"POON SQUAD" is a placeholder, not a competitor.** It is excluded from the
 standings and from every league-wide reference value.
 
@@ -132,6 +134,8 @@ published tracker and inventing one locally would desync it — add it there.
 ---
 
 ## A2 · League IDs and user IDs are secrets
+
+Settled 2026-09-10.
 
 Neither the league ID nor any Sleeper user ID is committed to this repository.
 
@@ -218,6 +222,8 @@ are placeholders even when a real one is at hand.
 
 ## A3 · Keep the eligibility map general, not pruned to 2026
 
+Settled 2026-09-10.
+
 The league uses `SUPER_FLEX` and no IDP **this season**. Do not treat that as
 permanent: the slot configuration can change between seasons, and the design
 already anticipates it — each season is its own `League` row with its own
@@ -241,6 +247,8 @@ would reach eleven or twelve and need D11's diverging bars as the default.
 
 ## A4 · No season chain to walk yet
 
+Settled 2026-09-10.
+
 2026 is the league's first season, so `previous_league_id` is null legitimately.
 
 **D8 still stands unchanged** — the chain walk is simply a no-op that terminates
@@ -255,6 +263,8 @@ year.
 ---
 
 ## A6 · An unset team name is absent, not an empty string
+
+Settled 2026-09-10.
 
 §03 says team name resolves as `users[].metadata.team_name` falling back to
 `display_name`, and that *"a manager who never set a team name has an empty
@@ -276,6 +286,8 @@ produced two blank team names in the standings.
 
 ## A7 · A commissioner override wins over the scored points
 
+Settled 2026-09-10.
+
 The matchup payload carries **`custom_points`** alongside `points`. It is null on
 every entry in the captured week, and it is the value Sleeper displays once a
 commissioner has corrected a score.
@@ -294,6 +306,8 @@ additive rather than a replacement, one line changes.
 
 ## A8 · An unresolved player is reported, never dropped
 
+Settled 2026-09-10.
+
 `RosterWeek` carries `UnresolvedPlayerIds` — ids on a roster that the player map
 could not explain.
 
@@ -310,6 +324,8 @@ happen is the list being ignored.
 ---
 
 ## A9 · Both invariants compare against Sleeper's scored points, never the override
+
+Settled 2026-09-11.
 
 §03 states `ideal >= actual` holds "always, with no exceptions". With A7 in
 place that is no longer true, because `actual` is `custom_points ?? points` and a
@@ -335,6 +351,8 @@ than their roster could have produced, because someone decided so.
 ---
 
 ## A10 · Excluded owners are a list, carried as one comma-separated secret
+
+Settled 2026-09-13.
 
 A1 excludes owners by user id, and `LeagueOptions.ExcludedOwnerIds` has always
 been an `IList<string>`. The deployment path did not match: `main.bicep` took a
@@ -391,6 +409,8 @@ existing violation and unresolved-player warnings, which matters against the
 
 ## A11 · The storage firewall stays open, with an expiry on the exception
 
+Settled 2026-09-13.
+
 Trivy's `AZU-0012` fails the storage account for leaving
 `networkAcls.defaultAction` unset, which means `Allow`. The finding is correct;
 acting on it is not free.
@@ -422,6 +442,8 @@ decisions ever put anything but runtime state in that account.
 ---
 
 ## A12 · The player map is stored, because instance memory is not storage
+
+Settled 2026-09-13.
 
 The first deployed request returned 500, six times over:
 

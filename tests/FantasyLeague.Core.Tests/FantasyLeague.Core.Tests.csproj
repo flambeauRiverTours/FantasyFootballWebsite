@@ -4,6 +4,8 @@
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+    <!-- a test's name is its documentation: a sentence about behaviour (domain 6) -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

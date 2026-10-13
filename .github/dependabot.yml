@@ -9,6 +9,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
     groups:
       microsoft-extensions:
         patterns:
@@ -36,6 +39,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
     groups:
       # one PR for routine updates; a major version still gets its own
       web-minor-and-patch:
@@ -53,3 +59,5 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci

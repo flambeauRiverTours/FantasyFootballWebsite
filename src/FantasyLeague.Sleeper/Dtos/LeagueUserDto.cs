@@ -22,10 +22,7 @@
     /// The manager's chosen team name, or null.
     /// </param>
     /// <remarks>
-    /// The design says a manager who never set a team name has an empty string
-    /// rather than a missing key. That is not what this league returns: for two of
-    /// six managers the <c>team_name</c> key is absent from <c>metadata</c>
-    /// altogether. Resolution has to handle absent, null and empty alike — see
+    /// Absent when the manager never set a name (A6); see
     /// <see cref="SleeperMapper.ResolveTeamName"/>.
     /// </remarks>
     internal sealed record LeagueUserMetadataDto(string? TeamName);

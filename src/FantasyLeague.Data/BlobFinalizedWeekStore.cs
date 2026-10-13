@@ -24,7 +24,6 @@ namespace FantasyLeague.Data
     /// </remarks>
     /// <param name="container">The container the blob lives in.</param>
     /// <param name="time">Clock for the write time and the staleness check.</param>
-    /// <param name="logger">Logger.</param>
     internal sealed class BlobFinalizedWeekStore(
         BlobContainerClient container,
         TimeProvider time,
@@ -33,9 +32,7 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Reads the stored season.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <param name="season">The season wanted.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>The season's weeks, or null on a miss or a transient failure.</returns>
         /// <remarks>
         /// A blob written before the last finalize run misses, so the caller
@@ -72,10 +69,8 @@ namespace FantasyLeague.Data
         /// Stores a season, unless the blob already holds a newer one. Never throws
         /// for a storage failure: SQL is the record, and the next read falls back to it.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <param name="season">The season the weeks belong to.</param>
         /// <param name="weeks">The season's finalized weeks.</param>
-        /// <param name="cancellationToken">CancellationToken.</param>
         /// <returns>A task that completes when the blob is written or skipped.</returns>
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
@@ -116,7 +111,6 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Names the league's one blob.
         /// </summary>
-        /// <param name="leagueId">The league.</param>
         /// <returns>The blob name, keyed by a hash of the league rather than its id.</returns>
         /// <remarks>
         /// Blob names show in the portal and in storage logs, and the league id

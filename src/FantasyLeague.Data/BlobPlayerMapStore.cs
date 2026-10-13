@@ -10,7 +10,6 @@ namespace FantasyLeague.Data
     /// </summary>
     /// <param name="container">The container the blob lives in.</param>
     /// <param name="blobName">The blob name.</param>
-    /// <param name="logger">Logger.</param>
     internal sealed class BlobPlayerMapStore(
         BlobContainerClient container,
         string blobName,
