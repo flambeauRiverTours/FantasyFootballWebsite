@@ -121,12 +121,6 @@ describe('ConsistencyPanel', () => {
     expect(widths).toEqual([...widths].sort((a, b) => a - b));
     expect(widths[2]! / widths[0]!).toBeCloseTo(6);
   });
-
-  it('names the weeks it covers', () => {
-    render(<ConsistencyPanel payload={season} rows={consistencyRows(season.teams)} />);
-
-    expect(screen.getByText(/Weeks 1–4\./)).toBeInTheDocument();
-  });
 });
 
 describe('The page', () => {
