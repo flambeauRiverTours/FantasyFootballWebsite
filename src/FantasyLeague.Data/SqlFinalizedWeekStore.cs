@@ -2,24 +2,10 @@
 using FantasyLeague.Core;
 using FantasyLeague.Data.Model;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Data
 {
-    /// <summary>
-    /// One rostered player inside <see cref="WeekScore.PlayersPointsJson"/>.
-    /// </summary>
-    /// <param name="Id">Sleeper's player id.</param>
-    /// <param name="Name">The player's name.</param>
-    /// <param name="Positions">The player's fantasy positions.</param>
-    /// <param name="Points">What the player scored that week.</param>
-    internal sealed record StoredPlayer(
-        string Id,
-        string Name,
-        IReadOnlyList<string> Positions,
-        decimal Points);
-
     /// <summary>
     /// Every season's finalized weeks, in SQL (A20).
     /// </summary>
@@ -35,32 +21,33 @@ namespace FantasyLeague.Data
 
         /// <inheritdoc />
         /// <remarks>
-        /// A database still waking after its retries returns empty, so the
-        /// season is rebuilt from Sleeper rather than the request failing.
+        /// A database still waking after its retries throws.
+        /// <see cref="FinalizedWeekStore"/> turns that into a rebuild from
+        /// Sleeper, where the failure is kept out of the cache.
         /// </remarks>
         public async Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
-            try
-            {
-                await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-                var rows = await db.WeekScores.Where(w => w.LeagueId == leagueId && w.Season == season && w.IsFinal)
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
+            await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+            var rows = await db.WeekScores.Where(w => w.LeagueId == leagueId && w.Season == season && w.IsFinal)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
 
-                logger.LogInformation("Read {RowCount} stored weeks for season {Season}.", rows.Count, season);
+            logger.LogInformation("Read {RowCount} stored weeks for season {Season}.", rows.Count, season);
 
-                return [.. rows.Select(ToDomain)];
-            }
-            catch (Exception ex) when (ex is RetryLimitExceededException or TimeoutException)
-            {
-                logger.LogWarning(ex, "Could not read stored weeks for season {Season}; rebuilding from Sleeper.", season);
-                return [];
-            }
+            return [.. rows.Select(ToDomain)];
         }
 
         /// <inheritdoc />
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
+            // a stored week is served as settled, so a live one would freeze mid-game
+            if (weeks.FirstOrDefault(w => !w.IsFinal) is { } live)
+            {
+                throw new ArgumentException(
+                    $"Only finalized weeks are stored; week {live.Week} of roster {live.RosterId} is still in progress.",
+                    nameof(weeks));
+            }
+
             if (weeks.Count == 0)
             {
                 return;
@@ -106,11 +93,15 @@ namespace FantasyLeague.Data
                 row.Week,
                 row.ActualPts,
                 row.IdealPts,
-                FromJson(row.StartersJson),
-                FromJson(row.IdealLineupJson),
-                FromPlayersJson(row.PlayersPointsJson),
+                FromJson<IReadOnlyList<PlayerId>>(row.StartersJson),
+                FromJson<IReadOnlyList<PlayerId>>(row.IdealLineupJson),
+                FromJson<IReadOnlyList<RosteredPlayer>>(row.PlayersJson),
                 row.IsFinal,
-                FromSlotJson(row.SlotAveragesJson));
+
+                // the one column with an empty past: rows written before AddSlotAveragesJson
+                row.SlotAveragesJson.Length == 0
+                    ? new Dictionary<string, decimal>()
+                    : FromJson<IReadOnlyDictionary<string, decimal>>(row.SlotAveragesJson));
 
         /// <summary>
         /// Creates the row for a week not yet stored.
@@ -146,59 +137,30 @@ namespace FantasyLeague.Data
             row.IdealPts = week.IdealPts;
             row.StartersJson = ToJson(week.Starters);
             row.IdealLineupJson = ToJson(week.IdealLineup);
-            row.PlayersPointsJson = ToPlayersJson(week.Players);
-            row.SlotAveragesJson = JsonSerializer.Serialize(week.SlotAverages, Json);
+            row.PlayersJson = ToJson(week.Players);
+            row.SlotAveragesJson = ToJson(week.SlotAverages);
             row.IsFinal = week.IsFinal;
             row.ComputedUtc = now;
         }
 
         /// <summary>
-        /// Writes player ids as a JSON array.
+        /// Writes one column's value as JSON, in the shape the blob stores it too.
         /// </summary>
-        /// <param name="players">The ids.</param>
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="value">The value.</param>
         /// <returns>The JSON.</returns>
-        private static string ToJson(IReadOnlyList<PlayerId> players) =>
-            JsonSerializer.Serialize(players.Select(p => p.Value).ToArray(), Json);
+        private static string ToJson<T>(T value) => JsonSerializer.Serialize(value, Json);
 
         /// <summary>
-        /// Writes rostered players and their points as JSON.
+        /// Reads one column's JSON back.
         /// </summary>
-        /// <param name="players">The players.</param>
-        /// <returns>The JSON.</returns>
-        private static string ToPlayersJson(IReadOnlyList<RosteredPlayer> players) =>
-            JsonSerializer.Serialize(
-                players.Select(p => new StoredPlayer(p.Id.Value, p.Name, p.FantasyPositions, p.Points)).ToArray(),
-                Json);
-
-        /// <summary>
-        /// Reads rostered players and their points from JSON.
-        /// </summary>
-        /// <param name="json">The stored JSON.</param>
-        /// <returns>The players.</returns>
-        private static IReadOnlyList<RosteredPlayer> FromPlayersJson(string json) =>
-            string.IsNullOrWhiteSpace(json)
-                ? []
-                : [.. (JsonSerializer.Deserialize<StoredPlayer[]>(json, Json) ?? [])
-                    .Select(p => new RosteredPlayer(new PlayerId(p.Id), p.Name, p.Positions, p.Points))];
-
-        /// <summary>
-        /// Reads player ids from a JSON array.
-        /// </summary>
-        /// <param name="json">The stored JSON.</param>
-        /// <returns>The ids.</returns>
-        private static IReadOnlyList<PlayerId> FromJson(string json) =>
-            string.IsNullOrWhiteSpace(json)
-                ? []
-                : [.. (JsonSerializer.Deserialize<string[]>(json, Json) ?? []).Select(v => new PlayerId(v))];
-
-        /// <summary>
-        /// Reads per-slot averages from JSON.
-        /// </summary>
-        /// <param name="json">The stored JSON.</param>
-        /// <returns>Per-slot averages, empty for a row written before they existed or a week excluded from the radar.</returns>
-        private static IReadOnlyDictionary<string, decimal> FromSlotJson(string json) =>
-            string.IsNullOrWhiteSpace(json)
-                ? new Dictionary<string, decimal>()
-                : JsonSerializer.Deserialize<Dictionary<string, decimal>>(json, Json) ?? new Dictionary<string, decimal>();
+        /// <typeparam name="T">The value's type.</typeparam>
+        /// <param name="json">The column.</param>
+        /// <returns>The value.</returns>
+        /// <exception cref="JsonException">The column is empty or not valid JSON: a row this store never wrote.</exception>
+        /// <exception cref="InvalidDataException">The column holds JSON <c>null</c>.</exception>
+        private static T FromJson<T>(string json)
+            where T : class =>
+            JsonSerializer.Deserialize<T>(json, Json) ?? throw new InvalidDataException("A stored week's column held JSON null.");
     }
 }

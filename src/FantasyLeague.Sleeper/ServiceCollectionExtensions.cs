@@ -10,11 +10,19 @@ namespace FantasyLeague.Sleeper
     /// </summary>
     public static class ServiceCollectionExtensions
     {
-        /// <summary>Burst capacity: the most requests that can go out back to back.</summary>
-        private const int TokenLimit = 50;
+        /// <summary>
+        /// Burst capacity: the most requests that can go out back to back.
+        /// </summary>
+        /// <remarks>
+        /// The bucket is per instance, and Flex Consumption cannot be capped
+        /// below 40 instances, so 40 × 25 keeps even that worst case inside
+        /// Sleeper's guidance of 1,000 requests a minute. The site needs about
+        /// 4.4 a minute, and 8.4 before Tuesday's job (§07).
+        /// </remarks>
+        private const int TokenLimit = 25;
 
         /// <summary>How many tokens are dropped into the bucket each period, as a lump rather than a trickle.</summary>
-        private const int TokensPerPeriod = 50;
+        private const int TokensPerPeriod = TokenLimit;
 
         /// <summary>How many callers may wait for the next refill before requests are refused outright.</summary>
         private const int QueueLimit = 20;

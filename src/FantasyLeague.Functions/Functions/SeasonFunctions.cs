@@ -53,12 +53,14 @@ namespace FantasyLeague.Functions.Functions
 
             var snapshot = await seasons.BuildAsync(cancellationToken);
             var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, time.GetUtcNow());
-            var etag = SeasonPayloadMapper.ComputeETag(payload);
+            var etag = SeasonETag.Compute(payload);
 
+            // short on purpose, to stay close to live during games; the 5 s
+            // season cache behind it makes a request inside the window cost nothing
             response.Headers.CacheControl = "public, max-age=5";
             response.Headers.ETag = etag;
 
-            return SeasonPayloadMapper.MatchesETag(req.Headers.IfNoneMatch, etag)
+            return SeasonETag.Matches(req.Headers.IfNoneMatch, etag)
                 ? new StatusCodeResult(StatusCodes.Status304NotModified)
                 : new OkObjectResult(payload);
         }
@@ -76,7 +78,8 @@ namespace FantasyLeague.Functions.Functions
         {
             var current = await seasons.GetCurrentSeasonAsync(cancellationToken);
 
-            req.HttpContext.Response.Headers.CacheControl = "public, max-age=300";
+            // a new season appears once a year, so a day's delay at the rollover costs nothing
+            req.HttpContext.Response.Headers.CacheControl = "public, max-age=86400";
 
             return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
         }

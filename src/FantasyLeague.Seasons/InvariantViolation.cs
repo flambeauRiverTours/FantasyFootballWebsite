@@ -6,14 +6,17 @@
     /// <param name="Week">The week.</param>
     /// <param name="RosterId">The roster.</param>
     /// <param name="Invariant">Which check failed.</param>
-    /// <param name="Expected">What it should have been.</param>
-    /// <param name="Actual">What it was.</param>
+    /// <param name="SleeperPts">Sleeper's scored points, before any override, which both checks compare against (A9).</param>
+    /// <param name="ComparedPts">
+    /// What was checked against them: the starters' sum, which should equal them,
+    /// or the ideal points, which should be no lower.
+    /// </param>
     public sealed record InvariantViolation(
         int Week,
         int RosterId,
         InvariantKind Invariant,
-        decimal Expected,
-        decimal Actual);
+        decimal SleeperPts,
+        decimal ComparedPts);
 
     /// <summary>
     /// The two checks the payload is self-verifying against.

@@ -77,8 +77,8 @@ namespace FantasyLeague.Cli
             {
                 output.WriteLine(
                     $"  wk {v.Week,-3} roster {v.RosterId,-3} {v.Invariant,-26} " +
-                    $"expected {v.Expected.ToString("F2", CultureInfo.InvariantCulture),9}  " +
-                    $"actual {v.Actual.ToString("F2", CultureInfo.InvariantCulture),9}");
+                    $"sleeper {v.SleeperPts.ToString("F2", CultureInfo.InvariantCulture),9}  " +
+                    $"compared {v.ComparedPts.ToString("F2", CultureInfo.InvariantCulture),9}");
             }
         }
 

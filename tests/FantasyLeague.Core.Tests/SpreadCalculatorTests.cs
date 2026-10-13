@@ -15,11 +15,6 @@ namespace FantasyLeague.Core.Tests
             SpreadCalculator.Calculate([]).Should().BeNull();
 
         [Fact]
-        public void No_weeks_is_null_even_with_no_minimum() =>
-            // F2: the minimum guard alone let an empty list through to Min()
-            SpreadCalculator.Calculate([], minWeeks: 0).Should().BeNull();
-
-        [Fact]
         public void One_week_is_null_not_zero() =>
             // Sigma of a single point is undefined, not zero. Returning 0.0 here
             // would put the newest, least-known team top of a consistency table.
@@ -53,15 +48,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_minimum_is_configurable_because_Q5_is_still_open()
-        {
-            // Four or five is undecided; the parameter is what keeps that a
-            // one-line change rather than a hunt.
-            IReadOnlyList<decimal> fourWeeks = [118.2m, 96.4m, 131.0m, 104.8m];
-
-            SpreadCalculator.Calculate(fourWeeks, minWeeks: 4).Should().NotBeNull();
-            SpreadCalculator.Calculate(fourWeeks, minWeeks: 5).Should().BeNull();
-        }
+        public void The_minimum_is_four_as_Q5_settled() => SpreadCalculator.MinWeeks.Should().Be(4);
     }
 
     /// <summary>

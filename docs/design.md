@@ -6,7 +6,7 @@
 > **Corrected in place on 2026-09-13 against what was actually built.** This file
 > is now edited directly rather than re-synced; a re-sync would reinstate the
 > errors marked **Corrected** below. The reasoning behind each change is in
-> [`amendments.md`](amendments.md), keyed A1–A26.
+> [`amendments.md`](amendments.md), keyed A1–A29.
 >
 > 11 decisions · 1 risk · 8 open questions, 5 of them now answered.
 
@@ -17,7 +17,7 @@ A live standings board for one Sleeper fantasy league, scoring the season on tot
 - Data source · Sleeper API
 - Stack · .NET 10 · Azure
 - Steady-state cost · $0.00 / mo
-- Sleeper budget · ≈ 12.2 req/min as built, against a 50/min bucket — see §07
+- Sleeper budget · ≈ 4.4 req/min as built, against a 25/min bucket per instance — see §07
 - Status · **M0–M2 built and deployed.** M3 (persistence) is next
 - League · **six rosters, five of them scoring** — one is excluded (A1)
 
@@ -227,37 +227,54 @@ Cost of the split: CORS configuration and two deploy targets. A linked backend r
 
 Chosen: client polls every 30 s, gated on tab visibility and on being inside an NFL game window.
 
-The data cannot change faster than the 30-second server cache, so a push channel would deliver the same information on the same cadence while adding a SignalR resource, a connection lifecycle and a reconnect path. Polling is also trivially correct across sleep, network changes and mobile backgrounding.
+The data cannot change faster than the server's 15-second score cache (**corrected, A27**: not 30 s), so a push channel would beat the 30-second poll by less than half a minute, while adding a SignalR resource, a connection lifecycle and a reconnect path. Polling is also trivially correct across sleep, network changes and mobile backgrounding.
 
 ## 07 · Request budget
 
 Steady state during a Sunday afternoon with the site under load. The ceiling is not a real constraint once reads are funnelled through the server.
 
 **Corrected: the TTLs as built differ from the ones designed here**, and the
-headline is 12.2 req/min rather than 2.3. Both columns are shown; the open
-question of which is right is **F4** in the task list.
+headline is about 4.4 req/min rather than 2.3. Both columns are shown. The TTLs
+live in `SleeperReader`, each with its reason.
 
 | Call | TTL designed | TTL built | Req/min built |
 |---|---|---|---|
-| matchups/{current week} | 30 s | **5 s** | 12.0 |
-| state/nfl | 5 min | **1 h** | 0.02 |
-| users + rosters | 1 h | **5 min** | 0.20 |
+| matchups/{current week} | 30 s | **15 s** | 4.0 |
+| state/nfl | 5 min | 5 min | 0.20 |
+| rosters | 1 h | **5 min** | 0.20 |
+| users | 1 h | 1 h | 0.02 |
 | league/{id} | 24 h | 24 h | <0.01 |
 | players/nfl (14.65 MB) | 24 h | 24 h | <0.01 |
-| weeks 1…n−1 | SQL, permanent | **blob first, SQL behind it, 6 h in memory** (A16) | 0 |
+| weeks 1…n−1 | SQL, permanent | **blob first, SQL behind it, 6 h in memory** (A16) | 0 once stored |
 | prior seasons | SQL, immutable | **not served until T29** | — |
-| Peak steady state | ≈ 2.3 | | **≈ 12.2** |
+| Peak steady state | ≈ 2.3 | | **≈ 4.4** |
 
-Still far inside the 50/min bucket, so nothing breaks. Two of the three are worth
-revisiting: matchups at 5 s buys 25 seconds of worst-case staleness for six times
-the traffic when the *client* only polls every 30 s (D6), and state at 1 h saves
-0.18 req/min while making the one value that gates `isFinal` up to an hour stale
-across Tuesday's rollover.
+Matchups at 15 s cost twice the designed traffic for a fresher page: with the
+client polling every 30 s (D6), a score is at most 45 s old rather than 60 s.
+
+**Every figure is per Function instance.** The cache is in memory and the token
+bucket is a singleton *per instance*, so a Sunday that scales out to three
+instances costs three times the table. Nothing shares a cache across instances
+(A12, A16). **The bucket is 25/min for that reason (A28):** Flex Consumption
+cannot be capped below 40 instances, and 40 × 25 keeps even that worst case
+inside Sleeper's guidance of 1,000 a minute.
+
+The table assumes every finished week is stored. Two cases fetch more:
+
+- **A finished week before Tuesday's job.** From the moment Sleeper moves to the
+  next week until `FinalizeWeek` stores the last one, that week is fetched
+  from Sleeper like the live one: 4 req/min more, about **8.4** in all.
+- **An empty blob and a database that will not wake.** With neither store
+  answering, every finished week is rebuilt from Sleeper at 4 req/min each.
+  By week 7 the total passes the 25/min bucket, which then refuses requests.
+  A failed read is never cached, so this lasts only as long as the outage: the
+  first read after the database wakes goes back to the stored weeks. The blob
+  usually answers first, so both stores have to fail together.
 
 Two mechanisms hold it there, and the second is the one that matters:
 
 - **Single-flight caching.** Concurrent requests for the same uncached key await one in-flight fetch rather than each issuing their own. Without it, a cache expiry under load produces a thundering herd — the classic way a 2/min design becomes a 200/min incident.
-- **A token bucket in the HTTP pipeline.** A `DelegatingHandler` on the Sleeper `HttpClient`, set to 50/min, shared by the HTTP and Timer triggers. This is the structural guarantee: a retry-loop bug or a bad cache key cannot exceed the limit, because nothing reaches Sleeper except through the handler.
+- **A token bucket in the HTTP pipeline.** A `DelegatingHandler` on the Sleeper `HttpClient`, set to 50/min (**corrected, A28: 25/min per instance**), shared by the HTTP and Timer triggers. This is the structural guarantee: a retry-loop bug or a bad cache key cannot exceed the limit, because nothing reaches Sleeper except through the handler.
 
 Pair it with a Polly policy that treats `429` as retryable with exponential backoff and jitter, and that gives up rather than queueing unboundedly.
 
@@ -268,7 +285,7 @@ Worth confirming against Sleeper's own guidance before launch: published advice 
 ```
 WeekScore(LeagueId, Season, Week, RosterId,
           ActualPts, IdealPts,
-          StartersJson, PlayersPointsJson, IdealLineupJson, SlotAveragesJson,
+          StartersJson, PlayersJson, IdealLineupJson, SlotAveragesJson,
           IsFinal, ComputedUtc,
           PK (Season, LeagueId, RosterId, Week))
 
@@ -283,7 +300,7 @@ for an hour and five minutes (§07), and A1 matches on `user_id` from that same
 data. `League` belongs to the season-chain walk (D8) and is created by T29
 rather than left empty until then.
 
-`PlayerWeek`, one of the original five, is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersPointsJson` on the row that needs it. **Corrected: this league has six rosters, five of them scoring (A1)** — so roughly 6 × 18 is 108 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes either way.
+`PlayerWeek`, one of the original five, is gone with the scoring engine, and its one surviving job — keeping enough raw data to recompute after a solver bug — is done by `PlayersJson` on the row that needs it (named `PlayersPointsJson` until A28: it holds each player's name, positions and points, not a map of points). **Corrected: this league has six rosters, five of them scoring (A1)** — so roughly 6 × 18 is 108 rows a season, each carrying a small map of player points. The whole season is a few hundred kilobytes either way.
 
 **Corrected · the key leads on `Season`, not `LeagueId`.** The composite is the
 same four columns; the order is what changed. A composite primary key is the
@@ -298,7 +315,7 @@ selectivity.
 
 `ScoringSettingsJson` is dropped from `League` for the same reason it is no longer fetched.
 
-**The positional radar (§11) needs no new storage.** Its axes come from the season's `RosterPositionsJson`, and its values come from `StartersJson` joined to `PlayersPointsJson` on rows that already exist. A feature that adds a chart and no columns is worth noticing.
+**The positional radar (§11) needs no new storage.** Its axes come from the season's `RosterPositionsJson`, and its values come from `StartersJson` joined to `PlayersJson` on rows that already exist. A feature that adds a chart and no columns is worth noticing.
 
 **Corrected: it added one.** Each row carries `SlotAveragesJson`, that week's points per slot, computed when the week is solved. The axes still come from `roster_positions`, which Sleeper serves with the league.
 
@@ -329,7 +346,7 @@ GET /api/season             → current season
 GET /api/season?season=2025 → a completed season
 
 200 OK
-Cache-Control: public, max-age=30                    # current season
+Cache-Control: public, max-age=5                     # current season (A27)
 Cache-Control: public, max-age=31536000, immutable   # completed season
 ETag: "2026-wk7-1738012800"
 
@@ -385,7 +402,7 @@ Where it breaks: the chain exists only if the commissioner used Sleeper's roll-o
 
 #### Serving a completed season
 
-A finished season is immutable and the response headers should say so outright — a year of `max-age` plus `immutable`, against thirty seconds for the live one. It is served entirely from SQL and reaches Sleeper zero times, no matter how many people open it.
+A finished season is immutable and the response headers should say so outright — a year of `max-age` plus `immutable`, against **five seconds** for the live one (corrected, A27: short on purpose, to stay close to live during games). `/api/seasons` is cached for a day, since a new season appears once a year. It is served entirely from SQL and reaches Sleeper zero times, no matter how many people open it.
 
 An unknown or un-backfilled year returns **404 with the list of available seasons** — never an empty payload, and never a synchronous backfill. Backfilling a season is roughly twenty-one calls: eighteen weeks of matchups plus league, users and rosters. That fits the budget comfortably, but running it inside a request means a visitor waits twenty seconds for a page, and a stray URL becomes a burst. Backfill is an explicit job, run once per historical season; the API only ever serves what SQL already holds.
 
@@ -578,8 +595,8 @@ Two things to actually configure rather than assume: the App Insights daily inge
 
 **Five of the eight were settled on 2026-09-10 against the live league** — Q1,
 Q2, Q3, Q7 and Q8. Their answers and consequences are in
-[`amendments.md`](amendments.md); the three still open are Q4, Q5 and Q6, tracked
-in [`tasks/todo.md`](../tasks/todo.md).
+[`amendments.md`](amendments.md). Q5 was settled later, at four weeks; Q4 and Q6
+are tracked in [`tasks/todo.md`](../tasks/todo.md).
 
 - **Q1 answered** — six rosters; eleven startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus eight `BN`. The league ID is a secret (A2).
 - **Q2 answered** — SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3).
@@ -593,7 +610,7 @@ The original text of all eight follows, for the reasoning behind the ones still 
 - Q2 · **Does the league use SUPER_FLEX or IDP slots?** Determines how much of the eligibility map is live code versus dead branches — and IDP means the solver's slot count rises, though nowhere near enough to threaten the DP.
 - Q3 · **Should players in IR slots count toward ideal points?** Default assumption: no — ideal means the best lineup that was legally startable. Worth settling now, since it is exactly the kind of thing a league argues about in December.
 - Q4 · **Regular season only, or through the playoffs?** Sleeper's playoff weeks have a different matchup structure and only some teams play. A league decided on total points probably wants regular season only — but σ in particular would be badly distorted by weeks where half the league does not play, and the chart's x-axis needs to know.
-- Q5 · **Minimum weeks before σ appears — four, or five?** Four is the assumption throughout this document. Five is defensible and buys another week of noise reduction at the cost of a longer empty column early in the season.
+- **Q5 answered** — four, per D1; `SpreadCalculator.MinWeeks` is the one place it lives. The question as asked: **Minimum weeks before σ appears — four, or five?** Four is the assumption throughout this document. Five is defensible and buys another week of noise reduction at the cost of a longer empty column early in the season.
 - Q6 · **Should the table show σ or CV?** D3 chooses σ for legibility with CV on the chart. If the league's scoring spread is wide — a gap of thirty or more points between the highest- and lowest-scoring teams' means — CV is the fairer default and the decision is worth revisiting.
 - Q7 · **Is the league’s season chain intact?** Follow `previous_league_id` back from the current league and count the hops. If it hits a null before reaching the league’s first season, those earlier years need explicit entries in `League:SeasonOverrides` and someone has to dig the old IDs out of Sleeper by hand. Cheap to check now, tedious to discover later.
 - Q8 · **How many distinct starting slots does the league have?** Seven or eight axes is a comfortable radar; a superflex-plus-IDP league can reach eleven or twelve, at which point the labels collide and the shape stops being readable. If the count is high, either merge the IDP slots into a single axis or make the diverging bar chart from D11 the default view for that season.

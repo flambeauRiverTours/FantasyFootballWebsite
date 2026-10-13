@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Core;
+﻿using System.ComponentModel;
+using FantasyLeague.Core;
 using Microsoft.Extensions.Caching.Hybrid;
 
 namespace FantasyLeague.Sleeper
@@ -46,9 +47,9 @@ namespace FantasyLeague.Sleeper
         /// the daily refresh is the only caller.
         /// </summary>
         /// <param name="cancellationToken">CancellationToken.</param>
-        /// <returns>The projected map, with how many players the dump held.</returns>
+        /// <returns>Every startable player by id.</returns>
         /// <exception cref="InvalidDataException">Sleeper answered with no players at all.</exception>
-        Task<PlayerDump> GetPlayersAsync(CancellationToken cancellationToken);
+        Task<IReadOnlyDictionary<string, PlayerRef>> GetPlayersAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -61,7 +62,11 @@ namespace FantasyLeague.Sleeper
         /// <summary>Scores move during games; 15 seconds is close enough to live.</summary>
         private static readonly HybridCacheEntryOptions Matchups = new() { Expiration = TimeSpan.FromSeconds(15) };
 
-        /// <summary>A manager may check the site straight after changing their roster.</summary>
+        /// <summary>
+        /// Who owns each roster, for team names and A1's exclusion. That changes
+        /// only when the commissioner reassigns a team, so this could be far
+        /// longer; at 0.2 requests a minute it is not worth the wait.
+        /// </summary>
         private static readonly HybridCacheEntryOptions Rosters = new() { Expiration = TimeSpan.FromMinutes(5) };
 
         /// <summary>The league's name and slots are set once a season.</summary>
@@ -70,17 +75,21 @@ namespace FantasyLeague.Sleeper
         /// <summary>The week rolls over once a week; 5 minutes bounds how late the site notices.</summary>
         private static readonly HybridCacheEntryOptions NFLState = new() { Expiration = TimeSpan.FromMinutes(5) };
 
-        /// <summary>Team names change rarely.</summary>
+        /// <summary>
+        /// Team names. A manager who renames their team waits up to an hour to
+        /// see it; renames are rare, and an hour saves 0.18 requests a minute
+        /// over five minutes.
+        /// </summary>
         private static readonly HybridCacheEntryOptions Users = new() { Expiration = TimeSpan.FromHours(1) };
 
         /// <inheritdoc />
         public async Task<NFLState> GetNFLStateAsync(CancellationToken cancellationToken)
         {
-            var state = await cache.GetOrCreateAsync(
+            var state = await GetOrFetchAsync(
                 "nfl_state",
                 async token => Required(await client.GetNFLStateAsync(token), "NFL state"),
                 NFLState,
-                cancellationToken: cancellationToken);
+                cancellationToken);
 
             return SleeperMapper.ToNFLState(state);
         }
@@ -88,29 +97,28 @@ namespace FantasyLeague.Sleeper
         /// <inheritdoc />
         public async Task<SleeperLeague> GetLeagueAsync(string leagueId, CancellationToken cancellationToken)
         {
-            var league = await cache.GetOrCreateAsync(
+            var league = await GetOrFetchAsync(
                 $"league:{leagueId}",
                 async token => Required(await client.GetLeagueAsync(leagueId, token), "league"),
                 League,
-                cancellationToken: cancellationToken);
+                cancellationToken);
 
-            var users = await cache.GetOrCreateAsync(
+            var users = await GetOrFetchAsync(
                 $"users:{leagueId}",
                 async token => RequiredList(await client.GetUsersAsync(leagueId, token), "users"),
                 Users,
-                cancellationToken: cancellationToken);
+                cancellationToken);
 
-            var rosters = await cache.GetOrCreateAsync(
+            var rosters = await GetOrFetchAsync(
                 $"rosters:{leagueId}",
                 async token => RequiredList(await client.GetRostersAsync(leagueId, token), "rosters"),
                 Rosters,
-                cancellationToken: cancellationToken);
+                cancellationToken);
 
             return new SleeperLeague(
                 SleeperMapper.ToLeagueName(league),
                 SleeperMapper.ToSlots(league),
-                SleeperMapper.ToTeamNames(users, rosters),
-                SleeperMapper.ToRosterOwnerIds(rosters));
+                SleeperMapper.ToTeams(users, rosters));
         }
 
         /// <inheritdoc />
@@ -120,22 +128,51 @@ namespace FantasyLeague.Sleeper
             IReadOnlyDictionary<string, PlayerRef> playerMap,
             CancellationToken cancellationToken)
         {
-            var matchups = await cache.GetOrCreateAsync(
+            var matchups = await GetOrFetchAsync(
                 $"matchups:{leagueId}:{week}",
                 async token => RequiredList(await client.GetMatchupsAsync(leagueId, week, token), "matchups"),
                 Matchups,
-                cancellationToken: cancellationToken);
+                cancellationToken);
 
             return [.. matchups.Select(matchup => SleeperMapper.ToRosterWeek(matchup, playerMap))];
         }
 
         /// <inheritdoc />
-        public async Task<PlayerDump> GetPlayersAsync(CancellationToken cancellationToken)
+        public async Task<IReadOnlyDictionary<string, PlayerRef>> GetPlayersAsync(CancellationToken cancellationToken)
         {
             // a request that fails throws before this; null means Sleeper's body was literally null
             var dump = Required(await client.GetPlayersAsync(cancellationToken), "players");
 
-            return SleeperMapper.ToPlayerDump(dump);
+            return SleeperMapper.ToPlayerMap(dump);
+        }
+
+        /// <summary>
+        /// Reads through the cache, keeping the response as the one instance it was fetched as.
+        /// </summary>
+        /// <typeparam name="T">The response shape.</typeparam>
+        /// <param name="key">The cache key.</param>
+        /// <param name="fetch">Calls Sleeper on a miss.</param>
+        /// <param name="options">How long the response lives.</param>
+        /// <param name="cancellationToken">CancellationToken.</param>
+        /// <returns>The cached or fetched response.</returns>
+        /// <remarks>
+        /// HybridCache hands back a freshly deserialized copy of anything it
+        /// cannot see is immutable, so a bare list would be copied on every hit.
+        /// The wrapper says it is immutable; nothing here mutates a response.
+        /// </remarks>
+        private async Task<T> GetOrFetchAsync<T>(
+            string key,
+            Func<CancellationToken, Task<T>> fetch,
+            HybridCacheEntryOptions options,
+            CancellationToken cancellationToken)
+        {
+            var entry = await cache.GetOrCreateAsync(
+                key,
+                async token => new Cached<T>(await fetch(token)),
+                options,
+                cancellationToken: cancellationToken);
+
+            return entry.Value;
         }
 
         /// <summary>
@@ -166,4 +203,13 @@ namespace FantasyLeague.Sleeper
                 : [.. list.OfType<T>()];
         }
     }
+
+    /// <summary>
+    /// A cached response, marked immutable so HybridCache hands back the same instance.
+    /// </summary>
+    /// <typeparam name="T">The response shape.</typeparam>
+    /// <param name="Value">The response.</param>
+    [ImmutableObject(true)]
+    internal sealed record Cached<T>(T Value);
+
 }

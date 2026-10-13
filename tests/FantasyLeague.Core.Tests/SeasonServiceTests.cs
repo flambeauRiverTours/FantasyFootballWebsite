@@ -161,7 +161,7 @@ namespace FantasyLeague.Core.Tests
             var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
 
             snapshot.Teams.Should().NotBeEmpty();
-            provider.GetRequiredService<IPlayerMapRefresher>().LastRefreshedUtc.Should().NotBeNull();
+            snapshot.UnresolvedPlayerIds.Should().BeEmpty("every player was found in the loaded map");
         }
 
         [Fact]
@@ -420,8 +420,8 @@ namespace FantasyLeague.Core.Tests
 
                 var violation = snapshot.Violations.Should().ContainSingle().Subject;
                 violation.Invariant.Should().Be(InvariantKind.StartersSumMatchesPoints);
-                violation.Expected.Should().Be(30m);
-                violation.Actual.Should().Be(35m);
+                violation.SleeperPts.Should().Be(30m);
+                violation.ComparedPts.Should().Be(35m);
             }
         }
 

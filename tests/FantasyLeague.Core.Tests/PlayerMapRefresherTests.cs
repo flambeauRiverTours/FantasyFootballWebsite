@@ -89,17 +89,6 @@ namespace FantasyLeague.Core.Tests
             """;
 
         [Fact]
-        public async Task Before_the_first_refresh_the_map_is_empty_and_unstamped()
-        {
-            var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)));
-
-            refresher.PlayerMap.Should().BeEmpty();
-            refresher.LastRefreshedUtc.Should().BeNull();
-
-            await Task.CompletedTask;
-        }
-
-        [Fact]
         public async Task A_refresh_keeps_only_startable_players()
         {
             // nothing can be started at no position
@@ -107,7 +96,8 @@ namespace FantasyLeague.Core.Tests
 
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
 
-            refresher.PlayerMap.Keys.Should().BeEquivalentTo(["4046", "1234", "BAL"]);
+            (await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken)).Keys
+                .Should().BeEquivalentTo(["4046", "1234", "BAL"]);
         }
 
         [Fact]
@@ -116,9 +106,10 @@ namespace FantasyLeague.Core.Tests
             var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)));
 
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
+            var map = await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
 
-            refresher.PlayerMap["BAL"].Name.Should().Be("BAL");
-            refresher.PlayerMap["BAL"].FantasyPositions.Should().Equal("DEF");
+            map["BAL"].Name.Should().Be("BAL");
+            map["BAL"].FantasyPositions.Should().Equal("DEF");
         }
 
         [Fact]
@@ -128,20 +119,22 @@ namespace FantasyLeague.Core.Tests
             var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)));
 
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
+            var map = await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
 
-            refresher.PlayerMap["1234"].FantasyPositions.Should().Equal("RB", "WR");
-            refresher.PlayerMap["1234"].Team.Should().Be("SF");
+            map["1234"].FantasyPositions.Should().Equal("RB", "WR");
+            map["1234"].Team.Should().Be("SF");
         }
 
         [Fact]
         public async Task A_refresh_stamps_the_time()
         {
             var before = DateTimeOffset.UtcNow;
-            var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)));
+            var store = new FakePlayerMapStore();
+            var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)), store);
 
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
 
-            refresher.LastRefreshedUtc.Should().NotBeNull().And.BeOnOrAfter(before);
+            store.Written!.RefreshedUtc.Should().BeOnOrAfter(before);
         }
 
         [Fact]
@@ -164,13 +157,12 @@ namespace FantasyLeague.Core.Tests
             var refresher = Build(socket);
 
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
-            var stamp = refresher.LastRefreshedUtc;
 
             await FluentActions.Awaiting(() => refresher.RefreshAsync(default))
                 .Should().ThrowAsync<InvalidDataException>();
 
-            refresher.PlayerMap.Should().HaveCount(3);
-            refresher.LastRefreshedUtc.Should().Be(stamp);
+            (await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken)).Should().HaveCount(3);
+            socket.Attempts.Should().Be(2, "the kept map is still current, so nothing is refetched");
         }
 
         [Fact]
@@ -186,7 +178,7 @@ namespace FantasyLeague.Core.Tests
             await FluentActions.Awaiting(() => refresher.RefreshAsync(default))
                 .Should().ThrowAsync<HttpRequestException>();
 
-            refresher.PlayerMap.Should().HaveCount(3);
+            (await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken)).Should().HaveCount(3);
         }
 
         [Fact]
@@ -200,7 +192,7 @@ namespace FantasyLeague.Core.Tests
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
 
-            refresher.PlayerMap.Keys.Should().BeEquivalentTo(["7777"]);
+            (await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken)).Keys.Should().BeEquivalentTo(["7777"]);
         }
 
         [Fact]
@@ -229,7 +221,7 @@ namespace FantasyLeague.Core.Tests
 
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
 
-            refresher.PlayerMap.Should().HaveCount(12000);
+            (await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken)).Should().HaveCount(12000);
         }
 
         [Fact]
@@ -254,13 +246,14 @@ namespace FantasyLeague.Core.Tests
                 new Dictionary<string, PlayerRef> { ["4046"] = new("Patrick Mahomes", "KC", ["QB"]) });
 
             var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
-            var refresher = Build(socket, new FakePlayerMapStore(stored));
+            var store = new FakePlayerMapStore(stored);
+            var refresher = Build(socket, store);
 
-            await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
+            var map = await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
 
             socket.Attempts.Should().Be(0, "the store answered");
-            refresher.PlayerMap.Should().ContainKey("4046");
-            refresher.LastRefreshedUtc.Should().Be(stored.RefreshedUtc);
+            map.Should().ContainKey("4046");
+            store.Written.Should().BeNull("an adopted map is not written back");
         }
 
         [Fact]
@@ -273,10 +266,10 @@ namespace FantasyLeague.Core.Tests
             var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
             var refresher = Build(socket, new FakePlayerMapStore(stored));
 
-            await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
+            var map = await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
 
             socket.Attempts.Should().Be(1);
-            refresher.PlayerMap.Should().NotContainKey("old");
+            map.Should().NotContainKey("old");
         }
 
         [Fact]
@@ -285,10 +278,10 @@ namespace FantasyLeague.Core.Tests
             var socket = new ScriptedSocket(ScriptedSocket.Json(Dump));
             var refresher = Build(socket, new FakePlayerMapStore());
 
-            await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
+            var map = await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
 
             socket.Attempts.Should().Be(1);
-            refresher.PlayerMap.Should().ContainKey("4046");
+            map.Should().ContainKey("4046");
         }
 
         [Fact]
@@ -298,11 +291,10 @@ namespace FantasyLeague.Core.Tests
             var store = new FakePlayerMapStore();
             var refresher = Build(new ScriptedSocket(ScriptedSocket.Json(Dump)), store);
 
-            await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
+            var map = await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken);
 
             store.Written.Should().NotBeNull();
-            store.Written!.Players.Should().ContainKey("4046");
-            store.Written.RefreshedUtc.Should().Be(refresher.LastRefreshedUtc);
+            store.Written!.Players.Should().BeSameAs(map);
         }
 
         [Fact]
@@ -342,7 +334,7 @@ namespace FantasyLeague.Core.Tests
             await refresher.RefreshAsync(TestContext.Current.CancellationToken);
 
             socket.Attempts.Should().Be(1);
-            refresher.PlayerMap.Should().ContainKey("4046");
+            (await refresher.EnsureCurrentAsync(TestContext.Current.CancellationToken)).Should().ContainKey("4046");
         }
 
     }

@@ -28,7 +28,7 @@ namespace FantasyLeague.Functions.Functions
         /// <returns>A task that completes when the weeks are stored.</returns>
         [Function("FinalizeWeek")]
         public async Task FinalizeWeek(
-            [TimerTrigger("0 0 12 * 9,10,11,12,1,2 2")] TimerInfo timer,
+            [TimerTrigger(FinalizeSchedule.Cron)] TimerInfo timer,
             CancellationToken cancellationToken)
         {
             var snapshot = await seasons.BuildAsync(cancellationToken);

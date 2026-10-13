@@ -1,4 +1,6 @@
-﻿namespace FantasyLeague.Seasons
+﻿using FantasyLeague.Sleeper;
+
+namespace FantasyLeague.Seasons
 {
     /// <summary>
     /// The outcome of resolving configured owner ids against one season.
@@ -12,7 +14,7 @@
         /// <summary>
         /// Resolves configured owner ids to this season's roster ids (A1).
         /// </summary>
-        /// <param name="rosterOwnerIds">Owner user ids by roster id.</param>
+        /// <param name="teams">This season's teams by roster id.</param>
         /// <param name="ownerIds">The configured owner ids. Empty excludes nobody.</param>
         /// <returns>The rosters to exclude, and every owner id no roster matched.</returns>
         /// <remarks>
@@ -20,15 +22,23 @@
         /// are reassigned between seasons.
         /// </remarks>
         public static ExcludedRosters Resolve(
-            IReadOnlyDictionary<int, string> rosterOwnerIds,
+            IReadOnlyDictionary<int, SleeperTeam> teams,
             IEnumerable<string> ownerIds)
         {
-            var owners = ownerIds.ToHashSet(StringComparer.Ordinal);
-            var matched = rosterOwnerIds.Where(pair => owners.Contains(pair.Value)).ToList();
+            var wanted = ownerIds.ToHashSet(StringComparer.Ordinal);
+            var rosterIds = new HashSet<int>();
+            var found = new HashSet<string>(StringComparer.Ordinal);
 
-            return new ExcludedRosters(
-                matched.Select(pair => pair.Key).ToHashSet(),
-                [.. owners.Except(matched.Select(pair => pair.Value), StringComparer.Ordinal)]);
+            foreach (var (rosterId, team) in teams)
+            {
+                if (team.OwnerId is { } owner && wanted.Contains(owner))
+                {
+                    rosterIds.Add(rosterId);
+                    found.Add(owner);
+                }
+            }
+
+            return new ExcludedRosters(rosterIds, [.. wanted.Where(owner => !found.Contains(owner))]);
         }
     }
 }

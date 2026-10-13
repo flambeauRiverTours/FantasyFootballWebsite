@@ -1,4 +1,5 @@
 ﻿using FantasyLeague.Data;
+using FantasyLeague.Data.Model;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -106,6 +107,63 @@ namespace FantasyLeague.Core.Tests
             read[0].Players[1].FantasyPositions.Should().Equal("RB", "WR");
         }
 
+        private static async Task<SqlFinalizedWeekStore> StoreHoldingAsync(WeekScore row)
+        {
+            var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());
+            await using (var db = factory.CreateDbContext())
+            {
+                db.WeekScores.Add(row);
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+
+            return new SqlFinalizedWeekStore(factory, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+        }
+
+        private static WeekScore Row(string slotAveragesJson = "{}", string startersJson = "[]") => new()
+        {
+            LeagueId = League,
+            Season = 2026,
+            Week = 1,
+            RosterId = 1,
+            StartersJson = startersJson,
+            IdealLineupJson = "[]",
+            PlayersJson = "[]",
+            SlotAveragesJson = slotAveragesJson,
+            IsFinal = true,
+        };
+
+        [Fact]
+        public async Task A_row_from_before_slot_averages_reads_with_no_attribution()
+        {
+            // AddSlotAveragesJson gave existing rows an empty string
+            var store = await StoreHoldingAsync(Row(slotAveragesJson: ""));
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken))
+                .Should().ContainSingle().Which.SlotAverages.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task An_empty_lineup_column_is_a_loud_failure_not_an_empty_lineup()
+        {
+            // only this store writes the column, and it never writes it empty
+            var store = await StoreHoldingAsync(Row(startersJson: ""));
+
+            await store.Invoking(s => s.ReadAsync(League, 2026, default))
+                .Should().ThrowAsync<System.Text.Json.JsonException>();
+        }
+
+        [Fact]
+        public void A_player_id_is_stored_as_a_bare_string()
+        {
+            // the blob and the SQL row share one shape (3b item 13)
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                new RosteredPlayer(new PlayerId("BAL"), "BAL", ["DEF"], 7m));
+
+            json.Should().Be("""{"Id":"BAL","Name":"BAL","FantasyPositions":["DEF"],"Points":7}""");
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PlayerId>>("""["4046","BAL"]""")
+                .Should().Equal(new PlayerId("4046"), new PlayerId("BAL"));
+        }
+
         [Fact]
         public async Task The_slot_averages_survive_the_round_trip()
         {
@@ -174,13 +232,15 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public async Task A_week_still_in_progress_is_never_read_back()
+        public async Task A_week_still_in_progress_is_refused()
         {
             var store = Store();
 
-            await store.WriteAsync(League, 2026, [Week(isFinal: false)], TestContext.Current.CancellationToken);
+            await store.Invoking(s => s.WriteAsync(League, 2026, [Week(week: 1), Week(week: 2, isFinal: false)], default))
+                .Should().ThrowAsync<ArgumentException>();
 
-            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken))
+                .Should().BeEmpty("one live week refuses the whole write");
         }
 
         [Fact]
@@ -191,14 +251,16 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public async Task An_unreachable_database_reads_back_empty_rather_than_throwing()
+        public async Task An_unreachable_database_throws_on_read()
         {
-            // the caller falls back to Sleeper: correct, just slower
+            // an empty answer here would be cached as if the season had no weeks;
+            // the cached store decides what a failure means
             var store = new SqlFinalizedWeekStore(
                 new BrokenContextFactory(new RetryLimitExceededException("still paused", new TimeoutException())),
                 TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
-            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+            await store.Invoking(s => s.ReadAsync(League, 2026, default))
+                .Should().ThrowAsync<RetryLimitExceededException>();
         }
 
         [Fact]

@@ -116,6 +116,8 @@ namespace FantasyLeague.Core.Tests
     {
         private static readonly ServiceProviderOptions Validated = new() { ValidateOnBuild = true, ValidateScopes = true };
 
+        private const string DevStorage = "UseDevelopmentStorage=true";
+
         private static ServiceProvider Provider()
         {
             var services = TestServices.Create(("League:CurrentLeagueId", "1234567890123456789"));
@@ -131,7 +133,7 @@ namespace FantasyLeague.Core.Tests
         public void The_functions_composition_works_in_either_order(bool dataFirst)
         {
             // nothing overlaps, so nothing depends on who registers first
-            var services = TestServices.Create();
+            var services = TestServices.Create(("AzureWebJobsStorage", DevStorage));
             if (dataFirst)
             {
                 services.AddFantasyData("Server=unused;Database=unused");
@@ -147,6 +149,40 @@ namespace FantasyLeague.Core.Tests
             using var provider = services.BuildServiceProvider(Validated);
 
             provider.GetRequiredService<IFinalizedWeekStore>().Should().NotBeOfType<NullFinalizedWeekStore>();
+        }
+
+        [Fact]
+        public void A_host_with_no_storage_account_refuses_to_start()
+        {
+            // A12: running on without blobs would fetch the 14 MB dump on every cold instance
+            var services = TestServices.Create();
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            FluentActions.Invoking(() => provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value)
+                .Should().Throw<OptionsValidationException>();
+        }
+
+        [Fact]
+        public void The_storage_account_falls_back_to_the_functions_host_one()
+        {
+            var services = TestServices.Create(("AzureWebJobsStorage", DevStorage));
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.ConnectionString.Should().Be(DevStorage);
+        }
+
+        [Fact]
+        public void A_configured_storage_account_wins_over_the_fallback()
+        {
+            var services = TestServices.Create(
+                ("AzureWebJobsStorage", DevStorage),
+                ("BlobStorage:ConnectionString", "UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://127.0.0.1"));
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.ConnectionString.Should().NotBe(DevStorage);
         }
 
         [Fact]

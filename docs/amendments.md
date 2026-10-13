@@ -30,7 +30,7 @@ Settled 2026-09-10 against the live league. Q1, Q2, Q3, Q7 and Q8 are closed.
 | **Q2** | SUPER_FLEX or IDP? | **SUPER_FLEX yes, IDP no.** Effectively a three-QB league: two `QB` slots *and* a `SUPER_FLEX`. But see **A3** — the eligibility map stays general. |
 | **Q3** | Should IR players count toward ideal? | **Moot.** The league has no `IR` or `TAXI` slots at all — `roster_positions` is 11 startable plus 8 `BN` and nothing else. The design's default (exclude) stands if a slot is ever added. |
 | **Q4** | Regular season only, or playoffs? | **Open.** `settings.playoff_week_start` reads `0`, which is unset rather than meaningful. Check the league settings directly. |
-| **Q5** | Minimum weeks before σ — four or five? | **Open.** Four remains the assumption. |
+| **Q5** | Minimum weeks before σ — four or five? | **Four**, per D1. `SpreadCalculator.MinWeeks` is a constant (A27). |
 | **Q6** | Table shows σ or CV? | **Open.** Revisit once a few weeks of real scores exist and the spread between team means is visible. |
 | **Q7** | Is the season chain intact? | **2026 is the league's first season.** `previous_league_id` is null because there is no predecessor, not because a rollover was missed. See **A4**. |
 | **Q8** | How many distinct starting slots? | **8** — `QB, RB, WR, TE, FLEX, SUPER_FLEX, K, DEF`. Comfortably readable as a radar; no need to merge axes or default to the diverging bars. |
@@ -947,6 +947,88 @@ loading", so the failure was announced twice and looked out of place. It is now
 a panel, as the 404 page already was, and the masthead says nothing until there
 is data.
 
+## A27 · Data and integrations meet their standards
+
+2026-10-13. Decisions from the domain 3 review (T61 3, items 4–9).
+
+**The stored-season blob carries its write time, and the reader acts on it.**
+A blob written before the latest scheduled `FinalizeWeek` run is a miss, so
+the reader goes to SQL and rewrites the blob. That is the failure it exists
+for: Tuesday's job reaches SQL, its blob write fails, and without the check the
+blob hides the new week until the following Tuesday. The schedule lives in
+`FinalizeSchedule`, which the timer reads its expression from, so the two
+cannot drift. In the offseason the last run is February's, so a blob stays
+current until September. A fixed maximum age was the alternative; it left a
+failed Tuesday stale for days. The blob moved to `current.v3.json`; v2 is
+orphaned. The C# review had removed the old `FinalizedUtc` because nothing
+read it; this one is read on every miss.
+
+**The store refuses an unfinished week.** `SqlFinalizedWeekStore.WriteAsync`
+throws `ArgumentException` and writes nothing, rather than relying on
+`FinalizeWeek`'s filter. A stored week is served as settled, so a live one
+would freeze mid-game. The `IsFinal` column and its read filter stay as a
+backstop; dropping them would need a migration for no behaviour.
+
+**`SeasonService` drops the placeholder team.** The snapshot never contains
+it, so the payload, the CLI and the stored rows cannot count it, and
+`SeasonSnapshot.ExcludedRosterIds` is gone. Both invariants and the
+unresolved-player report still run over it first: a solver bug shows on its
+lineup as well as any other. Rows it already has in SQL are dropped on read.
+
+**HTTP cache lifetimes have reasons.** `/api/season` stays at `max-age=5` on
+purpose, to stay close to live during games; the 5 s season cache behind it
+makes a request inside the window free. `/api/seasons` moves from 300 s to a
+day, because a new season appears once a year.
+
+## A28 · The league ID leaves blob names, the bucket halves, a column is renamed
+
+2026-10-13. The last three items of the domain 3 review (T61 3, items 11–13).
+
+**Blob names carry a hash of the league, not its ID.** Blob names show in the
+Azure portal and in storage logs, and A2 makes the ID a secret. The season blob
+is now `{first 16 hex of SHA-256(league)}/current.v3.json`; the blob under the
+plain ID is orphaned. A hash still keeps two leagues apart. It hides the ID
+from a casual reader, not from someone who already suspects which league it
+is, and that is all it is for. Cache keys keep the plain ID, because they never
+leave memory; so does SQL's `LeagueId` column, because the database is read only
+by the app's own identity and hashing it would mean a migration that rewrites
+every row and a database that is harder to debug.
+
+**The Sleeper token bucket is 25 a minute per instance, not 50.** The bucket is a
+singleton per instance, not per app, and Flex Consumption cannot be capped below
+40 instances, so 50 allowed 2,000 a minute in the worst case against Sleeper's
+guidance of 1,000. At 25 the worst case is 1,000. Normal traffic is about 4.4 a
+minute and 8.4 before Tuesday's job, so nothing ordinary comes near it. The cost
+is the outage case in §07: with both stores failing, refusals now start around
+week 7 rather than week 13. A limiter shared across instances (blob leases or
+Redis) was the alternative: a true limit, for a network call on every request.
+
+**`WeekScore.PlayersPointsJson` is `PlayersJson`.** It holds each player's ID,
+name, positions and points, not a map of points. Migration `RenamePlayersJson`
+renames the column in place and keeps its data. The `migrate` job runs before the
+new code deploys, so for those few minutes the old code reads a column that is
+gone. A read that misses the blob and the memory cache fails with a 500 until
+the deploy finishes. Expanding and contracting across two deploys would avoid
+that; the window was judged too short to be worth it.
+
+## A29 · Stored weeks keep their lineups, in one shape
+
+2026-10-13. Two decisions from the domain 3 high-level review (T61 3b, items
+12 and 13).
+
+**Every stored week keeps its starters, ideal lineup and players.** Nothing
+reads them back today, and A26's rule would remove them. They stay because §08
+asks for them: they are what lets a solver fix recompute a finished season
+without asking Sleeper for it again. That makes them the one exception to A26
+in the store, and it is recorded so the next review does not raise it again.
+
+**The blob and the SQL row store a week the same way.** A player id is written
+as a bare string everywhere, through a converter on `PlayerId`, and a player is
+`RosteredPlayer` as it is, so `StoredPlayer` and six JSON helpers are gone. The
+existing rows said `Positions` where `RosteredPlayer` says `FantasyPositions`;
+migration `RenamePlayersJson`, not yet deployed, rewrites that key as it renames
+the column, and its `Down` puts it back. The blob moved to schema v4.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**
@@ -971,9 +1053,12 @@ that are easy to make again.
   subscription quota for Y1 VMs is zero. Flex Consumption (FC1) is what exists.
   Every argument D5 makes still holds; only the SKU name was wrong.
 - **§07's TTLs and its "≤ 2.3 req/min" headline do not match what was built.**
-  Both columns are now shown in the design, and which set is right is still open
-  as **F4** in the task list. This is the one correction that is a genuine open
-  question rather than a settled fact.
+  Both columns are now shown in the design. The built TTLs stand, at about 4.4
+  req/min (F4, closed 2026-10-13); the table was itself stale until then, still
+  showing 12.2 after the C# review had changed three of the TTLs. §07 now also
+  says what it leaves out: the figures are per instance, a finished week costs
+  the live week's traffic again until Tuesday's job stores it, and a store that
+  fails to read sends every finished week to Sleeper while the outage lasts.
 - **§13's cost table was wrong in three ways**: the Functions row named the wrong
   plan, the storage account was missing entirely, and the App Insights ingest cap
   of "1 GB/day" permits **6× the free monthly allocation** — 31 GB against 5.

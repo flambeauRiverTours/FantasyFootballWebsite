@@ -12,16 +12,6 @@ namespace FantasyLeague.Seasons
     public interface IPlayerMapRefresher
     {
         /// <summary>
-        /// Gets the loaded map of player id to player.
-        /// </summary>
-        IReadOnlyDictionary<string, PlayerRef> PlayerMap { get; }
-
-        /// <summary>
-        /// Gets when the map was last replaced, or null if it has never been loaded.
-        /// </summary>
-        DateTimeOffset? LastRefreshedUtc { get; }
-
-        /// <summary>
         /// Fetches a fresh map from Sleeper and stores it, whatever the age of the current one.
         /// </summary>
         /// <param name="cancellationToken">CancellationToken.</param>
@@ -33,8 +23,9 @@ namespace FantasyLeague.Seasons
         /// reading the store before falling back to Sleeper.
         /// </summary>
         /// <param name="cancellationToken">CancellationToken.</param>
-        /// <returns>A task that completes when a usable map is in memory.</returns>
-        Task EnsureCurrentAsync(CancellationToken cancellationToken);
+        /// <returns>The map of player id to player.</returns>
+        /// <exception cref="InvalidDataException">No usable map was stored and Sleeper answered with no players.</exception>
+        Task<IReadOnlyDictionary<string, PlayerRef>> EnsureCurrentAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -54,17 +45,14 @@ namespace FantasyLeague.Seasons
     {
         private readonly SemaphoreSlim gate = new(1, 1);
 
-        private volatile IReadOnlyDictionary<string, PlayerRef> playerMap = new Dictionary<string, PlayerRef>();
+        /// <summary>
+        /// The map and when it was fetched, swapped as one so a reader never
+        /// sees one without the other. Null until the first load.
+        /// </summary>
+        private volatile StoredPlayerMap? current;
 
-        /// <inheritdoc />
-        public IReadOnlyDictionary<string, PlayerRef> PlayerMap => playerMap;
-
-        /// <inheritdoc />
-        /// <remarks>Null and an empty map are different things; A8 reports every player as unresolved in both.</remarks>
-        public DateTimeOffset? LastRefreshedUtc { get; private set; }
-
-        /// <summary>Gets whether the loaded map is young enough to serve.</summary>
-        private bool IsCurrent => LastRefreshedUtc is { } refreshed && IsWithinMaxAge(refreshed);
+        /// <summary>Gets the loaded map if it is young enough to serve.</summary>
+        private StoredPlayerMap? Usable => current is { } map && IsWithinMaxAge(map.RefreshedUtc) ? map : null;
 
         /// <inheritdoc />
         /// <exception cref="InvalidDataException">Sleeper answered with no players at all.</exception>
@@ -82,35 +70,34 @@ namespace FantasyLeague.Seasons
         }
 
         /// <inheritdoc />
-        public async Task EnsureCurrentAsync(CancellationToken cancellationToken)
+        public async Task<IReadOnlyDictionary<string, PlayerRef>> EnsureCurrentAsync(CancellationToken cancellationToken)
         {
-            if (IsCurrent)
+            if (Usable is { } loaded)
             {
-                return;
+                return loaded.Players;
             }
 
             // one fetch per instance however many requests arrive together
             await gate.WaitAsync(cancellationToken);
             try
             {
-                if (IsCurrent)
+                if (Usable is { } raced)
                 {
-                    return;
+                    return raced.Players;
                 }
 
                 var stored = await store.ReadAsync(cancellationToken);
                 if (stored is not null && IsWithinMaxAge(stored.RefreshedUtc))
                 {
-                    playerMap = stored.Players;
-                    LastRefreshedUtc = stored.RefreshedUtc;
+                    current = stored;
 
                     logger.LogInformation("Adopted the stored player map. Refreshed: {RefreshedUtc}, startable: {StartableCount}.",
-                        stored.RefreshedUtc, playerMap.Count);
+                        stored.RefreshedUtc, stored.Players.Count);
 
-                    return;
+                    return stored.Players;
                 }
 
-                await RefreshCoreAsync(cancellationToken);
+                return (await RefreshCoreAsync(cancellationToken)).Players;
             }
             finally
             {
@@ -130,25 +117,26 @@ namespace FantasyLeague.Seasons
         /// Fetches the dump, projects it and stores the result. Callers hold the gate.
         /// </summary>
         /// <param name="cancellationToken">CancellationToken.</param>
-        /// <returns>A task that completes when the map has been replaced.</returns>
+        /// <returns>The new map.</returns>
         /// <exception cref="InvalidDataException">Sleeper answered with no players at all.</exception>
-        private async Task RefreshCoreAsync(CancellationToken cancellationToken)
+        private async Task<StoredPlayerMap> RefreshCoreAsync(CancellationToken cancellationToken)
         {
             var started = time.GetTimestamp();
             logger.LogInformation("Refreshing player map from Sleeper.");
 
-            var dump = await sleeper.GetPlayersAsync(cancellationToken);
+            var players = await sleeper.GetPlayersAsync(cancellationToken);
 
             // assign last: a failed refresh keeps yesterday's map
-            playerMap = dump.Players;
-            LastRefreshedUtc = time.GetUtcNow();
+            var refreshed = new StoredPlayerMap(time.GetUtcNow(), players);
+            current = refreshed;
 
             // count is the tripwire: a dump that quietly shrinks shows up here
             logger.LogInformation(
-                "Refreshed player map. Fetched: {FetchedCount}, startable: {StartableCount}, duration: {DurationMs}ms",
-                dump.FetchedCount, playerMap.Count, (long)time.GetElapsedTime(started).TotalMilliseconds);
+                "Refreshed player map. Startable: {StartableCount}, duration: {DurationMs}ms",
+                players.Count, (long)time.GetElapsedTime(started).TotalMilliseconds);
 
-            await store.WriteAsync(new StoredPlayerMap(LastRefreshedUtc.Value, playerMap), cancellationToken);
+            await store.WriteAsync(refreshed, cancellationToken);
+            return refreshed;
         }
     }
 }

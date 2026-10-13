@@ -54,7 +54,7 @@ namespace FantasyLeague.Data.Migrations
                     b.Property<bool>("IsFinal")
                         .HasColumnType("bit");
 
-                    b.Property<string>("PlayersPointsJson")
+                    b.Property<string>("PlayersJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

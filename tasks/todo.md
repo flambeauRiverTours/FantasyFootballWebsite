@@ -325,6 +325,157 @@ one feeds the next.
               28. `StoredSeason.FinalizedUtc` is written, never read (item 5
                   replaces it with `Season`, which is read)
               29. F1 and F2 `Spread` bugs, already tracked
+      - [ ] **3 · Data and integrations** — 13 items, approved 2026-10-13.
+            Ten of the sixteen standards already hold: one rate-limited client
+            with a singleton bucket, the league ID only from configuration, the
+            exact solver on each week's own roster, migrations before code,
+            sigma per D1 on both sides, the radar per D10 and R2.
+            **1–3 done 2026-10-13.** §07 recalculated (F4 closed); a failed
+            database read is no longer cached. 371 tests pass, `dotnet format`
+            clean.
+            **4–9 done 2026-10-13 (A27).** The blob carries its write time
+            and misses when older than the last `FinalizeWeek` run
+            (`FinalizeSchedule`, shared with the timer); the blob is now
+            `current.v3.json`, v2 orphaned. The SQL store refuses unfinished
+            weeks. `SeasonService` drops the placeholder team; the invariants
+            still check it. `SpreadCalculator.MinWeeks` is a constant (Q5 marked
+            settled in the design). TTL reasons fixed; `/seasons` cached a day.
+            377 tests pass, `dotnet format` clean. The CLI was not re-run live:
+            it needs `League__CurrentLeagueId` in the environment.
+            **11–13 done 2026-10-13 (A28).** Blob names use a hash of the
+            league (the blob under the plain ID is orphaned); the Sleeper bucket
+            is 25/min per instance, so 40 instances stay inside Sleeper's
+            1,000/min; `PlayersPointsJson` renamed `PlayersJson` by migration
+            `RenamePlayersJson`, which the next deploy's `migrate` job applies.
+            379 tests pass, `dotnet format` clean, no pending model changes.
+            Still open: 10, which needs App Insights.
+            - Sleeper API
+              1. ~~§07, the README and CLAUDE.md state a budget the code no
+                 longer has; recalculate and close F4~~ — done, ≈ 4.4 req/min,
+                 and §07 now says the figures are per instance
+              2. ~~A failed SQL read returned empty and was cached for 6 h, so
+                 every finished week was refetched from Sleeper long after the
+                 database woke (past the 50/min bucket by week 13)~~ — done:
+                 `SqlFinalizedWeekStore` throws, `CachedFinalizedWeekStore`
+                 falls back outside the cache
+              3. ~~§07 left out the finished-but-unstored week~~ — done, with
+                 the store-outage case beside it
+            - Persistence
+              4. **Done (A27).** The stored-season blob carries no timestamp. Add the **write
+                 time** (decided) and move to schema v3. The reader has to use
+                 it this time: 1b item 28 removed `FinalizedUtc` because nothing
+                 read it
+              5. **Done (A27).** Only `FinalizeWeek`'s filter keeps unfinished weeks out of the
+                 store. **Make the store refuse them** (decided)
+            - Correctness
+              6. **Done (A27).** The placeholder team is filtered in `SeasonPayloadMapper`, so
+                 the snapshot, the CLI, the logs and the stored rows still see
+                 it. **`SeasonService` drops it** (decided), and
+                 `ExcludedRosterIds` goes
+              7. **Done.** `SpreadCalculator.Calculate`'s `minWeeks` parameter has no
+                 caller; make four a constant and drop the empty-list check
+              8. **Done: reasons fixed, TTLs kept (decided).** The rosters and users TTL reasons look swapped: team names come
+                 from users, and rosters only say who owns what. Fix the reasons,
+                 perhaps the TTLs (which moves item 1's budget)
+              9. **Done (A27): 5 s is deliberate; `/seasons` a day.** `/season`'s `max-age=5` differs from §09's 30 and D6's "30-second
+                 server cache"; `/seasons`' `max-age=300` has no reason. Record
+                 both or change them
+            - Outside the standards
+              10. Confirm `FinalizeWeek` (Tuesday 12:00 UTC) runs after Sleeper's
+                  week rolls over: if it rolls on Wednesday every week is stored
+                  a week late. Check "Finalized … through week X" in App Insights
+              11. **Done (A28): hashed in blob names only.** The league ID is in blob names and cache keys. Outside A2's
+                  letter (repo and logs); leave unless hashing is wanted
+              12. **Done (A28).** `WeekScore.PlayersPointsJson` holds players, not points. Rename
+                  only alongside another migration
+              13. **Done (A28): 25/min per instance.** The token bucket is per instance, so the 50/min limit is too:
+                  three instances could send 150/min. Found while recalculating
+                  item 1; §07 now says so
+      - [ ] **3b · Data and integrations, high-level review** — 25 items,
+            2026-10-13.
+            **1–4 done 2026-10-13.** No storage account is now a start-up
+            failure (`BlobStorageOptions.ConnectionString` is required, with
+            `AzureWebJobsStorage` as its fallback), and `NullBlobFinalizedWeekStore`
+            is gone; the CLI already used the Core null stores explicitly.
+            `Program.cs` comment corrected. `IPlayerMapRefresher.EnsureCurrentAsync`
+            returns the map, held with its timestamp in one field; `PlayerMap`,
+            `LastRefreshedUtc` and `SeasonService`'s unreachable check are gone.
+            379 tests pass, `dotnet format` clean.
+            **5 and 8–11 done 2026-10-13.** 5 confirmed first: a cached list came
+            back as a new copy on every hit, the snapshot as the same instance.
+            Cached Sleeper responses and stored seasons are now wrapped in a
+            record marked immutable, and a test pins it. One `FinalizedWeekStore`
+            (memory, then blob, then SQL) replaces `CachedFinalizedWeekStore`,
+            `BlobFirstFinalizedWeekStore` and `IBlobFinalizedWeekStore`.
+            `RosterWeek.Starters` is derived from `SlotStarters`; `PlayersPoints`
+            stays, because it alone holds the points of players the map could
+            not resolve. `SleeperLeague.Teams` holds one `SleeperTeam(Name,
+            OwnerId)` per roster. `SeasonService` reads in steps
+            (`ResolveExclusions`, `ReadWeeksAsync`, `ToTeamWeek`, `GroupTeams`)
+            into one `SeasonWeeks`; its two log lines per build are one.
+            377 tests pass, `dotnet format` clean.
+            **12–21 done 2026-10-13.** 12: kept, for §08's recompute (A29).
+            13: one serialized shape, `PlayerId` as a bare string, the
+            `Positions` key rewritten by `RenamePlayersJson` (A29); blob schema
+            v4. 14: DTOs hold only what the mapper reads. 15: `ToSeasonsPayload`
+            takes the current season only. 16: `PlayerDump` gone; the startable
+            count is the tripwire. 17: `SeasonETag.Compute` and `.Matches`.
+            18: `RosterWeek.ScoredPts` is `SleeperPts` (`ActualPts` kept, as
+            decided in 1b). 19: `InvariantViolation` carries `SleeperPts` and
+            `ComparedPts`. 20: `SleeperTeam.FallbackName`. 21: went with 13.
+            376 tests pass, `dotnet format` clean, no pending model changes.
+            **24–25 done 2026-10-13.** Only `SlotAveragesJson` keeps an
+            empty-column guard (rows from before `AddSlotAveragesJson`); an
+            empty lineup or player column now throws. The per-build timing
+            line is Debug. 378 tests pass, `dotnet format` clean.
+            Left: 22–23, folded into domain 7. Noticed while doing 25:
+            `SeasonService.Report` still logs every unresolved player and
+            invariant breach on every build, so one unknown player is a warning
+            every 5 s under load.
+            - Kluges
+              1. ~~A missing storage account silently registers no-op blob stores~~
+              2. ~~`Program.cs` comment names a catch that moved~~
+              3. ~~`SeasonService` checks a "never refreshed" map that cannot be~~
+              4. ~~`IPlayerMapRefresher` is ensure-then-read, with a torn pair of
+                 properties~~
+              5. ~~Done.~~ HybridCache may deserialize a fresh copy of the Sleeper DTO lists
+                 and the stored season on every hit; only `SeasonSnapshot` is
+                 marked immutable. Confirm with a test, then fix
+              6. The blob write reads the blob first to protect against T30's
+                 backfill, which is not built (A26's rule)
+              7. Two catch blocks per blob write log one message at two levels
+            - Overly complex
+              8. ~~Done.~~ Four classes and two interfaces for the finalized-week store;
+                 fold blob-first into the cached store
+              9. ~~Done, in part: `Starters` derived; `PlayersPoints` kept.~~ `RosterWeek` carries the same facts several times (`Players`
+                 and `PlayersPoints`, `Starters` and `SlotStarters`), and
+                 `SeasonService` derives a third copy
+              10. ~~Done.~~ `SleeperLeague` keeps two parallel dictionaries keyed by roster
+              11. ~~Done.~~ `BuildUncachedAsync` is about 70 lines; `BuildWeekAsync` returns
+                  three lists the caller appends to three more
+              12. **Kept (A29).** Starters, ideal lineup and every player are stored for a
+                  recompute that does not exist. **Decision needed:** keep for
+                  §08, or drop under A26
+              13. ~~Done (A29).~~ The SQL row and the blob serialize the same week in two shapes
+            - Waiting for a task
+              14. ~~Done.~~ DTO fields nothing reads, `LeagueDto.LeagueId` among them
+              15. ~~Done.~~ `ToSeasonsPayload`'s `available` parameter is always null
+              16. ~~Done.~~ `PlayerDump` exists for one log line
+            - Naming and placement
+              17. ~~Done.~~ ETag logic lives in `SeasonPayloadMapper`
+              18. ~~Done.~~ `ActualPts` and `ScoredPts` side by side, not saying which has
+                  the override
+              19. ~~Done.~~ `InvariantViolation.Expected` is a target for one check and a
+                  floor for the other
+              20. ~~Done.~~ The `"Roster {id}"` fallback is written three times
+              21. ~~Done.~~ `FromJson` and `ToJson` in `SqlFinalizedWeekStore` read and
+                  write player ids
+            - AI code smells
+              22. Doc comments that restate the type (`CancellationToken.`,
+                  `Logger.`)
+              23. Doc comments that narrate history the amendments already hold
+              24. ~~Done.~~ Empty-JSON guards on columns that are never empty
+              25. ~~Done.~~ "Begin building season snapshot." logged every 5 s under load
 - [ ] **T62** Rewrite the design for a prospective employer. Lead with the
       problem, the decisions and their trade-offs, and what was measured; keep
       the build-log history (corrections, amendments) one click away rather than
@@ -382,6 +533,8 @@ clear what would and would not have input.
       defined the way `IFinalizedWeekStore` was, and a `SeasonOverrides` property
       that `LeagueOptions` does not yet have. The page's `fetchSeasons` client
       call was removed unused (A26); add it back with the season picker (T56).
+      `LeagueDto.PreviousLeagueId` and `ToSeasonsPayload`'s list of available
+      seasons were removed unused too (T61 3b); add both back here.
 - [ ] **T30** Historical backfill job — 2.5 h · **no input, and largely redundant**
       T28 writes every finalized week rather than only the most recent, and
       `WriteAsync` upserts, so **the current season already backfills itself**.
@@ -439,7 +592,10 @@ Nothing here blocks anything.
 - [x] **F2 · `Calculate([], 0)` throws "Sequence contains no elements".** Done 2026-10-12.
       Unreachable at the default `minWeeks: 4`, so it is only a caller error with
       a confusing message. `finalWeeks.Count == 0` in the guard settles it.
-- [ ] **F4 · The cache TTLs move the request budget from 2.2 to 12.2 req/min.**
+- [x] **F4 · The cache TTLs move the request budget from 2.2 to 12.2 req/min.**
+      **Closed 2026-10-13 (T61 3, item 1).** The built TTLs stand: matchups
+      15 s, state 5 min, rosters 5 min, users 1 h, about 4.4 req/min. §07, the
+      README and CLAUDE.md now say so.
       matchups 30s to 5s, rosters 1h to 5min, state 5min to 1h. Far inside the
       50/min bucket, so nothing breaks, but §07's table and the "2.3 req/min"
       headline in the design and README are now wrong. Two are worth revisiting:
@@ -549,6 +705,9 @@ Listed here only so their implementation state is visible in one place.
 | **A24** | The front end meets its standards; Prettier and a bundle check added     | done — T61 domain 2                                                     |
 | **A25** | Colour follows the team; game windows cover the whole NFL week           | done — T61 2b, items 5 and 10                                           |
 | **A26** | Unused code waits for its task; `?radar` removed; a failure is a panel   | done — T61 2b                                                           |
+| **A27** | Blob judged by write time; store refuses live weeks; placeholder dropped early | done — T61 3, items 4–9                                           |
+| **A28** | League hashed in blob names; bucket 25/min per instance; `PlayersJson` | done — T61 3, items 11–13                                               |
+| **A29** | Stored weeks keep their lineups, in one shape for blob and SQL        | done — T61 3b, items 12–13                                              |
 
 ---
 

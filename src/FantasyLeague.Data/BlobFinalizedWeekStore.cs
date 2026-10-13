@@ -1,4 +1,6 @@
-﻿using Azure;
+﻿using System.Security.Cryptography;
+using System.Text;
+using Azure;
 using Azure.Storage.Blobs;
 using FantasyLeague.Core;
 using Microsoft.Extensions.Logging;
@@ -9,8 +11,9 @@ namespace FantasyLeague.Data
     /// The one season the blob holds.
     /// </summary>
     /// <param name="Season">The season the weeks belong to. A read for any other season misses.</param>
+    /// <param name="WrittenUtc">When the blob was written. A blob older than the last finalize run misses.</param>
     /// <param name="Weeks">The season's finalized weeks.</param>
-    internal sealed record StoredSeason(int Season, IReadOnlyList<TeamWeek> Weeks);
+    internal sealed record StoredSeason(int Season, DateTimeOffset WrittenUtc, IReadOnlyList<TeamWeek> Weeks);
 
     /// <summary>
     /// Caches the current season's finalized weeks in one blob per league (A20).
@@ -20,18 +23,43 @@ namespace FantasyLeague.Data
     /// so a past season is never read from here.
     /// </remarks>
     /// <param name="container">The container the blob lives in.</param>
+    /// <param name="time">Clock for the write time and the staleness check.</param>
     /// <param name="logger">Logger.</param>
     internal sealed class BlobFinalizedWeekStore(
         BlobContainerClient container,
-        ILogger<BlobFinalizedWeekStore> logger) : IBlobFinalizedWeekStore
+        TimeProvider time,
+        ILogger<BlobFinalizedWeekStore> logger)
     {
-        /// <inheritdoc />
+        /// <summary>
+        /// Reads the stored season.
+        /// </summary>
+        /// <param name="leagueId">The league.</param>
+        /// <param name="season">The season wanted.</param>
+        /// <param name="cancellationToken">CancellationToken.</param>
+        /// <returns>The season's weeks, or null on a miss or a transient failure.</returns>
+        /// <remarks>
+        /// A blob written before the last finalize run misses, so the caller
+        /// reads SQL and rewrites it. That is the case where Tuesday's job
+        /// reached SQL but its blob write failed, which would otherwise hide the
+        /// new week until next Tuesday.
+        /// </remarks>
         public async Task<IReadOnlyList<TeamWeek>?> ReadAsync(string leagueId, int season, CancellationToken cancellationToken)
         {
             try
             {
                 var stored = await BlobJson.ReadAsync<StoredSeason>(container.GetBlobClient(BlobName(leagueId)), cancellationToken);
-                return stored?.Season == season ? stored.Weeks : null;
+                if (stored?.Season != season)
+                {
+                    return null;
+                }
+
+                if (stored.WrittenUtc < FinalizeSchedule.LastRunAtOrBefore(time.GetUtcNow()))
+                {
+                    logger.LogInformation("The stored season was written at {WrittenUtc}, before the last finalize run; reading SQL instead.", stored.WrittenUtc);
+                    return null;
+                }
+
+                return stored.Weeks;
             }
             catch (RequestFailedException ex) when (BlobJson.IsTransient(ex))
             {
@@ -40,7 +68,15 @@ namespace FantasyLeague.Data
             }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Stores a season, unless the blob already holds a newer one. Never throws
+        /// for a storage failure: SQL is the record, and the next read falls back to it.
+        /// </summary>
+        /// <param name="leagueId">The league.</param>
+        /// <param name="season">The season the weeks belong to.</param>
+        /// <param name="weeks">The season's finalized weeks.</param>
+        /// <param name="cancellationToken">CancellationToken.</param>
+        /// <returns>A task that completes when the blob is written or skipped.</returns>
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
             if (weeks.Count == 0)
@@ -59,7 +95,7 @@ namespace FantasyLeague.Data
                     return;
                 }
 
-                await BlobJson.WriteAsync(container, BlobName(leagueId), new StoredSeason(season, weeks), cancellationToken);
+                await BlobJson.WriteAsync(container, BlobName(leagueId), new StoredSeason(season, time.GetUtcNow(), weeks), cancellationToken);
             }
             catch (RequestFailedException ex) when (BlobJson.IsTransient(ex))
             {
@@ -75,13 +111,20 @@ namespace FantasyLeague.Data
         /// The stored shape's version. Bump it whenever <see cref="TeamWeek"/>
         /// changes, so an old blob is a cache miss rather than a misread.
         /// </summary>
-        private const int Schema = 2;
+        private const int Schema = 4;
 
         /// <summary>
         /// Names the league's one blob.
         /// </summary>
         /// <param name="leagueId">The league.</param>
-        /// <returns>The blob name.</returns>
-        private static string BlobName(string leagueId) => $"{leagueId}/current.v{Schema}.json";
+        /// <returns>The blob name, keyed by a hash of the league rather than its id.</returns>
+        /// <remarks>
+        /// Blob names show in the portal and in storage logs, and the league id
+        /// is a secret (A2). The hash keeps leagues apart without naming one; it
+        /// hides the id from a casual reader, not from someone who already
+        /// suspects which league it is.
+        /// </remarks>
+        private static string BlobName(string leagueId) =>
+            $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(leagueId)))[..16]}/current.v{Schema}.json";
     }
 }

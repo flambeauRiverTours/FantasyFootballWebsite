@@ -64,7 +64,7 @@ namespace FantasyLeague.Core.Tests
     public class BlobStoreFailureTests
     {
         private static BlobFinalizedWeekStore SeasonStore(int status) =>
-            new(new FailingContainer(status), NullLogger<BlobFinalizedWeekStore>.Instance);
+            new(new FailingContainer(status), TimeProvider.System, NullLogger<BlobFinalizedWeekStore>.Instance);
 
         private static BlobPlayerMapStore PlayerMapStore(int status) =>
             new(new FailingContainer(status), "players.json", NullLogger<BlobPlayerMapStore>.Instance);

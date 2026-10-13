@@ -37,27 +37,29 @@ namespace FantasyLeague.Data
             services.AddHybridCache();
             services.TryAddSingleton(TimeProvider.System);
 
+            // AzureWebJobsStorage is already present wherever a Functions host runs.
+            // Without either, start-up fails: running on without blobs would fetch
+            // the 14 MB player dump on every cold instance (A12)
             services.AddOptions<BlobStorageOptions>()
                 .BindConfiguration("BlobStorage")
+                .PostConfigure<IConfiguration>((o, configuration) => o.ConnectionString ??= configuration["AzureWebJobsStorage"])
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
-            services.AddSingleton<IBlobFinalizedWeekStore>(provider =>
-                Container(provider, o => o.FinalizedWeekContainer) is { } container
-                    ? new BlobFinalizedWeekStore(container, provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>())
-                    : new NullBlobFinalizedWeekStore());
+            services.AddSingleton(provider =>
+                new BlobFinalizedWeekStore(
+                    Container(provider, o => o.FinalizedWeekContainer),
+                    provider.GetRequiredService<TimeProvider>(),
+                    provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>()));
 
             services.AddSingleton<IPlayerMapStore>(provider =>
-                Container(provider, o => o.PlayerMapContainer) is { } container
-                    ? new BlobPlayerMapStore(
-                        container,
-                        provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.PlayerMapBlob,
-                        provider.GetRequiredService<ILogger<BlobPlayerMapStore>>())
-                    : new NullPlayerMapStore());
+                new BlobPlayerMapStore(
+                    Container(provider, o => o.PlayerMapContainer),
+                    provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.PlayerMapBlob,
+                    provider.GetRequiredService<ILogger<BlobPlayerMapStore>>()));
 
             services.AddSingleton<SqlFinalizedWeekStore>();
-            services.AddSingleton<BlobFirstFinalizedWeekStore>();
-            services.AddSingleton<IFinalizedWeekStore, CachedFinalizedWeekStore>();
+            services.AddSingleton<IFinalizedWeekStore, FinalizedWeekStore>();
 
             return services;
         }
@@ -67,20 +69,12 @@ namespace FantasyLeague.Data
         /// </summary>
         /// <param name="provider">The service provider.</param>
         /// <param name="name">Picks the container's name from the options.</param>
-        /// <returns>The container, or null when no storage account is configured.</returns>
-        /// <remarks>
-        /// Falls back to <c>AzureWebJobsStorage</c>, which is already present
-        /// wherever a Functions host runs.
-        /// </remarks>
-        private static BlobContainerClient? Container(IServiceProvider provider, Func<BlobStorageOptions, string> name)
+        /// <returns>The container.</returns>
+        private static BlobContainerClient Container(IServiceProvider provider, Func<BlobStorageOptions, string> name)
         {
             var options = provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value;
-            var connectionString = options.ConnectionString
-                ?? provider.GetRequiredService<IConfiguration>()["AzureWebJobsStorage"];
 
-            return string.IsNullOrWhiteSpace(connectionString)
-                ? null
-                : new BlobServiceClient(connectionString).GetBlobContainerClient(name(options));
+            return new BlobServiceClient(options.ConnectionString).GetBlobContainerClient(name(options));
         }
     }
 }

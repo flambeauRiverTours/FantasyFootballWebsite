@@ -31,7 +31,7 @@
         public string StartersJson { get; set; } = string.Empty;
 
         /// <summary>Gets or sets every rostered player with their points, so a solver fix can recompute.</summary>
-        public string PlayersPointsJson { get; set; } = string.Empty;
+        public string PlayersJson { get; set; } = string.Empty;
 
         /// <summary>Gets or sets the solver's lineup.</summary>
         public string IdealLineupJson { get; set; } = string.Empty;

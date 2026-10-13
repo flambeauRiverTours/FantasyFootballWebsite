@@ -7,11 +7,24 @@ namespace FantasyLeague.Sleeper
     /// </summary>
     /// <param name="Name">The league's name, or a default when the commissioner set none.</param>
     /// <param name="Slots">Startable slots in roster_positions order, for this season only (A3).</param>
-    /// <param name="TeamNames">Display name per roster id.</param>
-    /// <param name="RosterOwnerIds">Owning user id per roster id; unowned rosters are absent. What A1 matches on.</param>
+    /// <param name="Teams">Every roster, by roster id.</param>
     public sealed record SleeperLeague(
         string Name,
         IReadOnlyList<Slot> Slots,
-        IReadOnlyDictionary<int, string> TeamNames,
-        IReadOnlyDictionary<int, string> RosterOwnerIds);
+        IReadOnlyDictionary<int, SleeperTeam> Teams);
+
+    /// <summary>
+    /// One roster as the league shows it.
+    /// </summary>
+    /// <param name="Name">The name to show it under, never blank.</param>
+    /// <param name="OwnerId">The owning user's id, or null for an orphaned roster. What A1 matches on.</param>
+    public sealed record SleeperTeam(string Name, string? OwnerId)
+    {
+        /// <summary>
+        /// The name shown for a roster with no manager or no name of its own.
+        /// </summary>
+        /// <param name="rosterId">The roster.</param>
+        /// <returns>For example, <c>Roster 3</c>.</returns>
+        public static string FallbackName(int rosterId) => $"Roster {rosterId}";
+    }
 }

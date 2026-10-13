@@ -10,8 +10,9 @@ namespace FantasyLeague.Data
     {
         /// <summary>
         /// Gets or sets the storage connection string. Falls back to
-        /// <c>AzureWebJobsStorage</c>, and with neither set nothing is persisted.
+        /// <c>AzureWebJobsStorage</c>; with neither set the host refuses to start.
         /// </summary>
+        [Required(AllowEmptyStrings = false)]
         public string? ConnectionString { get; set; }
 
         /// <summary>

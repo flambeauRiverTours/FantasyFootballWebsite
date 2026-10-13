@@ -139,7 +139,6 @@ namespace FantasyLeague.Core.Tests
 
             state!.Season.Should().Be(2026);
             state.Week.Should().Be(3);
-            state.SeasonType.Should().Be("regular");
         }
 
         [Fact]

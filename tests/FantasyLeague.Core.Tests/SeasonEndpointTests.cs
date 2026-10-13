@@ -1,4 +1,5 @@
 ﻿using FantasyLeague.Seasons;
+using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,13 +61,13 @@ namespace FantasyLeague.Core.Tests
 
     public class ExcludedRosterResolutionTests
     {
-        private static IReadOnlyDictionary<int, string> Owners(params (int RosterId, string Name, string OwnerId)[] rosters) =>
-            rosters.ToDictionary(r => r.RosterId, r => r.OwnerId);
+        private static IReadOnlyDictionary<int, SleeperTeam> Owners(params (int RosterId, string Name, string OwnerId)[] rosters) =>
+            rosters.ToDictionary(r => r.RosterId, r => new SleeperTeam(r.Name, r.OwnerId));
 
-        private static IReadOnlySet<int> Resolve(IReadOnlyDictionary<int, string> owners, params string[] excludedOwnerIds) =>
+        private static IReadOnlySet<int> Resolve(IReadOnlyDictionary<int, SleeperTeam> owners, params string[] excludedOwnerIds) =>
             ExcludedRosters.Resolve(owners, excludedOwnerIds).RosterIds;
 
-        private static IReadOnlyList<string> Unmatched(IReadOnlyDictionary<int, string> owners, params string[] excludedOwnerIds) =>
+        private static IReadOnlyList<string> Unmatched(IReadOnlyDictionary<int, SleeperTeam> owners, params string[] excludedOwnerIds) =>
             ExcludedRosters.Resolve(owners, excludedOwnerIds).UnmatchedOwnerIds;
 
         [Fact]
@@ -129,8 +130,7 @@ namespace FantasyLeague.Core.Tests
 
         [Fact]
         public void A_roster_with_no_owner_cannot_be_excluded_and_does_not_throw() =>
-            // an orphaned roster is absent from the owner map entirely
-            Resolve(new Dictionary<int, string>(), "u9").Should().BeEmpty();
+            Resolve(new Dictionary<int, SleeperTeam> { [3] = new("Roster 3", null) }, "u9").Should().BeEmpty();
 
         [Fact]
         public void An_owner_id_that_matches_no_roster_is_reported()
@@ -167,22 +167,6 @@ namespace FantasyLeague.Core.Tests
 
         [Fact]
         public void Nothing_is_reported_when_nothing_is_configured() => Unmatched(Owners((1, "Real Team", "u1"))).Should().BeEmpty();
-
-        [Fact]
-        public void The_resolved_ids_drop_the_team_from_the_payload()
-        {
-            var snapshot = new SeasonSnapshot("", 2026, 2, 1, Slot.Parse(["QB"]),
-                [
-                    new TeamSeason(1, "Real Team", [new TeamWeek(1, 1, 30m, 30m, [], [], [], true, new Dictionary<string, decimal>())]),
-                    new TeamSeason(9, "POON SQUAD", [new TeamWeek(9, 1, 0m, 0m, [], [], [], true, new Dictionary<string, decimal>())]),
-                ],
-                [], [],
-                Resolve(Owners((1, "Real Team", "u1"), (9, "POON SQUAD", "u9")), "u9"));
-
-            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, DateTimeOffset.UtcNow);
-
-            payload.Teams.Should().ContainSingle().Which.Name.Should().Be("Real Team");
-        }
     }
 
     public class LeagueOptionsExclusionTests

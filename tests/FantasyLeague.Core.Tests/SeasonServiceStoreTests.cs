@@ -29,9 +29,10 @@ namespace FantasyLeague.Core.Tests
 
     public class SeasonServiceStoreTests
     {
-        private static async Task<ISeasonService> BuildAsync(LeagueSocket socket, IFinalizedWeekStore store)
+        private static async Task<ISeasonService> BuildAsync(
+            LeagueSocket socket, IFinalizedWeekStore store, params (string Key, string? Value)[] settings)
         {
-            var services = TestServices.Create();
+            var services = TestServices.Create(settings);
             services.AddSingleton(store);
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
@@ -106,6 +107,58 @@ namespace FantasyLeague.Core.Tests
             var week = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.First();
             week.Players.Should().NotBeEmpty();
             week.Players.Should().OnlyContain(p => p.FantasyPositions.Count > 0);
+        }
+
+        [Fact]
+        public async Task An_excluded_roster_never_reaches_the_snapshot()
+        {
+            // A1, at the read boundary: a stored week of the placeholder team is
+            // dropped as well as a fetched one
+            var socket = new LeagueSocket { State = Bodies.State(week: 2) };
+            socket.Matchups[2] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 35m));
+            var store = new RecordingWeekStore([
+                new TeamWeek(1, 1, 35m, 35m, [], [], [], true, new Dictionary<string, decimal>()),
+                new TeamWeek(2, 1, 35m, 35m, [], [], [], true, new Dictionary<string, decimal>()),
+            ]);
+
+            var service = await BuildAsync(socket, store, ("League:ExcludedOwnerIds:0", "u2"));
+            var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+
+            snapshot.Teams.Should().ContainSingle().Which.RosterId.Should().Be(1);
+            snapshot.Teams[0].Weeks.Select(w => w.Week).Should().Equal(1, 2);
+        }
+
+        [Fact]
+        public async Task The_league_reference_leaves_out_the_excluded_roster()
+        {
+            // A1 step 2: the radar's league average is a separate aggregate from
+            // the standings, and the placeholder's low scores must not reach it
+            var socket = new LeagueSocket { State = Bodies.State(week: 2) };
+            socket.Matchups[1] = Bodies.Week(
+                Bodies.Matchup(1, 35m),
+                Bodies.Matchup(2, 3m, startersPoints: [1m, 1m, 1m],
+                    playersPoints: new Dictionary<string, decimal> { ["qb1"] = 1m, ["rb1"] = 1m, ["wr1"] = 1m }));
+
+            var service = await BuildAsync(socket, new RecordingWeekStore(), ("League:ExcludedOwnerIds:0", "u2"));
+            var payload = SeasonPayloadMapper.ToSeasonPayload(
+                await service.BuildAsync(TestContext.Current.CancellationToken), DateTimeOffset.UnixEpoch);
+
+            payload.Teams.Should().ContainSingle();
+            payload.LeagueSlotAverages.Should().NotBeEmpty()
+                .And.BeEquivalentTo(payload.Teams[0].SlotAverages);
+        }
+
+        [Fact]
+        public async Task An_excluded_roster_is_still_checked_against_both_invariants()
+        {
+            // starters sum to 35 against 99 points: a breach on the placeholder is still a breach
+            var socket = new LeagueSocket { State = Bodies.State(week: 1) };
+            socket.Matchups[1] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 99m));
+
+            var service = await BuildAsync(socket, new RecordingWeekStore(), ("League:ExcludedOwnerIds:0", "u2"));
+            var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+
+            snapshot.Violations.Should().NotBeEmpty().And.OnlyContain(v => v.RosterId == 2);
         }
     }
 }

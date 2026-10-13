@@ -17,20 +17,21 @@
     /// </summary>
     public static class SpreadCalculator
     {
+        /// <summary>The fewest finalized weeks that give a meaningful spread (D1, Q5).</summary>
+        public const int MinWeeks = 4;
+
         /// <summary>
         /// Computes the spread of a team's finalized weeks.
         /// </summary>
         /// <param name="finalWeeks">Point totals for finalized weeks only.</param>
-        /// <param name="minWeeks">The fewest weeks that give a meaningful answer.</param>
-        /// <returns>The spread, or null below <paramref name="minWeeks"/> (D1).</returns>
+        /// <returns>The spread, or null below <see cref="MinWeeks"/> (D1).</returns>
         /// <remarks>
         /// Null rather than zero, so a two-week team never reads as the steadiest
         /// in the league.
         /// </remarks>
-        public static Spread? Calculate(IReadOnlyList<decimal> finalWeeks, int minWeeks = 4)
+        public static Spread? Calculate(IReadOnlyList<decimal> finalWeeks)
         {
-            // the empty check matters only when a caller passes minWeeks of zero
-            if (finalWeeks.Count == 0 || finalWeeks.Count < minWeeks)
+            if (finalWeeks.Count < MinWeeks)
             {
                 return null;
             }

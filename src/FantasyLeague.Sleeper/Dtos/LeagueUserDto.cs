@@ -9,12 +9,10 @@
     /// </remarks>
     /// <param name="UserId">The only identifier stable across seasons, and therefore what A1's exclusion list matches on.</param>
     /// <param name="DisplayName">The manager's Sleeper handle. The fallback when no team name is set.</param>
-    /// <param name="IsBot">Whether Sleeper considers this a bot account. Can be null.</param>
     /// <param name="Metadata">Per-league user settings, including the team name. Can be null.</param>
     internal sealed record LeagueUserDto(
         string UserId,
         string? DisplayName,
-        bool? IsBot,
         LeagueUserMetadataDto? Metadata);
 
     /// <summary>

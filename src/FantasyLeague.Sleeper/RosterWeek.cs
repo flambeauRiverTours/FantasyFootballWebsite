@@ -8,12 +8,15 @@ namespace FantasyLeague.Sleeper
     /// </summary>
     /// <param name="RosterId">The roster this week belongs to.</param>
     /// <param name="ActualPts">What the roster actually scored, taking a commissioner override into account.</param>
-    /// <param name="ScoredPts">Sleeper's own scored total, before any override. What both invariants compare against (A9).</param>
+    /// <param name="SleeperPts">Sleeper's own scored total, before any commissioner override. What both invariants compare against (A9).</param>
     /// <param name="Players">Every rostered player that week, ready for the solver.</param>
-    /// <param name="Starters">The lineup that was started, in slot order, with empty slots removed.</param>
     /// <param name="StartersPoints">Points for the started lineup, for the <c>sum(starters_points) == points</c> invariant.</param>
     /// <param name="SlotStarters">The lineup aligned with the startable slots, with null for a slot left empty.</param>
-    /// <param name="PlayersPoints">Points per player id, bench included. A missing id scored zero.</param>
+    /// <param name="PlayersPoints">
+    /// Points per player id, bench included. A missing id scored zero. Unlike
+    /// <paramref name="Players"/> it includes players the map could not
+    /// resolve, so an unknown starter still scores on the radar.
+    /// </param>
     /// <param name="UnresolvedPlayerIds">
     /// Ids present on the roster that the player map could not explain.
     /// </param>
@@ -29,11 +32,16 @@ namespace FantasyLeague.Sleeper
     public sealed record RosterWeek(
         int RosterId,
         decimal ActualPts,
-        decimal ScoredPts,
+        decimal SleeperPts,
         IReadOnlyList<RosteredPlayer> Players,
-        IReadOnlyList<PlayerId> Starters,
         IReadOnlyList<decimal> StartersPoints,
         IReadOnlyList<string?> SlotStarters,
         IReadOnlyDictionary<string, decimal> PlayersPoints,
-        IReadOnlyList<string> UnresolvedPlayerIds);
+        IReadOnlyList<string> UnresolvedPlayerIds)
+    {
+        /// <summary>
+        /// Gets the lineup that was started, in slot order, with empty slots removed.
+        /// </summary>
+        public IReadOnlyList<PlayerId> Starters => [.. SlotStarters.OfType<string>().Select(id => new PlayerId(id))];
+    }
 }

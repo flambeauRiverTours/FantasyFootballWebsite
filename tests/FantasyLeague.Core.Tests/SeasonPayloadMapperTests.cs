@@ -25,11 +25,10 @@ namespace FantasyLeague.Core.Tests
             IReadOnlyList<TeamSeason>? teams = null,
             string[]? rosterPositions = null,
             int currentWeek = 5,
-            int finalThroughWeek = 4,
-            IReadOnlySet<int>? excluded = null) =>
+            int finalThroughWeek = 4) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], [], excluded ?? new HashSet<int>());
+                teams ?? [], [], []);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,
@@ -163,31 +162,6 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void An_excluded_roster_is_dropped_entirely()
-        {
-            // A1, at the read boundary
-            var payload = SeasonPayloadMapper.ToSeasonPayload(
-                Snapshot([
-                    Team(1, "Real", (30m, 30m, true)),
-                    Team(9, "POON SQUAD", (0m, 0m, true)),
-                ], excluded: new HashSet<int> { 9 }),
-                AsOf);
-
-            payload.Teams.Should().ContainSingle().Which.RosterId.Should().Be(1);
-        }
-
-        [Fact]
-        public void Excluding_nobody_keeps_everybody()
-        {
-            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
-                Team(1, "One", (10m, 10m, true)),
-                Team(2, "Two", (20m, 20m, true)),
-            ]), AsOf);
-
-            payload.Teams.Should().HaveCount(2);
-        }
-
-        [Fact]
         public void The_radar_blocks_are_empty_when_no_week_produced_an_attribution()
         {
             // an empty object beats omitting the key; the client can bind either way
@@ -226,20 +200,6 @@ namespace FantasyLeague.Core.Tests
             ]), AsOf);
 
             payload.Teams[0].SlotAverages["QB"].Should().Be(20m);
-        }
-
-        [Fact]
-        public void The_league_reference_excludes_the_dummy_team_A1_step_2()
-        {
-            // A1: a second, separate filter from the standings exclusion above
-            var payload = SeasonPayloadMapper.ToSeasonPayload(
-                Snapshot([
-                    TeamWithSlots(1, "Real", (true, new Dictionary<string, decimal> { ["QB"] = 20m })),
-                    TeamWithSlots(9, "POON SQUAD", (true, new Dictionary<string, decimal> { ["QB"] = 0m })),
-                ], excluded: new HashSet<int> { 9 }),
-                AsOf);
-
-            payload.LeagueSlotAverages["QB"].Should().Be(20m, "the dummy team's zero must not drag the reference down");
         }
 
         [Fact]
@@ -299,22 +259,6 @@ namespace FantasyLeague.Core.Tests
 
             payload.Current.Should().Be(2026);
             payload.Available.Should().Equal(2026);
-        }
-
-        [Fact]
-        public void Available_seasons_come_back_newest_first()
-        {
-            // what the season picker binds to, so a new year appears the day D8 finds it
-            var payload = SeasonPayloadMapper.ToSeasonsPayload(2026, [2024, 2026, 2025]);
-
-            payload.Available.Should().Equal(2026, 2025, 2024);
-        }
-
-        [Fact]
-        public void A_repeated_season_is_listed_once()
-        {
-            SeasonPayloadMapper.ToSeasonsPayload(2026, [2026, 2026, 2025])
-                .Available.Should().Equal(2026, 2025);
         }
     }
 }

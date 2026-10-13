@@ -52,14 +52,6 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
-        /// Projects the dump, keeping how many players it held as a tripwire.
-        /// </summary>
-        /// <param name="dump">The parsed <c>/v1/players/nfl</c> response.</param>
-        /// <returns>The slim map and the dump's size.</returns>
-        internal static PlayerDump ToPlayerDump(IReadOnlyDictionary<string, SleeperPlayerDto> dump) =>
-            new(dump.Count, ToPlayerMap(dump));
-
-        /// <summary>
         /// Keeps the two fields of the NFL state anything downstream reads.
         /// </summary>
         /// <param name="state">The state as Sleeper returned it.</param>
@@ -67,12 +59,12 @@ namespace FantasyLeague.Sleeper
         internal static NFLState ToNFLState(NFLStateDto state) => new(state.Season, state.Week);
 
         /// <summary>
-        /// Resolves each roster to the name it should be shown under.
+        /// Joins each roster to its owner, and so to the name it is shown under.
         /// </summary>
         /// <param name="users">The league's users.</param>
         /// <param name="rosters">The league's rosters.</param>
-        /// <returns>A map of roster id to display name.</returns>
-        internal static IReadOnlyDictionary<int, string> ToTeamNames(
+        /// <returns>Every roster by roster id.</returns>
+        internal static IReadOnlyDictionary<int, SleeperTeam> ToTeams(
             IReadOnlyList<LeagueUserDto> users,
             IReadOnlyList<RosterDto> rosters)
         {
@@ -80,9 +72,11 @@ namespace FantasyLeague.Sleeper
 
             return rosters.ToDictionary(
                 roster => roster.RosterId,
-                roster => roster.OwnerId is not null && byUserId.TryGetValue(roster.OwnerId, out var user)
-                    ? ResolveTeamName(user, roster.RosterId)
-                    : $"Roster {roster.RosterId}");
+                roster => new SleeperTeam(
+                    roster.OwnerId is not null && byUserId.TryGetValue(roster.OwnerId, out var user)
+                        ? ResolveTeamName(user, roster.RosterId)
+                        : SleeperTeam.FallbackName(roster.RosterId),
+                    roster.OwnerId));
         }
 
         /// <summary>
@@ -102,25 +96,6 @@ namespace FantasyLeague.Sleeper
         internal static IReadOnlyList<Slot> ToSlots(LeagueDto league) =>
             Slot.Parse(league.RosterPositions
                 ?? throw new InvalidDataException("Sleeper returned a league with no roster positions."));
-
-        /// <summary>
-        /// Each owned roster's owner, keyed by roster.
-        /// </summary>
-        /// <param name="rosters">The rosters as Sleeper returned them.</param>
-        /// <returns>Owner user IDs by roster ID, omitting unowned rosters.</returns>
-        internal static IReadOnlyDictionary<int, string> ToRosterOwnerIds(IReadOnlyList<RosterDto> rosters)
-        {
-            var owners = new Dictionary<int, string>();
-            foreach (var roster in rosters)
-            {
-                if (roster.OwnerId is { } owner)
-                {
-                    owners[roster.RosterId] = owner;
-                }
-            }
-
-            return owners;
-        }
 
         /// <summary>
         /// Picks a display name for one manager: their team name, else their
@@ -149,7 +124,7 @@ namespace FantasyLeague.Sleeper
                 return user.DisplayName;
             }
 
-            return $"Roster {rosterId}";
+            return SleeperTeam.FallbackName(rosterId);
         }
 
         /// <summary>
@@ -208,17 +183,11 @@ namespace FantasyLeague.Sleeper
                 players.Add(new RosteredPlayer(new PlayerId(id), reference.Name, reference.FantasyPositions, points));
             }
 
-            var starters = (matchup.Starters ?? [])
-                .Where(id => id != EmptySlot)
-                .Select(id => new PlayerId(id))
-                .ToList();
-
             return new RosterWeek(
                 matchup.RosterId,
                 matchup.CustomPoints ?? matchup.Points ?? 0m,
                 matchup.Points ?? 0m,
                 players,
-                starters,
                 matchup.StartersPoints ?? [],
                 ToSlotStarters(matchup),
                 matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
