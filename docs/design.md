@@ -6,7 +6,7 @@
 > **Corrected in place on 2026-09-13 against what was actually built.** This file
 > is now edited directly rather than re-synced; a re-sync would reinstate the
 > errors marked **Corrected** below. The reasoning behind each change is in
-> [`amendments.md`](amendments.md), keyed A1–A29.
+> [`amendments.md`](amendments.md), keyed A1–A32.
 >
 > 11 decisions · 1 risk · 8 open questions, 5 of them now answered.
 
@@ -16,7 +16,7 @@ A live standings board for one Sleeper fantasy league, scoring the season on tot
 
 - Data source · Sleeper API
 - Stack · .NET 10 · Azure
-- Steady-state cost · $0.00 / mo
+- Steady-state cost · ≈ $0.25 / mo, alert at $0.50 (A30)
 - Sleeper budget · ≈ 4.4 req/min as built, against a 25/min bucket per instance — see §07
 - Status · **M0–M2 built and deployed.** M3 (persistence) is next
 - League · **six rosters, five of them scoring** — one is excluded (A1)
@@ -567,27 +567,34 @@ The σ tests are mostly about absence: zero weeks, one week, three weeks, four w
 
 ## 13 · Cost
 
-**Corrected: the Functions row, the ingest cap, and a missing resource.**
+**Corrected: the Functions row, the ingest cap, a missing resource, and the
+storage account's real cost (A30).**
 
 | Resource | Tier | Headroom | Monthly |
 |---|---|---|---|
 | Static Web Apps | Free | 100 GB bandwidth, custom domain + TLS | $0.00 |
 | Functions | **Flex Consumption (FC1)** | Free grant; this app uses ~14% of the execution allowance and ~4% of the GB-s | $0.00 |
-| Storage account | Standard_LRS | Required by Functions for runtime state and the deployment container; also holds the 840 KB player map (A12) and the season's finalized weeks (A16) | $0.00 |
+| Storage account | Standard_LRS | Required by Functions for runtime state and the deployment container; also holds the 840 KB player map (A12) and the season's finalized weeks (A16). No free grant: the host's transactions are the bill | **≈ $0.15, measured** |
 | Azure SQL | Serverless, free offer | 100k vCore-s, 32 GB — off the request path since A16 | $0.00 |
 | Log Analytics + App Insights | Pay-as-you-go | 5 GB/mo free — **cap ingest at 0.16 GB/day, not 1 GB/day** | $0.00 |
-| Steady state | | | $0.00 |
+| Exception alert | Metric alert, one time series | Emails on any exception the Function App throws | ≈ $0.10 |
+| Steady state | | | **≈ $0.25** |
 
 **The 1 GB/day figure in the original was wrong by 6×.** A 5 GB monthly free
 allocation divided across 31 days is 0.16 GB/day; a 1 GB/day cap would permit
 31 GB a month and bill for 26 of them. The deployed workspace is capped at
 `0.16` with 30-day retention.
 
-A budget alert is also deployed, firing on any actual spend at all as well as on
-a forecast breach. It is conditional on `budgetAlertEmail` being supplied — with
-that parameter empty, no budget resource is created and nothing warns you.
+A budget alert fires at fifty cents of actual spend and on a forecast breach of
+the $1 budget. **Corrected (A31): it is deployed once by hand** from
+`infra/budget.bicep`, not by the pipeline, because a budget's start date cannot
+change after creation.
 
-Dropping the blob layer takes the bill to a genuine zero. A custom domain adds roughly $12 a year if you want one; the TLS certificate is included.
+**Corrected: the bill is not zero.** The storage account has no free grant, and
+the Functions host reads and writes it continuously; that measured about fifteen
+cents in September. Dropping the blob layer would not change it, since Functions
+needs the account regardless. A custom domain adds roughly $12 a year if you want
+one; the TLS certificate is included.
 
 Two things to actually configure rather than assume: the App Insights daily ingest cap, and the SQL free-tier limit behaviour from D7. Both are the difference between a free hobby project and an unpleasant surprise.
 

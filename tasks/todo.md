@@ -60,9 +60,9 @@ GitHub to Entra with no secret in the repo, and three workflows.
 
 CORS is verified working in Azure: `allowedOrigins` is exactly the SWA hostname,
 and a foreign origin is refused. Preview environments are deliberately **not**
-allowed — production origin only, decided rather than discovered. `devOrigins`
-exists as a bicep parameter, empty by default, for front-end development against
-the deployed API when T32 needs it.
+allowed — production origin only, decided rather than discovered. The
+`devOrigins` bicep parameter was removed unused in T61 4b; the Vite dev proxy
+made it unnecessary.
 
 - [x] Run the full verification pass after the next green deploy. **Done 2026-10-05**,
       after the #58 deploy. The runbook was cut from the field manual with the
@@ -477,6 +477,132 @@ one feeds the next.
               23. Doc comments that narrate history the amendments already hold
               24. ~~Done.~~ Empty-JSON guards on columns that are never empty
               25. ~~Done.~~ "Begin building season snapshot." logged every 5 s under load
+      - [x] **4 · Infrastructure and operations** — 11 items, done 2026-10-13
+            (A30). Passing already: no Azure names in the docs, no real IDs in
+            git or commit messages, Entra-only SQL, the telemetry cap, SQL
+            tracing.
+            1. The SWA upload token is read per run through OIDC, not stored
+            2. The budget start date has no deploy-time default; the lookup
+               fails loudly instead of falling back to this month
+            3. The budget alert fires at fifty cents (50% of $1); the standard
+               says so
+            4. `BUDGET_ALERT_EMAIL` is required, so the budget cannot be absent
+            5. Cost table: storage about $0.15 measured, steady state about
+               $0.25; the standard is "under fifty cents"
+            6. Storage by managed identity, shared keys off; three role
+               assignments in the Bicep; the app's blob stores take
+               `AzureWebJobsStorage__accountName`; Azure.Identity 1.21.0
+            7. `AllowAllWindowsAzureIps` recorded as an accepted exception
+            8. SQL on the stable `2023-08-01` API
+            9. A metric alert on exceptions, about $0.10 a month, with an action
+               group
+            10. `alertEmail` is `@secure()`
+            11. `functions` and `web` run in the `production` environment
+            381 tests pass, `dotnet format` clean, the Bicep builds and lints
+            clean, the workflows parse. Not yet deployed.
+            **Before merging, by hand:**
+            - [ ] Grant the CI principal Role Based Access Control
+                  Administrator on the resource group, with the condition in
+                  runbook step 4. Without it the deploy turns shared keys off
+                  and then fails to grant the roles that replace them, leaving
+                  the app unable to reach storage.
+            - [ ] After the first green deploy, delete the
+                  `AZURE_STATIC_WEB_APPS_API_TOKEN` GitHub secret.
+            - [ ] Deploy `infra/budget.bicep` once with the existing budget's
+                  start date (runbook, step 6), so the existing budget's alert
+                  moves to fifty cents. The pipeline no longer touches it (A31).
+      - [ ] **4b · Infrastructure, high-level review** — 16 items, 2026-10-13.
+            **Done: 1–5, 8–10, 12–14.** The template has 10 parameters, down
+            from 21. Fixed values are constants with a one-line reason;
+            `namePrefix` stays, because global resource names make it the one
+            value a second deployment must change. SQL is no longer optional.
+            Only the outputs the deploy reads remain, and the migrate job takes
+            the SQL server from them instead of three `az` lookups. `devOrigins`,
+            the excluded-owner check step, the redundant `az bicep build` steps
+            and `tr -d '\r'` on Linux runners are gone. Descriptions say what a
+            value is; the `Program.cs` comment is one line; 32 GB is written as
+            such. The Bicep builds and lints clean, the workflows parse,
+            `dotnet format` clean. Not yet deployed.
+            **Done: 6, 11, 15 (A31).** The budget is `infra/budget.bicep`,
+            deployed once from the runbook; the lookups in both workflows are
+            gone. `verify-cost.sh` is removed. Defaults are no longer restated;
+            security settings stay explicit.
+            **Done: 7 (A31).** Tested from a throwaway branch: a hosted runner
+            reaches SQL with no rule for its address. The firewall steps are
+            gone. The first test run hit a paused database and showed the
+            design-time factory had no retry; it now has the app's.
+            - [ ] Delete the remote `test/sql-firewall` branch (my delete was
+                  blocked): `git push origin --delete test/sql-firewall`
+            - [ ] A portal-made rule, `ClientIPAddress_20260914052117`, is on
+                  the SQL server outside the Bicep. Delete it if that address
+                  no longer needs direct access.
+            Open:
+            16. The queue and table storage roles may be unneeded with timer
+                triggers only; check after the first identity deploy
+            Found while doing 2: `web/vite.config.ts` names the Function App's
+            hostname as the dev proxy's default target. The standard bars
+            Azure names from the docs, and this is code, but it is the same
+            identifier.
+      - [x] **5 · CI/CD and supply chain** — 9 items, done 2026-10-13 (A32).
+            Passing already: what-if and actionlint on every PR, deploy order,
+            no cancelled deploys, the web job's bundle check, SHA-pinned
+            actions, CodeQL, Trivy, an SBOM, the NuGet licence gate.
+            1. npm licences checked, dev dependencies included
+               (`scripts/check-npm-licences.mjs`); the allow list grows to
+               ISC, 0BSD, BSD-2-Clause, MIT-0, plus MPL-2.0, BlueOak-1.0.0 and
+               CC0-1.0 for build tools only
+            2. `X-Build` on every season response; the smoke test waits for
+               this run's commit
+            3. `nuget-license` pinned to 4.0.18
+            4. `grep -m1` instead of `| head -1`
+            5. Dependabot watches `/web`, with minor and patch grouped
+            6. and the composite action
+            7. `npm audit --omit=dev` fails the build; `source-map-js` 1.2.1 to
+               1.2.2 fixed the one high finding, in the build tooling
+            8. Stale comments in `security.yml`
+            9. Web deploy stays parallel with functions (decided)
+            381 tests pass, workflows parse, `dotnet format` clean, the
+            licence script passes and refuses a planted GPL package.
+      - [x] **5b · CI/CD, high-level review** — 10 items, done 2026-10-13.
+            Removed: the deploy's second `dotnet test`; four of the web
+            deploy's five checks (custom-domain CORS, "not source", "built
+            against this API", the `/api` fallback), keeping the wait for this
+            run's bundle; the deploy's Trivy vulnerability scan (the SBOM
+            stays); CI's separate `tsc --noEmit` and "built, not source" step;
+            `-warnaserror`, already a project setting; the advisory
+            Sleeper-shaped-id step; the dependency-report artifact.
+            Simplified: required secrets are `@minLength` on the Bicep
+            parameters (the SQL admin id exactly a 36-character GUID), so the
+            shell checks in both workflows are gone; narrative comments are one
+            line each. The Bicep builds and lints clean, the workflows parse.
+      - [x] **6 · Testing** — 8 items, done 2026-10-13.
+            Passing already: every test name is a sentence (304 C#, all web).
+            1. Axe runs over the whole page loaded (radar included), loading
+               and failed (`web/tests/page.axe.test.tsx`)
+            2. `sum(starters_points) == points` and slot alignment run over
+               every captured week, as `ideal >= actual` already did
+            3. (a) The season service's ordinary paths run on the captured
+               league (`LeagueSocket.Captured()`); a new test assembles the
+               real season with every player known and no breach. Invented
+               data stays for constructed cases
+            4. Weeks 4 and 5 captured (week 6 is in progress and was dropped);
+               weeks 1–3 re-fetched unchanged; no secret values in the files.
+               The byes came as explicit zeros, so a missing points entry is
+               still only invented. The script now reads
+               `League__CurrentLeagueId`
+            5. Undo-and-show: eight regression tests from domains 3–4, each
+               red with its fix undone and green with it restored — a failed
+               read not cached, a stale blob missing, a live week refused, the
+               placeholder dropped at read, a cached read the same instance, a
+               player id as a string, an empty lineup column throwing, the
+               identity fallback. (The log-once test and the licence script
+               were shown failing when written.)
+            6. The standard says the page's API payload stays invented, and why
+            7. `coverlet.collector` removed; nothing collected coverage
+            8. For the high-level review: `FantasyLeague.Core.Tests` holds every
+               project's tests
+            394 C# and 188 web tests pass; `dotnet format`, Prettier, lint and
+            `tsc` clean.
 - [ ] **T62** Rewrite the design for a prospective employer. Lead with the
       problem, the decisions and their trade-offs, and what was measured; keep
       the build-log history (corrections, amendments) one click away rather than
@@ -709,6 +835,9 @@ Listed here only so their implementation state is visible in one place.
 | **A27** | Blob judged by write time; store refuses live weeks; placeholder dropped early | done — T61 3, items 4–9                                           |
 | **A28** | League hashed in blob names; bucket 25/min per instance; `PlayersJson` | done — T61 3, items 11–13                                               |
 | **A29** | Stored weeks keep their lineups, in one shape for blob and SQL        | done — T61 3b, items 12–13                                              |
+| **A30** | No stored keys; budget alert at fifty cents; an exception alert         | done — T61 4; two manual steps before merging                           |
+| **A31** | The budget leaves the pipeline; the cost script and firewall dance go | done — T61 4b, items 6, 7, 11, 15                                       |
+| **A32** | The supply chain covers the web app: npm licences, audit, Dependabot | done — T61 5                                                            |
 
 ---
 

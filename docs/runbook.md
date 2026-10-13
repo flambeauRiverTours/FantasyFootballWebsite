@@ -103,6 +103,25 @@ az role assignment create --assignee "$APP_ID" --role Contributor \
   --scope "/subscriptions/$SUB/resourceGroups/rg-myleague"
 ```
 
+The site reaches its storage with its own identity rather than a key, so the
+deploy has to hand that identity three storage roles. Contributor cannot hand
+out roles. This gives the deploy that one extra power, limited to exactly those
+three roles and nothing else:
+
+```bash
+ROLES="b7e6dc6d-f1e8-4753-8033-0f276bb0955b, 974c5e8b-45b9-4653-ba55-5f855dd0fb88, 0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3"
+CONDITION="((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLES})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ROLES}))"
+
+az role assignment create --assignee "$APP_ID" \
+  --role "Role Based Access Control Administrator" \
+  --scope "/subscriptions/$SUB/resourceGroups/rg-myleague" \
+  --condition "$CONDITION" --condition-version "2.0"
+```
+
+The three numbers are Azure's own IDs for Storage Blob Data Owner, Storage Queue
+Data Contributor and Storage Table Data Contributor. They are the same in every
+Azure account.
+
 Now tell Azure which GitHub actions to trust. You need your GitHub username and
 the numeric IDs GitHub uses internally.
 
@@ -156,7 +175,7 @@ gh secret set AZURE_SUBSCRIPTION_ID    --body "$SUB"
 gh secret set AZ_RESOURCE_GROUP_NAME   --body "rg-myleague"
 gh secret set AZ_SQL_ADMIN_OBJECT_ID   --body "$(az ad signed-in-user show --query id -o tsv | tr -d '\r')"
 gh secret set AZ_SQL_DB_ADMIN_NAME     --body "$(az ad signed-in-user show --query userPrincipalName -o tsv | tr -d '\r')"
-gh secret set BUDGET_ALERT_EMAIL       --body "you@example.com"
+gh secret set BUDGET_ALERT_EMAIL       --body "you@example.com"   # where error alerts go; the deploy stops without it
 gh secret set LEAGUE_ID                --body "<your league number from Step 2>"
 ```
 
@@ -210,19 +229,19 @@ az staticwebapp list -g rg-myleague --query "[0].defaultHostname" -o tsv
 
 Open it in a browser. You should see your standings.
 
-### One thing you have to do by hand
+### Set the budget alert, once
 
-The part people look at is uploaded separately, and it needs its own key. Azure
-will not hand it over automatically. Get it and store it:
+This emails you if the month's bill passes fifty cents. It is set up once by
+hand rather than on every deploy, because Azure will not let a budget's start
+date change once it exists:
 
 ```bash
-SWA=$(az staticwebapp list -g rg-myleague --query "[0].name" -o tsv | tr -d '\r')
-az staticwebapp secrets list -n "$SWA" -g rg-myleague \
-  --query properties.apiKey -o tsv | tr -d '\r' \
-  | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN
+az deployment group create -g rg-myleague --template-file infra/budget.bicep \
+  --parameters alertEmail="you@example.com" startDate="$(date -u +%Y-%m-01)"
 ```
 
-Then push again so the page deploys with the key in place.
+To change the budget later, run it again with the date it was created with in
+place of `$(date …)`. `az consumption budget list -g rg-myleague` shows it.
 
 ---
 
@@ -281,7 +300,9 @@ this, the browser console says `blocked by CORS policy`.
 
 ## What it costs
 
-**Nothing, in normal use.** Every piece runs on a free allowance.
+**About twenty-five cents a month.** Almost every piece runs on a free
+allowance. The storage the site needs costs about fifteen cents, and the email
+alert on errors about ten.
 
 | Piece | What it does | Free allowance |
 |---|---|---|
@@ -289,6 +310,8 @@ this, the browser console says `blocked by CORS policy`.
 | Functions | Fetches from Sleeper | 1 million calls a month |
 | Azure SQL | Remembers finished weeks | 100,000 seconds a month, free offer |
 | Application Insights | Records errors | 5 GB a month |
+| Storage | Holds the site's working files | None: about $0.15 a month |
+| Error alert | Emails you when the site fails | None: about $0.10 a month |
 
 A six-team league watched by a dozen people uses a small fraction of each.
 
@@ -299,17 +322,14 @@ bill.
    billing you. It comes back on the next visit, taking up to a minute.
 2. **Error recording stops** at a fixed daily amount. You lose that day's error
    log. You do not get an invoice.
-3. **An email warns you** if the bill ever passes one dollar.
+3. **An email warns you** if the bill ever passes fifty cents.
 
-Check all three at any time:
+A fourth email, separate from the bill, tells you when the site itself throws
+an error.
 
-```bash
-RG=rg-myleague ./scripts/verify-cost.sh
-```
-
-Run it after any change to the Azure setup. Settings you click into the Azure
-website get overwritten the next time the code deploys. The script reads the live
-values, so it tells you what is actually true.
+All of them are set by the code, so a setting changed by clicking in the Azure
+website is put back the next time the site deploys. The budget is the exception:
+it is set once in Step 6.
 
 The one thing that does cost money is a domain name, about fifteen dollars a
 year. Step 7 is optional and the site works fine without it. A subdomain of a
@@ -422,14 +442,15 @@ A check runs on every change and looks for them in the code. It reports which
 file and line, never the value itself. It has already caught one real mistake in
 this project.
 
-Two other keys exist. The upload key from Step 6 is the only one worth replacing
-if you think it has leaked:
+No other keys are stored anywhere. The database and the storage both recognise
+the site by its identity, and each deploy fetches the page's upload key fresh.
+If you think that key has leaked, replace it; the next deploy picks up the new
+one by itself:
 
 ```bash
+SWA=$(az staticwebapp list -g rg-myleague --query "[0].name" -o tsv | tr -d '\r')
 az staticwebapp secrets reset-api-key -n "$SWA" -g rg-myleague
 ```
-
-Then store the new one the same way as in Step 6.
 
 ---
 

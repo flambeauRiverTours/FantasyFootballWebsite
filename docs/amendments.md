@@ -1029,6 +1029,105 @@ existing rows said `Positions` where `RosteredPlayer` says `FantasyPositions`;
 migration `RenamePlayersJson`, not yet deployed, rewrites that key as it renames
 the column, and its `Down` puts it back. The blob moved to schema v4.
 
+## A30 · Infrastructure meets its standards: no stored keys, a fifty-cent alert
+
+2026-10-13. Decisions from the domain 4 review (T61 4, items 1–11).
+
+**No credential is stored anywhere.** The Static Web Apps upload token was the
+last GitHub secret that was a credential rather than an identifier. The `web`
+job now signs in through OIDC like the others and reads the token for that run,
+masked. The storage account's keys went too: the Function App reaches storage,
+for the host, the deployment package and its own blobs, through its system
+identity, and the account has shared keys turned off. That needs three role
+assignments, and Contributor cannot make them, so the CI principal also holds
+Role Based Access Control Administrator, with a condition that lets it assign
+only those three storage roles. A broader grant would let a compromised pipeline
+make itself Owner. The roles stay in the Bicep rather than in a one-off command,
+so a rebuilt environment gets them without anyone remembering.
+
+**The budget alert fires at fifty cents, and the steady state is about a
+quarter.** September's bill was fifteen cents: storage, which has no free grant
+and which the Functions host uses continuously. A standard that said "costs
+nothing" was false, and an alert at one cent would fire every month and be
+ignored. The budget stays at $1 with its actual-spend alert at 50%. The budget's
+start date is still the one value an Azure resource refuses to change, so the
+deploy reads the existing budget's date and fails loudly if it cannot, rather
+than falling back to the current month as it did in October.
+
+**One alert on the app's own failures, the cheap kind.** A metric alert on the
+exception count costs about ten cents a month and catches a failed timer job or
+a request that 500s. A log alert would also catch invariant breaches, which are
+logged rather than thrown, for about fifty cents, which on its own would pass
+the budget alert every month. Breaches stay in App Insights to be looked for.
+
+**Accepted: SQL allows connections from any Azure service.** Flex Consumption has
+no fixed outbound address to allow instead, and a private endpoint costs about
+$7 a month. Entra-only sign-in is the control; reaching the server is not
+signing in to it.
+
+## A31 · The budget leaves the pipeline; the cost script and firewall dance go
+
+2026-10-13. Decisions from the domain 4 high-level review (T61 4b, items 6, 7,
+11 and 15).
+
+**The budget is deployed once, by hand.** It was the one resource the pipeline
+could not simply redeploy: its start date cannot change after creation, which
+cost a required parameter, a lookup duplicated across `deploy.yml` and `ci.yml`,
+and the October outage that A30 was still guarding against. It now lives in
+`infra/budget.bicep`, which the runbook deploys once with this month's date, and
+again with the original date only to change it. The trade-off is that a budget
+deleted by hand is not put back by the next deploy. The deploy still requires
+the alert email, which the exception alert uses.
+
+**`scripts/verify-cost.sh` is removed.** It read back the telemetry cap, SQL's
+free limit, the budget and the exception alert, all of which the template sets
+on every deploy and the CI what-if shows as a diff if they drift. It was 80
+lines of script for a check the pipeline already makes.
+
+**The migrate job opens no firewall rule.** A throwaway workflow, run twice
+from a GitHub-hosted runner with no rule for its address, reached the database
+through the "allow Azure services" rule alone: the runners are in Azure. The
+open and close steps, the `api.ipify.org` lookup and the `sqlServerName` output
+are gone. The first of the two runs failed with a transient error because the
+database was paused, which showed that the design-time factory the migrate job
+uses had no retry; it now retries as the app does.
+
+**The template no longer restates Azure's defaults.** Soft-delete switched off,
+`zoneRedundant: false`, `alwaysReady: []`, public network access on and HTTPS
+only are what Azure does anyway. The security settings that are also defaults
+today (TLS 1.2, no public blob access) stay, so a change in a default cannot
+loosen them.
+
+## A32 · The supply chain covers the web app too
+
+2026-10-13. Decisions from the domain 5 review (T61 5, items 1–8).
+
+**The licence allow list grows to what the web app actually uses.** The NuGet
+gate allowed MIT, Apache-2.0 and BSD-3-Clause, and nothing checked npm at all.
+The page itself ships ISC (d3) and 0BSD (tslib), both as permissive as MIT, and
+the dev tools add BSD-2-Clause and MIT-0. Those join the list for everything.
+Three more are allowed for build and test tools only: MPL-2.0 (lightningcss,
+axe-core), whose copyleft applies to changes to those files and never reaches
+the page; BlueOak-1.0.0 and CC0-1.0, both permissive. Development dependencies
+are checked as well as production ones, by choice, so a new licence surfaces
+when Dependabot proposes it rather than when it ships. The check is
+`scripts/check-npm-licences.mjs`, forty lines over the lockfile, rather than
+another npm package to vet.
+
+**npm vulnerabilities fail on production packages only**, matching the NuGet
+gate's intent. The one high finding at the time, `source-map-js` in the build
+tooling, was fixed rather than excepted.
+
+**The API names its build.** Every season response carries `X-Build`, the
+commit it was built from, and the deploy's smoke test waits for this run's
+commit. The previous build answering the old check was a pass that proved
+nothing.
+
+**The web deploy stays parallel with migrations and functions.** Ordering it
+after functions would stop a new page briefly calling an old API, at the cost of
+a slower deploy; with the page and the API changed together this rarely, it is
+not worth it.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

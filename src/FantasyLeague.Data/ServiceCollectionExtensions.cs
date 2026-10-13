@@ -1,4 +1,5 @@
-﻿using Azure.Storage.Blobs;
+﻿using Azure.Identity;
+using Azure.Storage.Blobs;
 using FantasyLeague.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -38,12 +39,15 @@ namespace FantasyLeague.Data
             services.TryAddSingleton(TimeProvider.System);
 
             // AzureWebJobsStorage is already present wherever a Functions host runs.
-            // Without either, start-up fails: running on without blobs would fetch
-            // the 14 MB player dump on every cold instance (A12)
+            // Without any storage, start-up fails: running on without blobs would
+            // fetch the 14 MB player dump on every cold instance (A12)
             services.AddOptions<BlobStorageOptions>()
                 .BindConfiguration("BlobStorage")
-                .PostConfigure<IConfiguration>((o, configuration) => o.ConnectionString ??= configuration["AzureWebJobsStorage"])
+                .PostConfigure<IConfiguration>((o, configuration) => o.FallBackTo(configuration))
                 .ValidateDataAnnotations()
+                .Validate(
+                    o => o.ConnectionString is not null || o.ServiceUri is not null,
+                    "No storage account: set BlobStorage:ConnectionString or BlobStorage:ServiceUri, or AzureWebJobsStorage.")
                 .ValidateOnStart();
 
             services.AddSingleton(provider =>
@@ -70,11 +74,19 @@ namespace FantasyLeague.Data
         /// <param name="provider">The service provider.</param>
         /// <param name="name">Picks the container's name from the options.</param>
         /// <returns>The container.</returns>
+        /// <remarks>
+        /// By connection string locally; by the Function App's own identity in
+        /// Azure, where the account has shared keys turned off.
+        /// </remarks>
         private static BlobContainerClient Container(IServiceProvider provider, Func<BlobStorageOptions, string> name)
         {
             var options = provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value;
 
-            return new BlobServiceClient(options.ConnectionString).GetBlobContainerClient(name(options));
+            var service = options.ConnectionString is { } connectionString
+                ? new BlobServiceClient(connectionString)
+                : new BlobServiceClient(options.ServiceUri, new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned));
+
+            return service.GetBlobContainerClient(name(options));
         }
     }
 }

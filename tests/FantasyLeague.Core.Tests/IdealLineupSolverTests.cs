@@ -441,6 +441,49 @@ namespace FantasyLeague.Core.Tests
                 $"in {weekFile} at least one roster should have left points on the bench");
         }
 
+        [Theory]
+        [MemberData(nameof(CapturedWeeks))]
+        public void Every_roster_s_starters_sum_to_its_points(string weekFile)
+        {
+            // the other invariant: what the starters scored is what Sleeper says the roster scored
+            using var week = Fixture(weekFile);
+
+            foreach (var entry in week.RootElement.EnumerateArray())
+            {
+                var startersSum = entry.GetProperty("starters_points").EnumerateArray().Sum(p => p.GetDecimal());
+                var points = entry.GetProperty("points").GetDecimal();
+
+                startersSum.Should().BeApproximately(points, 0.01m, $"roster {entry.GetProperty("roster_id").GetInt32()} in {weekFile}");
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(CapturedWeeks))]
+        public void Every_starter_is_eligible_for_the_slot_at_its_index(string weekFile)
+        {
+            // the radar rests on starters[i] belonging to the ith startable slot,
+            // an observation rather than a documented guarantee
+            var slots = LeagueSlots();
+            var positions = PlayerPositions();
+            using var week = Fixture(weekFile);
+
+            foreach (var entry in week.RootElement.EnumerateArray())
+            {
+                var rosterId = entry.GetProperty("roster_id").GetInt32();
+                var starters = entry.GetProperty("starters").EnumerateArray().Select(e => e.GetString()!).ToList();
+
+                starters.Should().HaveCount(slots.Count, $"roster {rosterId} in {weekFile}");
+                for (var i = 0; i < starters.Count; i++)
+                {
+                    if (starters[i] != "0")
+                    {
+                        slots[i].Accepts(positions[starters[i]]).Should().BeTrue(
+                            $"roster {rosterId} started {starters[i]} at {slots[i].Code} in {weekFile}");
+                    }
+                }
+            }
+        }
+
         [Fact]
         public void A_roster_short_at_a_position_leaves_that_slot_empty()
         {

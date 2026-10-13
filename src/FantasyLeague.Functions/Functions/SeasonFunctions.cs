@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Seasons;
+﻿using System.Reflection;
+using FantasyLeague.Seasons;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -17,6 +18,15 @@ namespace FantasyLeague.Functions.Functions
     public sealed class SeasonFunctions(ISeasonService seasons, TimeProvider time)
     {
         /// <summary>
+        /// The commit this build was made from, sent as <c>X-Build</c> so the
+        /// deploy can tell its own build from the one it replaced.
+        /// </summary>
+        private static readonly string Build =
+            typeof(SeasonFunctions).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+') is [_, var commit]
+                ? commit
+                : "local";
+
+        /// <summary>
         /// Serves one season.
         /// </summary>
         /// <param name="req">The request. Only <c>season</c> is read.</param>
@@ -27,6 +37,8 @@ namespace FantasyLeague.Functions.Functions
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "season")] HttpRequest req,
             CancellationToken cancellationToken)
         {
+            req.HttpContext.Response.Headers["X-Build"] = Build;
+
             var raw = req.Query["season"].ToString();
             int? requested = null;
 

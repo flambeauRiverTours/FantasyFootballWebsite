@@ -46,7 +46,7 @@ steadily the points arrived) and **ideal** (how many never left the bench).
 A third view, the **positional radar**, plots one team's average at each of its
 own starting slots as a ratio to the league average at that slot. .NET 10 on
 Azure Functions behind Static Web Apps, Azure SQL for finalized weeks,
-Vite/React/TypeScript/D3 for the page. $0.00/month steady state, ≈ 4.4 Sleeper
+Vite/React/TypeScript/D3 for the page. ≈ $0.25/month steady state, ≈ 4.4 Sleeper
 requests per minute per instance regardless of viewer count (§07).
 
 ## Where things are

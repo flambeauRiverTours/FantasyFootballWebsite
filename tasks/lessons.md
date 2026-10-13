@@ -610,3 +610,15 @@ quits early (`grep -q`, `head`, `grep -m1`). Write it to a file and test the
 file. Small outputs, or readers that consume everything (`jq`, plain `grep`),
 are fine. And when a step's red is on its *checker* rather than the thing
 being checked, re-run the checker against production before believing it.
+
+## Redacting one key in a settings file is not redacting the file
+
+Reading `local.settings.json` with a `sed` that blanked `League__CurrentLeagueId`
+printed `League__ExcludedOwnerIds__0` in full: a Sleeper user ID, which A2 says
+is never printed. The file is git-ignored, so nothing reached the repository,
+but it reached the session output. The redaction listed the secret I expected
+rather than every value the file holds.
+
+**Rule:** read a settings file (`local.settings.json`, `.env*`, user-secrets,
+app settings) as keys only, or with every value replaced, never with a list of
+keys to hide. `jq '.Values | keys'` or `sed -E 's/(": ")[^"]*/\1<value>/'`.

@@ -44,21 +44,12 @@ namespace FantasyLeague.Core.Tests
             return provider.GetRequiredService<ISeasonService>();
         }
 
-        private static LeagueSocket ThreeWeeks()
-        {
-            var socket = new LeagueSocket { State = Bodies.State(week: 3) };
-            socket.Matchups[1] = Bodies.Week(Bodies.Matchup(1, 35m));
-            socket.Matchups[2] = Bodies.Week(Bodies.Matchup(1, 41m));
-            socket.Matchups[3] = Bodies.Week(Bodies.Matchup(1, 12m));
-            return socket;
-        }
-
         [Fact]
         public async Task The_store_is_consulted_once_per_build()
         {
             var store = new RecordingWeekStore();
 
-            await (await BuildAsync(ThreeWeeks(), store)).BuildAsync(TestContext.Current.CancellationToken);
+            await (await BuildAsync(LeagueSocket.Captured(), store)).BuildAsync(TestContext.Current.CancellationToken);
 
             store.Reads.Should().Be(1, "one read per season, not one per week");
         }
@@ -69,7 +60,7 @@ namespace FantasyLeague.Core.Tests
             var stored = new TeamWeek(1, 1, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
             var store = new RecordingWeekStore([stored]);
 
-            var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync(TestContext.Current.CancellationToken);
+            var snapshot = await (await BuildAsync(LeagueSocket.Captured(), store)).BuildAsync(TestContext.Current.CancellationToken);
 
             var week1 = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Single(w => w.Week == 1);
             week1.ActualPts.Should().Be(999m, "the stored value wins over Sleeper's");
@@ -78,30 +69,32 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task A_week_still_in_progress_is_never_served_from_the_store()
         {
-            // week 3 is current, so it must come from Sleeper however the store answers
-            var stored = new TeamWeek(1, 3, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
+            // the latest captured week is current, so it must come from Sleeper however the store answers
+            var socket = LeagueSocket.Captured();
+            var current = socket.Matchups.Keys.Max();
+            var stored = new TeamWeek(1, current, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
             var store = new RecordingWeekStore([stored]);
 
-            var snapshot = await (await BuildAsync(ThreeWeeks(), store)).BuildAsync(TestContext.Current.CancellationToken);
+            var snapshot = await (await BuildAsync(socket, store)).BuildAsync(TestContext.Current.CancellationToken);
 
-            var week3 = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Single(w => w.Week == 3);
-            week3.ActualPts.Should().NotBe(999m);
+            var live = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Single(w => w.Week == current);
+            live.ActualPts.Should().NotBe(999m);
         }
 
         [Fact]
         public async Task An_empty_store_rebuilds_every_week_from_Sleeper()
         {
-            var snapshot = await (await BuildAsync(ThreeWeeks(), new RecordingWeekStore()))
+            var snapshot = await (await BuildAsync(LeagueSocket.Captured(), new RecordingWeekStore()))
                 .BuildAsync(TestContext.Current.CancellationToken);
 
-            snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Should().HaveCount(3);
+            snapshot.Teams.Single(t => t.RosterId == 1).Weeks.Should().HaveCount(snapshot.CurrentWeek);
         }
 
         [Fact]
         public async Task A_rebuilt_week_carries_its_rostered_players()
         {
             // what the widening was for: stored weeks must be re-solvable later
-            var snapshot = await (await BuildAsync(ThreeWeeks(), new RecordingWeekStore()))
+            var snapshot = await (await BuildAsync(LeagueSocket.Captured(), new RecordingWeekStore()))
                 .BuildAsync(TestContext.Current.CancellationToken);
 
             var week = snapshot.Teams.Single(t => t.RosterId == 1).Weeks.First();

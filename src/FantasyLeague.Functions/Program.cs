@@ -17,11 +17,7 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
 {
     builder.Services.AddOpenTelemetry()
         .UseFunctionsWorkerDefaults()
-        // UseFunctionsWorkerDefaults only instruments HTTP; without this, a SQL
-        // connection attempt - including every retry EnableRetryOnFailure makes
-        // during a serverless auto-resume - is invisible in Application Insights
-        // except as the warning FinalizedWeekStore logs when it gives up. No
-        // SQL text or parameters are captured by default - nothing to opt out of.
+        // the worker defaults trace HTTP only; this adds every SQL call and retry
         .WithTracing(tracing => tracing.AddSqlClientInstrumentation())
         .UseAzureMonitorExporter();
 }

@@ -174,6 +174,32 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void An_account_name_alone_means_connecting_by_identity()
+        {
+            // in Azure the account accepts no keys, so the host names the account instead
+            var services = TestServices.Create(("AzureWebJobsStorage:accountName", "stexample"));
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            var options = provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value;
+            options.ConnectionString.Should().BeNull();
+            options.ServiceUri.Should().Be(new Uri("https://stexample.blob.core.windows.net"));
+        }
+
+        [Fact]
+        public void The_identity_composition_resolves_its_stores()
+        {
+            var services = TestServices.Create(("AzureWebJobsStorage:accountName", "stexample"));
+            services.AddSleeperClient();
+            services.AddSeasonService();
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IFinalizedWeekStore>().Should().NotBeNull();
+            provider.GetRequiredService<IPlayerMapStore>().Should().NotBeNull();
+        }
+
+        [Fact]
         public void A_configured_storage_account_wins_over_the_fallback()
         {
             var services = TestServices.Create(

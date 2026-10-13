@@ -193,18 +193,30 @@ This document states the standards for each programming domain for this project.
   - why: they identify a real league and its members
 - Azure SQL accepts managed identity through Entra only
   - why: no password exists to leak or rotate
+- Storage is reached by managed identity with shared keys turned off
+  - why: the same reason, for the last key the system had
 - CI reaches Azure through OIDC with no stored credentials
+  - Including the Static Web Apps upload token, read per run
 
 **Cost**
-- Steady state costs nothing each month
-  - why: a hobby site should never produce a bill
-- A budget alert fires at one dollar
+- Steady state stays under fifty cents a month
+  - why: a hobby site should never produce a real bill
+  - Storage transactions are the only charge, about fifteen cents
+- A budget alert fires at fifty cents
 - New resources state their monthly cost up front
 - A daily telemetry cap stays inside the free grant
 
 **Observability**
 - SQL dependency calls are traced
   - why: a failing query once hid behind a silent fallback
+- An exception in the Function App raises an alert
+  - why: a failed timer job otherwise waits for someone to look
+
+**Accepted exceptions**
+- SQL allows connections from any Azure service
+  - why: Flex Consumption has no fixed outbound address
+  - A private endpoint would cost about seven dollars a month
+  - Entra only sign in is the control that matters
 
 ## 5 · CI/CD and supply chain
 
@@ -219,6 +231,7 @@ This document states the standards for each programming domain for this project.
   - why: a half applied deploy is worse than a queue
 - Post deploy checks verify the artefact this run built
   - why: the live site may still serve the previous build
+  - The page by its bundle name, the API by its `X-Build` commit
 
 **Workflows**
 - Never pipe large output into an early exit reader
@@ -226,12 +239,17 @@ This document states the standards for each programming domain for this project.
   - why: pipefail turns an early exit into a false failure
 
 **Dependencies**
+- NuGet and npm are both checked, and Dependabot watches both
+  - Plus every action pin, the composite action's included
+- A vulnerable production package fails the build
 - Deprecated packages are reported without failing the build
   - why: deprecation alone is not a defect
-- Licences come from an allow list
-  - `MIT`
-  - `Apache-2.0`
-  - `BSD-3-Clause`
+- Every tool a workflow installs is pinned to a version
+  - why: an unpinned tool is an unreviewed dependency
+- Licences come from an allow list per A32
+  - Anything that ships: `MIT`, `MIT-0`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `0BSD`
+  - Build and test tools also: `MPL-2.0`, `BlueOak-1.0.0`, `CC0-1.0`
+  - Development dependencies are checked too, so a new licence is caught early
 - Every licence exception is recorded as an amendment
 - Licence overrides pin a package version per A18
   - why: a new version means rereading its licence
@@ -241,10 +259,15 @@ This document states the standards for each programming domain for this project.
 **Shape**
 - Boundaries are tested against real captured Sleeper payloads
   - why: real payloads catch shapes invented ones never will
+  - The page's API payload stays invented
+  - why: a real one carries team names managers chose, which is personal data (A2)
 - Invented data covers only cases reality has not produced
-  - A bye week
+  - A missing points entry
   - A commissioner override
+  - An invariant breach or the placeholder team
+  - Users and rosters, which are personal data
 - Axe checks every panel for accessibility
+  - The whole page in each state, so a new panel is covered
 - Invariants run against every captured week automatically
   - why: each new capture tests the solver for free
 

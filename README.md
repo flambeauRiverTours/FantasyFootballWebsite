@@ -14,7 +14,7 @@ no head-to-head views.
 | Data source | Sleeper read API (unauthenticated, free) |
 | Stack | .NET 10 · Azure Functions · Azure SQL · Vite/React/TypeScript/D3 |
 | Hosting | Static Web Apps (Free) + Functions (Consumption) |
-| Steady-state cost | $0.00 / month |
+| Steady-state cost | ≈ $0.25 / month, alert at $0.50 |
 | Sleeper request budget | ≈ 4.4 req/min per instance, regardless of viewer count |
 | Status | M0-M4 built and deployed. M5 in progress, M6 (radar) next |
 

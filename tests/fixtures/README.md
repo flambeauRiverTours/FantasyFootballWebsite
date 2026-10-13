@@ -5,34 +5,40 @@ milliseconds.
 
 | File | What |
 |---|---|
-| `wk{N}-matchups.json` | `/v1/league/{id}/matchups/{N}` verbatim, weeks 1–3 — 6 rosters, 11 starters, 19 or 20 players each |
+| `wk{N}-matchups.json` | `/v1/league/{id}/matchups/{N}` verbatim, weeks 1–5 — 6 rosters, 11 starters, 19 or 20 players each |
 | `roster-positions.json` | The `roster_positions` array lifted out of the league object |
-| `player-positions.json` | `{ playerId → { name, team, fantasyPositions } }` for the 122 players rostered across every captured week |
+| `player-positions.json` | `{ playerId → { name, team, fantasyPositions } }` for the 137 players rostered across every captured week |
 
 `player-positions.json` is a projection of the 5 MB `/v1/players/nfl` dump down to
 just the players these rosters actually contain. It exists so the fixture set is
 self-contained: the solver needs `fantasyPositions` to run, and no test should
 pull five megabytes to get it.
 
-## Captured 2026-10-05: weeks 1–3, all final
+## Captured 2026-10-13: weeks 1–5, all final
 
-Weeks 1–3 were captured after each had finalized, replacing the original
+Weeks 4 and 5 joined on 2026-10-13; weeks 1–3 were re-fetched unchanged. Weeks
+1–3 were first captured on 2026-10-05, after each had finalized, replacing the original
 mid-week-1 capture (2026-09-10), in which only the Thursday game had been played
 and four of six teams sat on 0.0. That capture made three of the six
 `ideal >= actual` checks "0 >= 0"; every roster now has real points in every week.
 
-The `ideal >= actual` test runs once per `wk*-matchups.json` file it finds, so a
-new capture is covered without a code change. It also requires at least one
-roster per week to have `ideal > actual`; without that, a solver that just
-returned the started lineup would still pass.
+Three checks run once per `wk*-matchups.json` file they find, so a new capture
+is covered without a code change: `ideal >= actual`, which also requires at
+least one roster per week with `ideal > actual` (otherwise a solver that just
+returned the started lineup would pass); `sum(starters_points) == points`; and
+every starter eligible for the slot at its index. `LeagueSocket.Captured()`
+also serves these weeks to the season service's ordinary-path tests, so the
+whole read path runs over them.
 
 Still to come:
 
-- **Week 4 (B3)** finalizes 2026-10-06. It is the first week σ is defined over
-  real data (D1 needs four finalized weeks).
-- **A bye week (B4)**, weeks 5–6. Nobody has been on bye yet, so no player in
-  these captures lacks a `players_points` entry; the `0m` default is still only
-  tested against hand-built data.
+- **A missing `players_points` entry (B4).** Weeks 4 and 5 included byes, and
+  Sleeper listed every player on bye with an explicit `0`, not a missing entry.
+  The `0m` default for an absent entry is still only tested against hand-built
+  data, because Sleeper has not produced the case.
+
+Capture with `League__CurrentLeagueId` set, the name the app and the CLI read.
+A week still in progress is not a fixture: delete it after capturing.
 
 2026 is the league's first season (A4), so there is no historical data to
 backfill from — these fixtures can only grow as the season does.
