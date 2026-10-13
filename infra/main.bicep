@@ -1,98 +1,66 @@
-metadata description = 'Ideal Points: Static Web App, Functions on Consumption, storage and telemetry.'
+metadata description = 'Ideal Points: Static Web App, Functions on Flex Consumption, Azure SQL, storage and telemetry.'
 
-@description('Short name used to build every resource name.')
+@description('Builds every resource name. Function App, SQL server and Static Web App names are global, so a second deployment needs its own.')
 @minLength(3)
 @maxLength(11)
 param namePrefix string = 'idealpoints'
 
-@description('Where to deploy.')
-param location string = resourceGroup().location
-
-@description('Region for the Static Web App, which supports fewer locations than everything else.')
-@allowed([
-  'centralus'
-  'eastus2'
-  'eastasia'
-  'westeurope'
-  'westus2'
-])
-param staticWebAppLocation string = 'eastus2'
-
-@description('The Sleeper league this site serves. Secure so it never reaches the deployment history.')
+@description('The Sleeper league this site serves (A2).')
 @secure()
+@minLength(1)
 param leagueId string
 
-@description('Owning user ids excluded from every metric, comma separated. Empty for a league with no placeholder team.')
+@description('Owner user ids left out of every metric (A1), comma separated. Empty when the league has no placeholder team.')
 @secure()
 param excludedOwnerIds string = ''
 
-@description('Extra origins allowed to call the API, for front-end development against the deployed API. Empty in production; preview environments are deliberately not allowed.')
-param devOrigins array = []
+@description('Where the error alert is sent.')
+@secure()
+@minLength(1)
+param alertEmail string
 
-@description('Daily telemetry ingestion cap in GB, as a string so a fraction is possible. 0.16/day keeps a month inside the 5 GB free allocation.')
-param dailyIngestCapGb string = '0.16'
+@description('Object id of the Entra principal that administers SQL, a GUID.')
+@minLength(36)
+@maxLength(36)
+param sqlAdminObjectId string
 
-@description('Most Flex Consumption instances that may run at once. Forty is the platform minimum.')
-@minValue(40)
-param maxScaleOut int = 40
+@description('That principal\'s display name.')
+@minLength(1)
+param sqlAdminLogin string
 
-@description('Memory per instance. The smallest size costs the fewest GB-seconds.')
-@allowed([
-  512
-  2048
-  4096
-])
-param instanceMemoryMb int = 512
-
-@description('Monthly spend that triggers an alert, in the billing currency. The design expects zero.')
-param budgetAmount int = 1
-
-@description('Where to send the budget alert. Leave empty to skip the budget entirely.')
-param budgetAlertEmail string = ''
-
-@description('First day of the month the budget starts. Defaults to this month.')
-param budgetStartDate string = utcNow('yyyy-MM-01')
-
-@description('Region for the SQL server. Azure SQL General Purpose provisioning is restricted per subscription per region; this defaults to a region verified open on this subscription, independent of the resource group location.')
-@allowed([
-  'centralus'
-  'eastasia'
-  'westeurope'
-  'westus2'
-])
-param sqlLocation string = 'westus2'
-
-@description('Object id of the Entra principal that administers the SQL server. Empty skips the SQL resources entirely.')
-param sqlAdminObjectId string = ''
-
-@description('Display name of that principal, shown in the portal.')
-param sqlAdminLogin string = ''
-
-@description('Minutes of inactivity before the database pauses. Required on the free offer; 60 is the minimum.')
-param sqlAutoPauseDelayMinutes int = 60
-
-@description('Custom domain serving the site, without a scheme. Empty until T57.')
+@description('Custom domain serving the site, without a scheme. Empty for none.')
 param customDomain string = ''
 
-@description('String to use instead of the league name that exists in Sleeper.')
+@description('A name to show instead of the league\'s name in Sleeper. Empty uses Sleeper\'s.')
 param overrideLeagueName string = ''
 
-var excludedOwnerIdList = filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id))
+var location = resourceGroup().location
+
+// Static Web Apps runs in fewer regions than everything else
+var staticWebAppLocation = 'eastus2'
+
+// Azure SQL General Purpose is open to this subscription in westus2
+var sqlLocation = 'westus2'
+var sqlDatabaseName = 'idealpoints'
+
+// 5 GB a month free, spread over 31 days
+var dailyIngestCapGb = '0.16'
 
 var excludedOwnerSettings = [
-  for (ownerId, index) in excludedOwnerIdList: {
+  for (ownerId, index) in filter(map(split(excludedOwnerIds, ','), id => trim(id)), id => !empty(id)): {
     name: 'League__ExcludedOwnerIds__${index}'
     value: ownerId
   }
 ]
 
-var sqlConnectionSettings = deploySql ? [
-  {
-    name: 'ConnectionStrings__FantasyLeague'
-    value: 'Server=tcp:${sqlName}${environment().suffixes.sqlServerHostname},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;'
-  }
-] : []
-var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storage.listKeys().keys[0].value}'
+// Storage Blob Data Owner, Queue Data Contributor and Table Data Contributor:
+// what the Functions host and the app's blob stores need. CI may assign only
+// these (runbook, step 4).
+var storageRoleIds = [
+  'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+  '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+  '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+]
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${namePrefix}'
@@ -127,20 +95,13 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
   properties: {
     minimumTlsVersion: 'TLS1_2'
-    supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false
+    // everything reaches storage through the Function App's identity
+    allowSharedKeyAccess: false
   }
 
   resource blob 'blobServices' = {
     name: 'default'
-    properties: {
-      deleteRetentionPolicy: {
-        enabled: false
-      }
-      containerDeleteRetentionPolicy: {
-        enabled: false
-      }
-    }
 
     resource deployments 'containers' = {
       name: 'deployments'
@@ -168,10 +129,10 @@ resource site 'Microsoft.Web/staticSites@2023-12-01' = {
     name: 'Free'
     tier: 'Free'
   }
-  properties: {}
+  properties: {} // required even when empty: preflight rejects a static site without it
 }
 
-resource functions 'Microsoft.Web/sites@2023-12-01' = {
+resource functions 'Microsoft.Web/sites@2024-04-01' = {
   name: 'func-${namePrefix}'
   location: location
   kind: 'functionapp,linux'
@@ -179,7 +140,7 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
     type: 'SystemAssigned'
   }
   // Flex Consumption deploys into this container, and only the storage
-  // account is an inferred dependency.
+  // account is an inferred dependency
   dependsOn: [
     storage::blob::deployments
   ]
@@ -192,15 +153,13 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
           type: 'blobContainer'
           value: '${storage.properties.primaryEndpoints.blob}deployments'
           authentication: {
-            type: 'StorageAccountConnectionString'
-            storageAccountConnectionStringName: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
+            type: 'SystemAssignedIdentity'
           }
         }
       }
       scaleAndConcurrency: {
-        maximumInstanceCount: maxScaleOut
-        instanceMemoryMB: instanceMemoryMb
-        alwaysReady: []
+        maximumInstanceCount: 40 // the platform minimum
+        instanceMemoryMB: 512 // the smallest size costs the fewest GB-seconds
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -214,23 +173,23 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
       cors: {
         allowedOrigins: concat(
           ['https://${site.properties.defaultHostname}'],
-          empty(customDomain) ? [] : ['https://${customDomain}'],
-          devOrigins
+          empty(customDomain) ? [] : ['https://${customDomain}']
         )
       }
       appSettings: concat(
         [
           {
-            name: 'AzureWebJobsStorage'
-            value: storageConnectionString
-          }
-          {
-            name: 'DEPLOYMENT_STORAGE_CONNECTION_STRING'
-            value: storageConnectionString
+            // the host and the app's blob stores both connect by identity
+            name: 'AzureWebJobsStorage__accountName'
+            value: storage.name
           }
           {
             name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
             value: insights.properties.ConnectionString
+          }
+          {
+            name: 'ConnectionStrings__FantasyLeague'
+            value: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;'
           }
           {
             name: 'League__CurrentLeagueId'
@@ -241,56 +200,33 @@ resource functions 'Microsoft.Web/sites@2023-12-01' = {
             value: overrideLeagueName
           }
         ],
-        excludedOwnerSettings,
-        sqlConnectionSettings
+        excludedOwnerSettings
       )
     }
   }
 }
 
-resource budget 'Microsoft.Consumption/budgets@2023-05-01' = if (!empty(budgetAlertEmail)) {
-  name: 'budget-${namePrefix}'
-  properties: {
-    category: 'Cost'
-    amount: budgetAmount
-    timeGrain: 'Monthly'
-    timePeriod: {
-      startDate: budgetStartDate
-    }
-    notifications: {
-      anySpendAtAll: {
-        enabled: true
-        operator: 'GreaterThan'
-        threshold: 1
-        thresholdType: 'Actual'
-        contactEmails: [
-          budgetAlertEmail
-        ]
-      }
-      forecastToExceed: {
-        enabled: true
-        operator: 'GreaterThan'
-        threshold: 100
-        thresholdType: 'Forecasted'
-        contactEmails: [
-          budgetAlertEmail
-        ]
-      }
+resource storageRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for roleId in storageRoleIds: {
+    name: guid(storage.id, functions.id, roleId)
+    scope: storage
+    properties: {
+      principalId: functions.identity.principalId
+      principalType: 'ServicePrincipal'
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleId)
     }
   }
-}
+]
 
-var deploySql = !empty(sqlAdminObjectId)
-var sqlName = 'sql-${namePrefix}'
-var sqlDatabaseName = 'idealpoints'
+// The budget is in budget.bicep, deployed once by hand: its start date cannot
+// change after creation, which a pipeline that redeploys every push trips over (A31)
 
-resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = if (deploySql) {
-  name: sqlName
+resource sqlServer 'Microsoft.Sql/servers@2023-08-01' = {
+  name: 'sql-${namePrefix}'
   location: sqlLocation
   properties: {
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
-    // A2: no password anywhere. Entra-only means there is no SQL login to leak.
+    // Entra only: no SQL login exists to leak
     administrators: {
       administratorType: 'ActiveDirectory'
       login: sqlAdminLogin
@@ -299,6 +235,9 @@ resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = if (deploySql) {
       azureADOnlyAuthentication: true
     }
   }
+
+  // Accepted exception (standards, domain 4; A30): Flex Consumption has no
+  // fixed outbound address to allow instead, and Entra-only sign-in is the control
   resource allowAzure 'firewallRules' = {
     name: 'AllowAllWindowsAzureIps'
     properties: {
@@ -308,7 +247,7 @@ resource sqlServer 'Microsoft.Sql/servers@2024-05-01-preview' = if (deploySql) {
   }
 }
 
-resource sqlDatabase 'Microsoft.Sql/servers/databases@2024-05-01-preview' = if (deploySql) {
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
   parent: sqlServer
   name: sqlDatabaseName
   location: sqlLocation
@@ -321,34 +260,68 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2024-05-01-preview' = if (
   properties: {
     useFreeLimit: true
     freeLimitExhaustionBehavior: 'AutoPause'
-    autoPauseDelay: sqlAutoPauseDelayMinutes
+    autoPauseDelay: 60 // the free offer requires auto-pause, and 60 is its minimum
     minCapacity: json('0.5')
-    maxSizeBytes: 34359738368
-    zoneRedundant: false
-    requestedBackupStorageRedundancy: 'Local'
+    maxSizeBytes: 32 * 1024 * 1024 * 1024 // the free offer's 32 GB
+    requestedBackupStorageRedundancy: 'Local' // geo-redundant backup is billed
   }
 }
 
-@description('Name of the Function App, for the deploy workflow.')
+resource alerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-${namePrefix}'
+  location: 'global'
+  properties: {
+    groupShortName: 'alerts'
+    enabled: true
+    emailReceivers: [
+      {
+        name: 'owner'
+        emailAddress: alertEmail
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+// About $0.10 a month. Sees what the app throws, not what it logs as an error (A30)
+resource exceptionAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-${namePrefix}-exceptions'
+  location: 'global'
+  properties: {
+    description: 'The Function App threw an exception.'
+    severity: 2
+    enabled: true
+    scopes: [
+      insights.id
+    ]
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'exceptions'
+          metricName: 'exceptions/count'
+          metricNamespace: 'microsoft.insights/components'
+          operator: 'GreaterThan'
+          threshold: 0
+          timeAggregation: 'Count'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: alerts.id
+      }
+    ]
+  }
+}
+
 output functionAppName string = functions.name
-
-@description('Public base address of the API.')
 output functionAppUrl string = 'https://${functions.properties.defaultHostName}'
-
-@description('Managed identity of the Function App. T26 grants this access to SQL.')
-output functionAppPrincipalId string = functions.identity.principalId
-
-@description('Name of the Static Web App, for the deploy workflow.')
 output staticWebAppName string = site.name
-
-@description('Public address of the site.')
 output staticWebAppUrl string = 'https://${site.properties.defaultHostname}'
-
-@description('Fully qualified name of the SQL server, or empty when SQL is not deployed.')
-output sqlServerFqdn string = sqlServer.?properties.fullyQualifiedDomainName ?? ''
-
-@description('Name of the SQL server, for the migration step in T31.')
-output sqlServerName string = deploySql ? sqlName : ''
-
-@description('Database name, for T31.')
-output sqlDatabaseName string = deploySql ? sqlDatabaseName : ''
+output sqlServerFqdn string = sqlServer.properties.fullyQualifiedDomainName
+output sqlDatabaseName string = sqlDatabase.name

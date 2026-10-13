@@ -6,6 +6,13 @@
     "name": "Rashee Rice",
     "team": "KC"
   },
+  "10232": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Michael Wilson",
+    "team": "ARI"
+  },
   "10236": {
     "fantasyPositions": [
       "TE"
@@ -19,6 +26,13 @@
     ],
     "name": "Sam LaPorta",
     "team": "DET"
+  },
+  "11435": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Emanuel Wilson",
+    "team": "SEA"
   },
   "11533": {
     "fantasyPositions": [
@@ -118,12 +132,26 @@
     "name": "Cam Little",
     "team": "JAX"
   },
+  "11792": {
+    "fantasyPositions": [
+      "K"
+    ],
+    "name": "Will Reichard",
+    "team": "MIN"
+  },
   "11942": {
     "fantasyPositions": [
       "TE"
     ],
     "name": "Colson Yankoff",
     "team": "WAS"
+  },
+  "12185": {
+    "fantasyPositions": [
+      "K"
+    ],
+    "name": "Spencer Shrader",
+    "team": "IND"
   },
   "1234": {
     "fantasyPositions": [
@@ -152,6 +180,13 @@
     ],
     "name": "Bhayshul Tuten",
     "team": "JAX"
+  },
+  "12495": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Ollie Gordon",
+    "team": "MIA"
   },
   "12506": {
     "fantasyPositions": [
@@ -349,6 +384,13 @@
     "name": "Dak Prescott",
     "team": "DAL"
   },
+  "3321": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Tyreek Hill",
+    "team": null
+  },
   "3451": {
     "fantasyPositions": [
       "K"
@@ -384,12 +426,26 @@
     "name": "Jake Butt",
     "team": null
   },
+  "4199": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Aaron Jones",
+    "team": "MIN"
+  },
   "421": {
     "fantasyPositions": [
       "QB"
     ],
     "name": "Matthew Stafford",
     "team": "LAR"
+  },
+  "4217": {
+    "fantasyPositions": [
+      "TE"
+    ],
+    "name": "George Kittle",
+    "team": "SF"
   },
   "4854": {
     "fantasyPositions": [
@@ -411,6 +467,13 @@
     ],
     "name": "Lamar Jackson",
     "team": "BAL"
+  },
+  "4943": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "Sam Darnold",
+    "team": "SEA"
   },
   "4983": {
     "fantasyPositions": [
@@ -467,6 +530,13 @@
     ],
     "name": "A.J. Brown",
     "team": "NE"
+  },
+  "5872": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Deebo Samuel",
+    "team": "SF"
   },
   "5892": {
     "fantasyPositions": [
@@ -608,6 +678,13 @@
     "name": "Javonte Williams",
     "team": "DAL"
   },
+  "7594": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Chuba Hubbard",
+    "team": "CAR"
+  },
   "7611": {
     "fantasyPositions": [
       "RB"
@@ -691,6 +768,13 @@
     ],
     "name": "Breece Hall",
     "team": "NYJ"
+  },
+  "8167": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Christian Watson",
+    "team": "GB"
   },
   "8183": {
     "fantasyPositions": [
@@ -797,6 +881,13 @@
     "name": "Bijan Robinson",
     "team": "ATL"
   },
+  "9758": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "C.J. Stroud",
+    "team": "HOU"
+  },
   "9997": {
     "fantasyPositions": [
       "WR"
@@ -810,6 +901,13 @@
     ],
     "name": "BAL",
     "team": "BAL"
+  },
+  "CIN": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "CIN",
+    "team": "CIN"
   },
   "DEN": {
     "fantasyPositions": [
@@ -831,6 +929,13 @@
     ],
     "name": "LAR",
     "team": "LAR"
+  },
+  "MIN": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "MIN",
+    "team": "MIN"
   },
   "PHI": {
     "fantasyPositions": [

@@ -2,7 +2,7 @@
 """Capture real Sleeper payloads into tests/fixtures/.
 
 Usage:
-    export SLEEPER_LEAGUE_ID=...        # never hard-code it; see docs/amendments.md A2
+    export League__CurrentLeagueId=...        # the name the app and CLI read; never hard-code it (A2)
     python scripts/capture_fixtures.py              # every week up to the current one
     python scripts/capture_fixtures.py 1 2 3        # just those weeks
 
@@ -46,12 +46,12 @@ def fail(message: str) -> None:
 
 
 def league_id() -> str:
-    value = os.environ.get("SLEEPER_LEAGUE_ID", "").strip()
+    value = os.environ.get("League__CurrentLeagueId", "").strip()
     if not value:
         fail(
-            "SLEEPER_LEAGUE_ID is not set.\n"
-            "  Git Bash:   export SLEEPER_LEAGUE_ID=...\n"
-            "  PowerShell: $env:SLEEPER_LEAGUE_ID = '...'\n"
+            "League__CurrentLeagueId is not set.\n"
+            "  Git Bash:   export League__CurrentLeagueId=...\n"
+            "  PowerShell: $env:League__CurrentLeagueId = '...'\n"
             "It is a secret and must not be committed - see docs/amendments.md, A2."
         )
     return value

@@ -9,7 +9,9 @@ export function useMeasuredWidth<T extends HTMLElement>() {
     const element = ref.current;
     if (!element) return;
 
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width);
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);

@@ -6,6 +6,8 @@ namespace FantasyLeague.Data
     /// <summary>
     /// Builds a context for the <c>dotnet ef</c> tools only.
     /// </summary>
+    /// <remarks>
+    /// <code>
     /// dotnet ef migrations add Name --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Data
     /// </code>
     /// </remarks>
@@ -27,10 +29,12 @@ namespace FantasyLeague.Data
         {
             var connectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
 
+            // the deploy's migrate job is often the first connection after an
+            // auto-pause, which fails fast with 40613 until the database wakes
             var options = new DbContextOptionsBuilder<FantasyDataContext>()
-                .UseSqlServer(string.IsNullOrWhiteSpace(connectionString)
-                    ? ScaffoldOnlyConnectionString
-                    : connectionString)
+                .UseSqlServer(
+                    string.IsNullOrWhiteSpace(connectionString) ? ScaffoldOnlyConnectionString : connectionString,
+                    sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null))
                 .Options;
 
             return new FantasyDataContext(options);

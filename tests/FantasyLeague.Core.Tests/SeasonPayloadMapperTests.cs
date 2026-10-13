@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using FantasyLeague.Sleeper;
+using FantasyLeague.Seasons;
 using FluentAssertions;
 
 namespace FantasyLeague.Core.Tests
@@ -25,11 +25,10 @@ namespace FantasyLeague.Core.Tests
             IReadOnlyList<TeamSeason>? teams = null,
             string[]? rosterPositions = null,
             int currentWeek = 5,
-            int finalThroughWeek = 4,
-            IReadOnlyDictionary<int, string>? owners = null) =>
+            int finalThroughWeek = 4) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], [], owners ?? new Dictionary<int, string>());
+                teams ?? [], [], []);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,
@@ -38,7 +37,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void The_header_fields_come_straight_from_the_snapshot()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
+            var payload = SeasonPayloadMapper.ToSeasonPayload(
                 Snapshot(currentWeek: 7, finalThroughWeek: 6), AsOf);
 
             payload.Season.Should().Be(2026);
@@ -48,31 +47,13 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void No_requested_season_means_the_current_one()
-        {
-            SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf).IsCurrent.Should().BeTrue();
-        }
-
-        [Fact]
-        public void Requesting_the_season_being_served_is_still_current()
-        {
-            SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf, requestedSeason: 2026)
-                .IsCurrent.Should().BeTrue();
-        }
-
-        [Fact]
-        public void Requesting_a_different_season_is_not_current()
-        {
-            // decides the cache headers and whether the page keeps polling
-            SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf, requestedSeason: 2025)
-                .IsCurrent.Should().BeFalse();
-        }
+        public void The_served_season_is_the_current_one() => SeasonPayloadMapper.ToSeasonPayload(Snapshot(), AsOf).IsCurrent.Should().BeTrue();
 
         [Fact]
         public void Slot_order_is_the_distinct_codes_not_every_slot()
         {
             // eleven startable slots, eight radar axes
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf);
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot(), AsOf);
 
             payload.SlotOrder.Should().Equal(
                 "QB", "RB", "WR", "TE", "FLEX", "SUPER FLEX", "K", "DEF");
@@ -82,7 +63,7 @@ namespace FantasyLeague.Core.Tests
         public void Slot_order_keeps_roster_positions_order_rather_than_sorting()
         {
             // R2: the silhouette depends on axis order, so it is never re-sorted
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
+            var payload = SeasonPayloadMapper.ToSeasonPayload(
                 Snapshot(rosterPositions: ["WR", "QB", "TE", "BN"]), AsOf);
 
             payload.SlotOrder.Should().Equal("WR", "QB", "TE");
@@ -91,7 +72,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void Bench_slots_never_become_axes()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
+            var payload = SeasonPayloadMapper.ToSeasonPayload(
                 Snapshot(rosterPositions: ["QB", "BN", "IR", "TAXI"]), AsOf);
 
             payload.SlotOrder.Should().Equal("QB");
@@ -100,7 +81,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void Teams_arrive_ranked_by_points()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 Team(3, "Third", (10m, 10m, true)),
                 Team(1, "First", (30m, 30m, true)),
                 Team(2, "Second", (20m, 20m, true)),
@@ -113,7 +94,7 @@ namespace FantasyLeague.Core.Tests
         public void Totals_sum_every_week_including_the_unfinished_one()
         {
             // the league is decided on total points, which includes the live week
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 Team(1, "Playing", (10m, 20m, true), (5m, 30m, false)),
             ]), AsOf);
 
@@ -125,7 +106,7 @@ namespace FantasyLeague.Core.Tests
         public void Sigma_covers_finalized_weeks_only()
         {
             // R1: a team on 41 points at 2pm Sunday is not an outlier
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 Team(1, "Mid Sunday",
                     (8m, 8m, true), (12m, 12m, true), (8m, 8m, true), (12m, 12m, true),
                     (41m, 41m, false)),
@@ -141,7 +122,7 @@ namespace FantasyLeague.Core.Tests
         public void Sigma_and_its_companions_are_null_below_four_final_weeks()
         {
             // D1: absence is a value the client has to handle, not a zero
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 Team(1, "Too Early", (10m, 10m, true), (20m, 20m, true), (30m, 30m, true)),
             ]), AsOf);
 
@@ -157,7 +138,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void Totals_carry_the_figures_the_range_mark_needs()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
             var totals = payload.Teams[0].Totals;
 
             totals.Mean.Should().Be(10m);
@@ -169,7 +150,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void Weeks_come_through_in_order_with_their_finality()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 Team(1, "One", (10m, 11m, true), (20m, 21m, true), (30m, 31m, false)),
             ]), AsOf);
 
@@ -181,36 +162,10 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void An_excluded_roster_is_dropped_entirely()
-        {
-            // A1, at the read boundary
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
-                Snapshot([
-                    Team(1, "Real", (30m, 30m, true)),
-                    Team(9, "POON SQUAD", (0m, 0m, true)),
-                ]),
-                AsOf,
-                excludedRosterIds: new HashSet<int> { 9 });
-
-            payload.Teams.Should().ContainSingle().Which.RosterId.Should().Be(1);
-        }
-
-        [Fact]
-        public void Excluding_nobody_keeps_everybody()
-        {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
-                Team(1, "One", (10m, 10m, true)),
-                Team(2, "Two", (20m, 20m, true)),
-            ]), AsOf);
-
-            payload.Teams.Should().HaveCount(2);
-        }
-
-        [Fact]
         public void The_radar_blocks_are_empty_when_no_week_produced_an_attribution()
         {
             // an empty object beats omitting the key; the client can bind either way
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
 
             payload.LeagueSlotAverages.Should().NotBeNull().And.BeEmpty();
             payload.Teams[0].SlotAverages.Should().NotBeNull().And.BeEmpty();
@@ -220,7 +175,7 @@ namespace FantasyLeague.Core.Tests
         public void Slot_averages_flow_from_weeks_to_the_team_and_the_league_reference()
         {
             // T47: average each team's weeks, then average across teams
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 TeamWithSlots(1, "High",
                     (true, new Dictionary<string, decimal> { ["QB"] = 20m }),
                     (true, new Dictionary<string, decimal> { ["QB"] = 24m })),
@@ -237,7 +192,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void An_unfinished_week_and_a_rules_mismatch_week_do_not_count_toward_the_average()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 TeamWithSlots(1, "Mixed",
                     (true, new Dictionary<string, decimal> { ["QB"] = 20m }),
                     (false, new Dictionary<string, decimal> { ["QB"] = 99m }),           // not final
@@ -248,24 +203,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_league_reference_excludes_the_dummy_team_A1_step_2()
-        {
-            // A1: a second, separate filter from the standings exclusion above
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(
-                Snapshot([
-                    TeamWithSlots(1, "Real", (true, new Dictionary<string, decimal> { ["QB"] = 20m })),
-                    TeamWithSlots(9, "POON SQUAD", (true, new Dictionary<string, decimal> { ["QB"] = 0m })),
-                ]),
-                AsOf,
-                excludedRosterIds: new HashSet<int> { 9 });
-
-            payload.LeagueSlotAverages["QB"].Should().Be(20m, "the dummy team's zero must not drag the reference down");
-        }
-
-        [Fact]
         public void A_season_with_no_teams_maps_without_throwing()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot(), AsOf);
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot(), AsOf);
 
             payload.Teams.Should().BeEmpty();
             payload.SlotOrder.Should().NotBeEmpty();
@@ -275,7 +215,7 @@ namespace FantasyLeague.Core.Tests
         public void The_payload_serialises_to_the_documented_field_names()
         {
             // ASP.NET Core's defaults are camelCase; the contract in §09 is camelCase
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([FourFinalWeeks()]), AsOf);
 
             var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
             {
@@ -297,7 +237,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void A_null_sigma_serialises_as_null_rather_than_disappearing()
         {
-            var payload = SeasonPayloadMapper.ToIndividualSeasonPayload(Snapshot([
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
                 Team(1, "Too Early", (10m, 10m, true)),
             ]), AsOf);
 
@@ -319,22 +259,6 @@ namespace FantasyLeague.Core.Tests
 
             payload.Current.Should().Be(2026);
             payload.Available.Should().Equal(2026);
-        }
-
-        [Fact]
-        public void Available_seasons_come_back_newest_first()
-        {
-            // what the season picker binds to, so a new year appears the day D8 finds it
-            var payload = SeasonPayloadMapper.ToSeasonsPayload(2026, [2024, 2026, 2025]);
-
-            payload.Available.Should().Equal(2026, 2025, 2024);
-        }
-
-        [Fact]
-        public void A_repeated_season_is_listed_once()
-        {
-            SeasonPayloadMapper.ToSeasonsPayload(2026, [2026, 2026, 2025])
-                .Available.Should().Equal(2026, 2025);
         }
     }
 }

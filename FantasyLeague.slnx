@@ -1,9 +1,10 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/FantasyLeague.Console/FantasyLeague.Console.csproj" />
+    <Project Path="src/FantasyLeague.Cli/FantasyLeague.Cli.csproj" />
     <Project Path="src/FantasyLeague.Core/FantasyLeague.Core.csproj" />
     <Project Path="src/FantasyLeague.Data/FantasyLeague.Data.csproj" />
     <Project Path="src/FantasyLeague.Functions/FantasyLeague.Functions.csproj" />
+    <Project Path="src/FantasyLeague.Seasons/FantasyLeague.Seasons.csproj" />
     <Project Path="src/FantasyLeague.Sleeper/FantasyLeague.Sleeper.csproj" />
   </Folder>
   <Folder Name="/tests/">

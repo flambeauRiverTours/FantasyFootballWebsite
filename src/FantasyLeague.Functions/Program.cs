@@ -1,8 +1,7 @@
 ﻿using Azure.Monitor.OpenTelemetry.Exporter;
-using FantasyLeague.Core;
 using FantasyLeague.Data;
+using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
-using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
 using Microsoft.Extensions.Configuration;
@@ -18,20 +17,15 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
 {
     builder.Services.AddOpenTelemetry()
         .UseFunctionsWorkerDefaults()
-        // UseFunctionsWorkerDefaults only instruments HTTP; without this, a SQL
-        // connection attempt - including every retry EnableRetryOnFailure makes
-        // during a serverless auto-resume - is invisible in Application Insights
-        // except as whatever SqlFinalizedWeekStore's own catch block logs. No SQL
-        // text or parameters are captured by default - nothing to opt out of.
+        // the worker defaults trace HTTP only; this adds every SQL call and retry
         .WithTracing(tracing => tracing.AddSqlClientInstrumentation())
         .UseAzureMonitorExporter();
 }
 
-builder.Services.AddFantasyData(builder.Configuration.GetConnectionString("FantasyLeague")!);
-
-// Registers the configured league and the client together with its resilience
-// pipeline and rate limit; the host does not need to know how it is assembled.
+// each library registers only what it owns, so the order of these does not matter
 builder.Services.AddSleeperClient();
+builder.Services.AddSeasonService();
+builder.Services.AddFantasyData(builder.Configuration.GetConnectionString("FantasyLeague"));
 builder.Services.Configure<ServiceProviderOptions>(o =>
 {
     o.ValidateOnBuild = true;

@@ -1,37 +1,37 @@
-﻿using System.Net;
-using System.Threading.RateLimiting;
-using Azure.Storage.Blobs;
-using FantasyLeague.Core;
-using Microsoft.Extensions.Caching.Hybrid;
-using Microsoft.Extensions.Configuration;
+﻿using System.Threading.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Sleeper
 {
     /// <summary>
-    /// Extension methods for <see cref="IServiceCollection"/> to add the <see cref="SleeperClient"/> service.
+    /// Registers the Sleeper client and the reader in front of it.
     /// </summary>
     public static class ServiceCollectionExtensions
     {
-        /// <summary>Burst capacity: the most requests that can go out back to back.</summary>
-        private const int TokenLimit = 50;
+        /// <summary>
+        /// Burst capacity: the most requests that can go out back to back.
+        /// </summary>
+        /// <remarks>
+        /// The bucket is per instance, and Flex Consumption cannot be capped
+        /// below 40 instances, so 40 × 25 keeps even that worst case inside
+        /// Sleeper's guidance of 1,000 requests a minute. The site needs about
+        /// 4.4 a minute, and 8.4 before Tuesday's job (§07).
+        /// </remarks>
+        private const int TokenLimit = 25;
 
         /// <summary>How many tokens are dropped into the bucket each period, as a lump rather than a trickle.</summary>
-        private const int TokensPerPeriod = 50;
+        private const int TokensPerPeriod = TokenLimit;
 
         /// <summary>How many callers may wait for the next refill before requests are refused outright.</summary>
         private const int QueueLimit = 20;
 
         /// <summary>
-        /// Registers <see cref="SleeperClient"/> together with the whole outbound
-        /// pipeline: resilience on the outside, this application's rate limit on
-        /// the inside.
+        /// Registers <see cref="ISleeperReader"/> and the client behind it, together
+        /// with the whole outbound pipeline: resilience on the outside, this
+        /// application's rate limit on the inside.
         /// </summary>
-        /// <param name="services">The service collection.</param>
         /// <param name="configureResilience">
         /// Optional overrides applied after the defaults below, for a host that
         /// needs different settings or a test that cannot wait out real backoff.
@@ -46,19 +46,6 @@ namespace FantasyLeague.Sleeper
             this IServiceCollection services,
             Action<HttpStandardResilienceOptions>? configureResilience = null)
         {
-
-            services.AddOptions<LeagueOptions>()
-                .BindConfiguration("League")
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
-
-            // bound through the provider rather than BindConfiguration: a bare
-            // ServiceCollection has no IConfiguration, and every default here is
-            // usable without one
-            services.AddOptions<PlayerMapOptions>()
-                .Configure<IServiceProvider>((options, provider) =>
-                    provider.GetService<IConfiguration>()?.GetSection("PlayerMap").Bind(options));
-
             services.TryAddSingleton<RateLimiter>(_ => new TokenBucketRateLimiter(
                 new TokenBucketRateLimiterOptions
                 {
@@ -70,15 +57,17 @@ namespace FantasyLeague.Sleeper
                     AutoReplenishment = true,
                 }));
 
-
             services.TryAddTransient<RateLimitHandler>();
 
             var builder = services.AddHttpClient<SleeperClient>(c =>
             {
                 c.BaseAddress = new Uri("https://api.sleeper.app/v1/");
-                c.DefaultRequestHeaders.UserAgent.ParseAdd("bosty-base-site/1.0");
-                //No timeout - this is handled by the resilience policy below, which retries on timeouts and other transient failures.
+                c.DefaultRequestHeaders.UserAgent.ParseAdd("ideal-points/1.0");
+                // the resilience pipeline's 30 s total timeout fires well inside HttpClient's own 100 s
             });
+
+            // the default logger writes request URLs, and every league URL carries the league id (A2)
+            builder.RemoveAllLoggers();
 
             builder.AddStandardResilienceHandler(o =>
             {
@@ -91,35 +80,8 @@ namespace FantasyLeague.Sleeper
 
             builder.AddHttpMessageHandler<RateLimitHandler>();
 
-            //Add the hybrid cache to the service collection, so that it can be used by the SleeperClient and other services.
             services.AddHybridCache();
-            services.TryAddTransient<SleeperReaderCache>();
-
-            // AzureWebJobsStorage is already present wherever a Functions host runs;
-            // with no connection string at all the map simply is not persisted
-            services.TryAddSingleton<IPlayerMapStore>(provider =>
-            {
-                var playerMap = provider.GetRequiredService<IOptions<PlayerMapOptions>>().Value;
-                var connectionString = playerMap.ConnectionString
-                    ?? provider.GetService<IConfiguration>()?["AzureWebJobsStorage"];
-
-                if (string.IsNullOrWhiteSpace(connectionString))
-                {
-                    return new NullPlayerMapStore();
-                }
-
-                return new BlobPlayerMapStore(
-                    new BlobServiceClient(connectionString).GetBlobContainerClient(playerMap.ContainerName),
-                    playerMap.BlobName,
-                    provider.GetRequiredService<ILogger<BlobPlayerMapStore>>());
-            });
-
-            //TryAdd, so a host with a database registers the SQL adapter instead and the console keeps rebuilding from Sleeper
-            services.TryAddSingleton<IFinalizedWeekStore, NullFinalizedWeekStore>();
-
-            // singleton: the map it holds is shared state
-            services.TryAddSingleton<IPlayerMapRefresher, PlayerMapRefresher>();
-            services.TryAddTransient<ISeasonService, SeasonService>();
+            services.TryAddTransient<ISleeperReader, SleeperReader>();
 
             return builder;
         }
@@ -128,21 +90,13 @@ namespace FantasyLeague.Sleeper
         /// Decides whether a failed attempt is worth repeating.
         /// </summary>
         /// <param name="outcome">The result or exception from the attempt.</param>
-        /// <returns><c>true</c> when retrying could plausibly succeed.</returns>
-        private static bool ShouldRetry(Polly.Outcome<HttpResponseMessage> outcome)
-        {
-            if (outcome.Exception is SleeperRateLimitExceededException) return false;
-
-            if (outcome.Result is { } response)
-            {
-                return response.StatusCode is HttpStatusCode.TooManyRequests
-                    or HttpStatusCode.RequestTimeout
-                    or HttpStatusCode.ServiceUnavailable
-                    or HttpStatusCode.BadGateway
-                    or HttpStatusCode.GatewayTimeout;
-            }
-
-            return outcome.Exception is HttpRequestException or TimeoutException;
-        }
+        /// <returns><c>true</c> for the standard transient failures, except the local limiter's refusal.</returns>
+        /// <remarks>
+        /// The refusal is an <see cref="HttpRequestException"/>, which the standard
+        /// predicate retries. Retrying it only spends the queue.
+        /// </remarks>
+        private static bool ShouldRetry(Polly.Outcome<HttpResponseMessage> outcome) =>
+            outcome.Exception is not SleeperRateLimitExceededException
+            && HttpClientResiliencePredicates.IsTransient(outcome);
     }
 }

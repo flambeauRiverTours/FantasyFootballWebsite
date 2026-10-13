@@ -7,10 +7,10 @@ const Units: [Intl.RelativeTimeFormatUnit, number][] = [
   ['day', 7],
 ];
 
-/*
- * Gets the relative time, but React-y
- * @param iso ISO format
- * @returns Relative time string
+/**
+ * How long ago a moment was, in words, refreshed every 15 seconds.
+ * @param iso An ISO 8601 timestamp, or undefined before there is one.
+ * @returns For example "2 minutes ago", or an empty string when there is no time.
  */
 export function useRelativeTime(iso: string | undefined): string {
   const [now, setNow] = useState(() => Date.now());

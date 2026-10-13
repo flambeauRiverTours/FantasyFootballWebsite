@@ -4,14 +4,17 @@ import { useQueryState } from './useQueryState';
 
 /** Ids from the parameter, dropping any the payload does not have. Empty means all. */
 function toShown(param: string, valid: number[]): Set<number> {
-  const ids = param.split(',').map(Number).filter((id) => valid.includes(id));
+  const ids = param
+    .split(',')
+    .map(Number)
+    .filter((id) => valid.includes(id));
   return new Set(ids.length > 0 ? ids : valid);
 }
 
-/*
- * Filters teams down based on user input via toggle
- * @param teams Full list of teams
- * @returns Shown list of teams, toggle handler
+/**
+ * Which teams the chart shows, kept in the `teams` query parameter.
+ * @param teams Every team in the payload.
+ * @returns The shown roster ids, and a toggle that never leaves zero teams shown.
  */
 export function useTeamFilter(teams: TeamPayload[]) {
   const [param, setParam] = useQueryState('teams', '');
@@ -19,7 +22,7 @@ export function useTeamFilter(teams: TeamPayload[]) {
   const validIds = useMemo(() => teams.map((t) => t.rosterId), [teams]);
   const shown = useMemo(() => toShown(param, validIds), [param, validIds]);
 
-  //never zero teams
+  // the last team shown cannot be hidden: a chart of no one says nothing
   const toggle = (id: number) =>
     setParam((prev) => {
       const current = toShown(prev, validIds);

@@ -29,7 +29,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("rb1", 18m, "RB"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(38m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(38m);
         }
 
         [Fact]
@@ -43,8 +43,8 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("rb1", 18m, "RB"),
             };
 
-            IdealLineupSolver.Solve(players, Roster.Slots("FLEX", "WR")).Points.Should().Be(38m);
-            IdealLineupSolver.Solve(players, Roster.Slots("WR", "FLEX")).Points.Should().Be(38m);
+            IdealLineupSolver.Solve(players, Roster.Slots("FLEX", "WR")).IdealPts.Should().Be(38m);
+            IdealLineupSolver.Solve(players, Roster.Slots("WR", "FLEX")).IdealPts.Should().Be(38m);
         }
 
         [Fact]
@@ -54,8 +54,8 @@ namespace FantasyLeague.Core.Tests
             var a = Roster.Player("wr1", 20m, "WR");
             var b = Roster.Player("rb1", 18m, "RB");
 
-            IdealLineupSolver.Solve([a, b], slots).Points
-                .Should().Be(IdealLineupSolver.Solve([b, a], slots).Points);
+            IdealLineupSolver.Solve([a, b], slots).IdealPts
+                .Should().Be(IdealLineupSolver.Solve([b, a], slots).IdealPts);
         }
 
         [Fact]
@@ -89,7 +89,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("hybrid", 12m, "RB", "WR"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(26m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(26m);
         }
 
         [Fact]
@@ -105,7 +105,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("wr1", 18m, "WR"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(67m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(67m);
         }
 
         [Fact]
@@ -154,7 +154,7 @@ namespace FantasyLeague.Core.Tests
                 Roster.Player("rb1", 0m, "RB"),
             };
 
-            IdealLineupSolver.Solve(players, slots).Points.Should().Be(18m);
+            IdealLineupSolver.Solve(players, slots).IdealPts.Should().Be(18m);
         }
     }
 
@@ -249,14 +249,28 @@ namespace FantasyLeague.Core.Tests
 
             void Search(int slotIndex, decimal running)
             {
-                if (running > best) best = running;
-                if (slotIndex >= slots.Count) return;
+                if (running > best)
+                {
+                    best = running;
+                }
+
+                if (slotIndex >= slots.Count)
+                {
+                    return;
+                }
 
                 Search(slotIndex + 1, running);   // leaving a slot empty is allowed
                 for (var i = 0; i < players.Count; i++)
                 {
-                    if (used[i]) continue;
-                    if (!slots[slotIndex].Accepts(players[i].FantasyPositions)) continue;
+                    if (used[i])
+                    {
+                        continue;
+                    }
+
+                    if (!slots[slotIndex].Accepts(players[i].FantasyPositions))
+                    {
+                        continue;
+                    }
 
                     used[i] = true;
                     Search(slotIndex + 1, running + players[i].Points);
@@ -295,7 +309,7 @@ namespace FantasyLeague.Core.Tests
             {
                 var (players, slots) = Random(rng);
 
-                IdealLineupSolver.Solve(players, slots).Points
+                IdealLineupSolver.Solve(players, slots).IdealPts
                     .Should().Be(BruteForce(players, slots), $"case {i} should match brute force");
             }
         }
@@ -414,7 +428,10 @@ namespace FantasyLeague.Core.Tests
                 lineup.Should().OnlyHaveUniqueItems($"roster {rosterId}");
                 lineup.Count.Should().BeLessThanOrEqualTo(slots.Count, $"roster {rosterId}");
 
-                if (ideal > actual) gaps++;
+                if (ideal > actual)
+                {
+                    gaps++;
+                }
             }
 
             // ideal >= actual alone would still pass if the solver just returned
@@ -422,6 +439,49 @@ namespace FantasyLeague.Core.Tests
             // leaves points on the bench, so demand at least one genuine gap (B5).
             gaps.Should().BeGreaterThan(0,
                 $"in {weekFile} at least one roster should have left points on the bench");
+        }
+
+        [Theory]
+        [MemberData(nameof(CapturedWeeks))]
+        public void Every_roster_s_starters_sum_to_its_points(string weekFile)
+        {
+            // the other invariant: what the starters scored is what Sleeper says the roster scored
+            using var week = Fixture(weekFile);
+
+            foreach (var entry in week.RootElement.EnumerateArray())
+            {
+                var startersSum = entry.GetProperty("starters_points").EnumerateArray().Sum(p => p.GetDecimal());
+                var points = entry.GetProperty("points").GetDecimal();
+
+                startersSum.Should().BeApproximately(points, 0.01m, $"roster {entry.GetProperty("roster_id").GetInt32()} in {weekFile}");
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(CapturedWeeks))]
+        public void Every_starter_is_eligible_for_the_slot_at_its_index(string weekFile)
+        {
+            // the radar rests on starters[i] belonging to the ith startable slot,
+            // an observation rather than a documented guarantee
+            var slots = LeagueSlots();
+            var positions = PlayerPositions();
+            using var week = Fixture(weekFile);
+
+            foreach (var entry in week.RootElement.EnumerateArray())
+            {
+                var rosterId = entry.GetProperty("roster_id").GetInt32();
+                var starters = entry.GetProperty("starters").EnumerateArray().Select(e => e.GetString()!).ToList();
+
+                starters.Should().HaveCount(slots.Count, $"roster {rosterId} in {weekFile}");
+                for (var i = 0; i < starters.Count; i++)
+                {
+                    if (starters[i] != "0")
+                    {
+                        slots[i].Accepts(positions[starters[i]]).Should().BeTrue(
+                            $"roster {rosterId} started {starters[i]} at {slots[i].Code} in {weekFile}");
+                    }
+                }
+            }
         }
 
         [Fact]
@@ -450,7 +510,7 @@ namespace FantasyLeague.Core.Tests
                 var rosterId = entry.GetProperty("roster_id").GetInt32();
                 var players = Roster(entry, positions, _ => 1m);
 
-                IdealLineupSolver.Solve(players, slots).Points
+                IdealLineupSolver.Solve(players, slots).IdealPts
                     .Should().Be(expected[rosterId], $"roster {rosterId}");
             }
         }
@@ -473,7 +533,7 @@ namespace FantasyLeague.Core.Tests
 
                 var players = Roster(entry, positions, _ => 1m);
 
-                IdealLineupSolver.Solve(players, slots).Points
+                IdealLineupSolver.Solve(players, slots).IdealPts
                     .Should().BeGreaterThanOrEqualTo(started, $"roster {rosterId}");
             }
         }

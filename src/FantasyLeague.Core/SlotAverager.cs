@@ -1,46 +1,51 @@
 ﻿namespace FantasyLeague.Core
 {
+    /// <summary>
+    /// The radar's figures: points per startable slot, averaged per week, per season and across the league.
+    /// </summary>
     public static class SlotAverager
     {
-
         /// <summary>
-        /// Averages starter player scores by slot
+        /// Averages one week's starter points by slot.
         /// </summary>
-        /// <param name="starters">List of starters</param>
-        /// <param name="playersPoints">Dict of player to points scored</param>
-        /// <param name="playerPositions">Dict of playet to positions</param>
-        /// <param name="startableSlots">List of startable slots</param>
-        /// <returns>Dictionary of slot to average points for that slot</returns>
-        public static IReadOnlyDictionary<string, decimal>? MakeSlotAverages(
-            IReadOnlyList<string> starters,
+        /// <param name="starters">The lineup in slot order, with null for a slot left empty.</param>
+        /// <param name="playersPoints">Points per player id. A missing id scored zero.</param>
+        /// <param name="playerPositions">Fantasy positions per player id.</param>
+        /// <param name="startableSlots">The season's startable slots, in roster_positions order.</param>
+        /// <returns>
+        /// Average points per slot code, or null when the starters do not line up
+        /// with the slots: a different count, or a starter ineligible for the slot
+        /// at its position. Both mean the slot list changed after this week.
+        /// </returns>
+        public static IReadOnlyDictionary<string, decimal>? WeekAverages(
+            IReadOnlyList<string?> starters,
             IReadOnlyDictionary<string, decimal> playersPoints,
             IReadOnlyDictionary<string, IReadOnlyList<string>> playerPositions,
             IReadOnlyList<Slot> startableSlots)
         {
-            if (starters.Count != startableSlots.Count) return null;   // rules changed mid-season
+            if (starters.Count != startableSlots.Count)
+            {
+                return null;
+            }
 
-            var byCode = new Dictionary<string, (decimal Total, int Slots)>();
+            var points = new List<(string Code, decimal Value)>(starters.Count);
             for (var i = 0; i < starters.Count; i++)
             {
                 var slot = startableSlots[i];
-                var starterId = starters[i];
+                var starter = starters[i];
 
-                if (starterId != "0"
-                    && playerPositions.TryGetValue(starterId, out var positions)
+                if (starter is not null
+                    && playerPositions.TryGetValue(starter, out var positions)
                     && !slot.Accepts(positions))
                 {
                     return null;
                 }
 
-                var pts = starterId == "0"                            // an empty slot
-                         ? 0m
-                         : playersPoints.GetValueOrDefault(starterId, 0m);
-
-                var cur = byCode.GetValueOrDefault(slot.Code);
-                byCode[slot.Code] = (cur.Total + pts, cur.Slots + 1);
+                // an empty slot is a real zero and still counts toward the divisor
+                points.Add((slot.Code, starter is null ? 0m : playersPoints.GetValueOrDefault(starter, 0m)));
             }
 
-            return byCode.ToDictionary(kv => kv.Key, kv => kv.Value.Total / kv.Value.Slots);
+            return Mean(points);
         }
 
         /// <summary>
@@ -49,21 +54,12 @@
         /// carries an empty slot average and is skipped rather than counted as a
         /// zero at every slot.
         /// </summary>
-        public static IReadOnlyDictionary<string, decimal> SeasonAverages(IEnumerable<TeamWeek> weeks)
-        {
-            var byCode = new Dictionary<string, (decimal Total, int Weeks)>();
-
-            foreach (var week in weeks.Where(w => w.IsFinal && w.SlotAverages.Count > 0))
-            {
-                foreach (var (code, value) in week.SlotAverages)
-                {
-                    var cur = byCode.GetValueOrDefault(code);
-                    byCode[code] = (cur.Total + value, cur.Weeks + 1);
-                }
-            }
-
-            return byCode.ToDictionary(kv => kv.Key, kv => kv.Value.Total / kv.Value.Weeks);
-        }
+        /// <param name="weeks">The team's weeks.</param>
+        /// <returns>Average points per slot code across the season.</returns>
+        public static IReadOnlyDictionary<string, decimal> SeasonAverages(IEnumerable<TeamWeek> weeks) =>
+            Mean(weeks
+                .Where(w => w.IsFinal && w.SlotAverages.Count > 0)
+                .SelectMany(w => w.SlotAverages.Select(kv => (kv.Key, kv.Value))));
 
         /// <summary>
         /// The radar's reference circle: each slot averaged across the given
@@ -72,21 +68,20 @@
         /// Callers filter to non-excluded teams first (A1); this function does
         /// not know about the dummy team.
         /// </summary>
+        /// <param name="teamSeasonAverages">Each team's season averages.</param>
+        /// <returns>Average points per slot code across the teams.</returns>
         public static IReadOnlyDictionary<string, decimal> LeagueAverages(
-            IEnumerable<IReadOnlyDictionary<string, decimal>> teamSeasonAverages)
-        {
-            var byCode = new Dictionary<string, (decimal Total, int Teams)>();
+            IEnumerable<IReadOnlyDictionary<string, decimal>> teamSeasonAverages) =>
+            Mean(teamSeasonAverages.SelectMany(team => team.Select(kv => (kv.Key, kv.Value))));
 
-            foreach (var team in teamSeasonAverages)
-            {
-                foreach (var (code, value) in team)
-                {
-                    var cur = byCode.GetValueOrDefault(code);
-                    byCode[code] = (cur.Total + value, cur.Teams + 1);
-                }
-            }
-
-            return byCode.ToDictionary(kv => kv.Key, kv => kv.Value.Total / kv.Value.Teams);
-        }
+        /// <summary>
+        /// Averages values that share a slot code.
+        /// </summary>
+        /// <param name="values">Slot code and value pairs, any number per code.</param>
+        /// <returns>The mean value per code.</returns>
+        private static IReadOnlyDictionary<string, decimal> Mean(IEnumerable<(string Code, decimal Value)> values) =>
+            values
+                .GroupBy(v => v.Code)
+                .ToDictionary(g => g.Key, g => g.Average(v => v.Value));
     }
 }

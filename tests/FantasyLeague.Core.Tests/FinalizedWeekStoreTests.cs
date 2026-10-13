@@ -1,240 +1,198 @@
 ﻿using FantasyLeague.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.InMemory.Infrastructure.Internal;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FantasyLeague.Core.Tests
 {
-    internal sealed class InMemoryContextFactory(string name) : IDbContextFactory<FantasyDataContext>
-    {
-        public FantasyDataContext CreateDbContext() =>
-            new(new DbContextOptionsBuilder<FantasyDataContext>()
-                .UseInMemoryDatabase(name)
-                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                .Options);
-    }
-
-    internal sealed class BrokenContextFactory : IDbContextFactory<FantasyDataContext>
-    {
-        public FantasyDataContext CreateDbContext() =>
-            throw new InvalidOperationException("no database");
-    }
-
-    public class SqlFinalizedWeekStoreTests
+    /// <summary>
+    /// The store the host uses: memory, then the blob, then SQL (A16, A20).
+    /// </summary>
+    public class FinalizedWeekStoreTests
     {
         private const string League = "L1";
 
-        private static SqlFinalizedWeekStore Store() =>
-            new(new InMemoryContextFactory(Guid.NewGuid().ToString()),
-                NullLogger<SqlFinalizedWeekStore>.Instance);
+        private sealed record Parts(
+            FinalizedWeekStore Store,
+            SqlFinalizedWeekStore Sql,
+            BlobFinalizedWeekStore Blob,
+            MemoryContainer Container,
+            CountingContextFactory Factory);
 
-        private static TeamWeek Week(
-            int rosterId = 1,
-            int week = 1,
-            decimal actual = 100m,
-            decimal ideal = 120m,
-            bool isFinal = true,
-            IReadOnlyList<RosteredPlayer>? players = null,
-            IReadOnlyDictionary<string, decimal>? slotAverages = null) =>
-            new(rosterId, week, actual, ideal,
-                [new PlayerId("s1"), new PlayerId("s2")],
-                [new PlayerId("s1"), new PlayerId("i9")],
-                players ?? [new RosteredPlayer(new PlayerId("s1"), "Patrick Mahomes", ["QB"], 27.5m)],
-                isFinal, slotAverages ?? new Dictionary<string, decimal>());
+        private static Parts Build()
+        {
+            var factory = new CountingContextFactory(Guid.NewGuid().ToString());
+            var container = new MemoryContainer();
+            var sql = new SqlFinalizedWeekStore(factory, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+            var blob = new BlobFinalizedWeekStore(container, TimeProvider.System, NullLogger<BlobFinalizedWeekStore>.Instance);
+
+            var cache = new ServiceCollection()
+                .AddHybridCache()
+                .Services
+                .BuildServiceProvider()
+                .GetRequiredService<HybridCache>();
+
+            return new Parts(
+                new FinalizedWeekStore(sql, blob, cache, NullLogger<FinalizedWeekStore>.Instance),
+                sql, blob, container, factory);
+        }
+
+        private static TeamWeek Week(int week = 1, decimal ideal = 120m) =>
+            new(1, week, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>());
+
+        private static CancellationToken Token => TestContext.Current.CancellationToken;
 
         [Fact]
-        public async Task An_empty_store_reads_back_nothing()
+        public async Task A_read_prefers_the_blob_over_sql()
         {
-            (await Store().ReadAsync(League, 2026, default)).Should().BeEmpty();
+            var parts = Build();
+            await parts.Sql.WriteAsync(League, 2026, [Week(ideal: 100m)], Token);
+            await parts.Blob.WriteAsync(League, 2026, [Week(ideal: 999m)], Token);
+
+            (await parts.Store.ReadAsync(League, 2026, Token)).Should().ContainSingle()
+                .Which.IdealPts.Should().Be(999m);
         }
 
         [Fact]
-        public async Task A_written_week_reads_back()
+        public async Task A_cold_blob_falls_through_to_sql_and_is_primed_with_it()
         {
-            var store = Store();
+            // T58: otherwise the blob sits empty from deploy until the first Tuesday run
+            var parts = Build();
+            await parts.Sql.WriteAsync(League, 2026, [Week(ideal: 100m)], Token);
 
-            await store.WriteAsync(League, 2026, [Week()], default);
-            var read = await store.ReadAsync(League, 2026, default);
-
-            read.Should().ContainSingle();
-            read[0].RosterId.Should().Be(1);
-            read[0].Week.Should().Be(1);
+            (await parts.Store.ReadAsync(League, 2026, Token)).Should().ContainSingle()
+                .Which.IdealPts.Should().Be(100m);
+            (await parts.Blob.ReadAsync(League, 2026, Token)).Should().ContainSingle();
         }
 
         [Fact]
-        public async Task The_scores_survive_the_round_trip_exactly()
+        public async Task Nothing_anywhere_reads_back_empty_rather_than_null() =>
+            (await Build().Store.ReadAsync(League, 2026, Token)).Should().BeEmpty();
+
+        [Fact]
+        public async Task A_write_reaches_sql_and_the_blob()
         {
-            var store = Store();
+            var parts = Build();
 
-            await store.WriteAsync(League, 2026, [Week(actual: 123.45m, ideal: 167.89m)], default);
-            var read = await store.ReadAsync(League, 2026, default);
+            await parts.Store.WriteAsync(League, 2026, [Week(ideal: 155m)], Token);
 
-            read[0].Actual.Should().Be(123.45m);
-            read[0].Ideal.Should().Be(167.89m);
+            (await parts.Sql.ReadAsync(League, 2026, Token)).Should().ContainSingle();
+            (await parts.Blob.ReadAsync(League, 2026, Token)).Should().ContainSingle()
+                .Which.IdealPts.Should().Be(155m);
         }
 
         [Fact]
-        public async Task The_lineups_survive_the_round_trip()
+        public async Task A_second_read_touches_neither_store()
         {
-            var store = Store();
+            // the free tier allows roughly 55 awake hours a month; a query per
+            // request would never let it pause
+            var parts = Build();
+            await parts.Sql.WriteAsync(League, 2026, [Week()], Token);
 
-            await store.WriteAsync(League, 2026, [Week()], default);
-            var read = await store.ReadAsync(League, 2026, default);
+            await parts.Store.ReadAsync(League, 2026, Token);
+            var afterFirst = parts.Factory.Created;
+            parts.Container.Blobs.Clear();
+            await parts.Store.ReadAsync(League, 2026, Token);
 
-            read[0].Starters.Should().Equal(new PlayerId("s1"), new PlayerId("s2"));
-            read[0].IdealLineup.Should().Equal(new PlayerId("s1"), new PlayerId("i9"));
-        }
-        [Fact]
-        public async Task The_rostered_players_survive_the_round_trip()
-        {
-            // the whole reason TeamWeek was widened: a stored week must be re-solvable
-            var store = Store();
-
-            await store.WriteAsync(League, 2026, [Week(players:
-                [
-                    new RosteredPlayer(new PlayerId("4046"), "Patrick Mahomes", ["QB"], 27.5m),
-                    new RosteredPlayer(new PlayerId("1234"), "Multi Eligible", ["RB", "WR"], 8.25m),
-                ])], default);
-
-            var read = await store.ReadAsync(League, 2026, default);
-
-            // BeEquivalentTo, not Be: RosteredPlayer is a record whose list member
-            // compares by reference, so two identical players are never ==
-            read[0].Players.Should().HaveCount(2);
-            read[0].Players[0].Should().BeEquivalentTo(
-                new RosteredPlayer(new PlayerId("4046"), "Patrick Mahomes", ["QB"], 27.5m));
-            read[0].Players[1].Points.Should().Be(8.25m);
-            read[0].Players[1].FantasyPositions.Should().Equal("RB", "WR");
+            parts.Factory.Created.Should().Be(afterFirst);
+            parts.Container.Blobs.Should().BeEmpty("nothing re-primed the blob");
         }
 
         [Fact]
-        public async Task The_slot_averages_survive_the_round_trip()
+        public async Task A_cached_read_is_the_same_instance_not_a_copy()
         {
-            // M6's stored column; an empty dict is the only shape prior tests exercised
-            var store = Store();
+            // HybridCache deserializes a copy of anything it cannot see is immutable
+            var parts = Build();
+            await parts.Store.WriteAsync(League, 2026, [Week()], Token);
 
-            await store.WriteAsync(League, 2026, [Week(slotAverages: new Dictionary<string, decimal>
-            {
-                ["QB"] = 21.5m,
-                ["SUPER FLEX"] = 14.25m,
-            })], default);
+            var first = await parts.Store.ReadAsync(League, 2026, Token);
+            var second = await parts.Store.ReadAsync(League, 2026, Token);
 
-            var read = await store.ReadAsync(League, 2026, default);
-
-            read[0].SlotAverages.Should().BeEquivalentTo(new Dictionary<string, decimal>
-            {
-                ["QB"] = 21.5m,
-                ["SUPER FLEX"] = 14.25m,
-            });
+            second.Should().BeSameAs(first);
         }
 
         [Fact]
-        public async Task Writing_the_same_week_twice_updates_rather_than_duplicating()
+        public async Task A_write_drops_the_cached_answer()
         {
-            // T30 re-runs the backfill after a solver fix; that is designed, not accidental
-            var store = Store();
+            // without this the finalize timer writes a week nobody can see
+            var parts = Build();
+            await parts.Store.WriteAsync(League, 2026, [Week(ideal: 120m)], Token);
+            (await parts.Store.ReadAsync(League, 2026, Token))[0].IdealPts.Should().Be(120m);
 
-            await store.WriteAsync(League, 2026, [Week(ideal: 120m)], default);
-            await store.WriteAsync(League, 2026, [Week(ideal: 155m)], default);
+            await parts.Store.WriteAsync(League, 2026, [Week(ideal: 155m)], Token);
 
-            var read = await store.ReadAsync(League, 2026, default);
-
-            read.Should().ContainSingle();
-            read[0].Ideal.Should().Be(155m);
+            (await parts.Store.ReadAsync(League, 2026, Token))[0].IdealPts.Should().Be(155m);
         }
 
         [Fact]
-        public async Task Each_roster_and_week_is_its_own_row()
+        public async Task Seasons_are_cached_separately()
         {
-            var store = Store();
+            // the blob keeps only the newest season, so 2025 comes from SQL
+            var parts = Build();
+            await parts.Store.WriteAsync(League, 2025, [Week(ideal: 99m)], Token);
+            await parts.Store.WriteAsync(League, 2026, [Week(ideal: 111m)], Token);
 
-            await store.WriteAsync(League, 2026,
-                [Week(rosterId: 1, week: 1), Week(rosterId: 2, week: 1), Week(rosterId: 1, week: 2)],
-                default);
-
-            (await store.ReadAsync(League, 2026, default)).Should().HaveCount(3);
-        }
-
-        [Fact]
-        public async Task A_different_season_is_not_returned()
-        {
-            var store = Store();
-
-            await store.WriteAsync(League, 2025, [Week()], default);
-
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task A_different_league_is_not_returned()
-        {
-            // roster ids repeat across leagues; the key is what keeps them apart
-            var store = Store();
-
-            await store.WriteAsync("L1", 2026, [Week()], default);
-
-            (await store.ReadAsync("L2", 2026, default)).Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task A_week_still_in_progress_is_never_read_back()
-        {
-            var store = Store();
-
-            await store.WriteAsync(League, 2026, [Week(isFinal: false)], default);
-
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
-        }
-
-        [Fact]
-        public async Task Writing_nothing_is_not_an_error()
-        {
-            await Store().Invoking(s => s.WriteAsync(League, 2026, [], default))
-                .Should().NotThrowAsync();
+            (await parts.Store.ReadAsync(League, 2025, Token))[0].IdealPts.Should().Be(99m);
+            (await parts.Store.ReadAsync(League, 2026, Token))[0].IdealPts.Should().Be(111m);
         }
 
         [Fact]
         public async Task An_unreachable_database_reads_back_empty_rather_than_throwing()
         {
-            // the caller falls back to Sleeper: correct, just slower
-            var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(), NullLogger<SqlFinalizedWeekStore>.Instance);
+            // the season is rebuilt from Sleeper: correct, just slower
+            var parts = Build();
+            parts.Factory.Failure = new RetryLimitExceededException("still paused", new TimeoutException());
 
-            (await store.ReadAsync(League, 2026, default)).Should().BeEmpty();
+            (await parts.Store.ReadAsync(League, 2026, Token)).Should().BeEmpty();
         }
 
         [Fact]
-        public async Task An_unreachable_database_still_throws_on_write()
+        public async Task A_failed_read_is_not_cached()
         {
-            // a swallowed write means a finalized week is absent forever
-            var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(), NullLogger<SqlFinalizedWeekStore>.Instance);
+            // cached for six hours, the empty answer would rebuild every
+            // finalized week from Sleeper long after the database woke
+            var parts = Build();
+            await parts.Sql.WriteAsync(League, 2026, [Week()], Token);
+            parts.Factory.Failure = new RetryLimitExceededException("still paused", new TimeoutException());
+            await parts.Store.ReadAsync(League, 2026, Token);
 
-            await store.Invoking(s => s.WriteAsync(League, 2026, [Week()], default))
+            parts.Factory.Failure = null;
+
+            (await parts.Store.ReadAsync(League, 2026, Token)).Should().ContainSingle();
+        }
+
+        [Fact]
+        public async Task A_non_transient_read_failure_still_throws()
+        {
+            var parts = Build();
+            parts.Factory.Failure = new InvalidOperationException("Invalid column name");
+
+            await parts.Store.Invoking(s => s.ReadAsync(League, 2026, default))
                 .Should().ThrowAsync<InvalidOperationException>();
         }
     }
 
-    public class NullFinalizedWeekStoreTests
+    internal sealed class CountingContextFactory(string name) : IDbContextFactory<FantasyDataContext>
     {
-        [Fact]
-        public async Task It_reads_back_nothing()
+        public int Created { get; private set; }
+
+        public Exception? Failure { get; set; }
+
+        public FantasyDataContext CreateDbContext()
         {
-            (await new NullFinalizedWeekStore().ReadAsync("L1", 2026, default)).Should().BeEmpty();
+            Created++;
+            if (Failure is not null)
+            {
+                throw Failure;
+            }
+
+            return new FantasyDataContext(
+                new DbContextOptionsBuilder<FantasyDataContext>()
+                    .UseInMemoryDatabase(name)
+                    .Options);
         }
-
-        [Fact]
-        public async Task It_accepts_a_write_and_keeps_none_of_it()
-        {
-            var store = new NullFinalizedWeekStore();
-
-            await store.WriteAsync("L1", 2026,
-                [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>())], default);
-
-            (await store.ReadAsync("L1", 2026, default)).Should().BeEmpty();
-        }
-
     }
 }

@@ -1,11 +1,14 @@
 ﻿namespace FantasyLeague.Core
 {
     /// <summary>
-    /// Defines a roster slot that can take multiple positions, such as "FLEX" or "SUPER_FLEX". It also includes methods to parse roster positions and determine if a slot can accept certain positions.
+    /// One startable slot from a league's <c>roster_positions</c>.
     /// </summary>
-    /// <param name="Code">The position code for the slot.</param>
+    /// <param name="Code">Sleeper's slot code, such as <c>QB</c> or <c>SUPER_FLEX</c>.</param>
     public sealed record Slot(string Code)
     {
+        /// <summary>
+        /// The positions each flex slot accepts. Every other slot accepts only its own code.
+        /// </summary>
         private static readonly Dictionary<string, string[]> Flex = new()
         {
             ["FLEX"] = ["RB", "WR", "TE"],
@@ -16,7 +19,7 @@
         };
 
         /// <summary>
-        /// Sleeper's underscored flex codes, spaced out for the client. 
+        /// Sleeper's underscored flex codes, spaced out for the client.
         /// </summary>
         private static readonly Dictionary<string, string> DisplayNames = new()
         {
@@ -35,18 +38,26 @@
         public static string DisplayCode(string code) => DisplayNames.GetValueOrDefault(code, code);
 
         /// <summary>
-        /// A set of all valid position slots in the fantasy league, including quarterback (QB), running back (RB), wide receiver (WR), tight end (TE), kicker (K), defense (DEF), defensive line (DL), linebacker (LB), and defensive back (DB).
+        /// Slots that take exactly one position.
         /// </summary>
         private static readonly HashSet<string> PositionSlots =
             ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"];
 
+        /// <summary>
+        /// Roster places that are not part of a lineup.
+        /// </summary>
         private static readonly HashSet<string> NotStartable = ["BN", "IR", "TAXI"];
 
         /// <summary>
-        /// Parses a list of roster positions into a list of startable slots, filtering out non-startable positions like "BN", "IR", and "TAXI".
+        /// Reads a league's <c>roster_positions</c> into its startable slots, in order.
         /// </summary>
-        /// <param name="rosterPositions">The list of roster positions to parse.</param>
-        /// <returns>The list of startable slots.</returns>
+        /// <param name="rosterPositions">The league's roster positions, bench included.</param>
+        /// <returns>Every startable slot, duplicates included.</returns>
+        /// <exception cref="ArgumentException">A code is not recognised (A3).</exception>
+        /// <remarks>
+        /// An unknown code fails loudly. Dropped silently, it would undercount
+        /// ideal, and <c>ideal &gt;= actual</c> cannot see undercounting.
+        /// </remarks>
         public static IReadOnlyList<Slot> Parse(IEnumerable<string> rosterPositions)
         {
             var all = rosterPositions.ToList();
@@ -65,10 +76,10 @@
         }
 
         /// <summary>
-        /// Determines whether the slot can accept any of the given positions, taking into account flex positions.
+        /// Decides whether a player may start in this slot.
         /// </summary>
-        /// <param name="positions">The list of positions to check.</param>
-        /// <returns>true if the slot can accept any of the positions; otherwise, false.</returns>
+        /// <param name="positions">The player's fantasy positions, all of them, not just the primary one.</param>
+        /// <returns><c>true</c> when any of them fits.</returns>
         public bool Accepts(IReadOnlyList<string> positions) =>
             Flex.TryGetValue(Code, out var allowed)
                 ? positions.Any(allowed.Contains)

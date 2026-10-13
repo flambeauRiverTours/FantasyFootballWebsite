@@ -10,8 +10,13 @@ namespace FantasyLeague.Sleeper
     /// types at all: a Sleeper schema change lands here, not in the solver, the
     /// tests and the API contract at once.
     /// </remarks>
-    public static class SleeperMapper
+    internal static class SleeperMapper
     {
+        /// <summary>
+        /// The league name used when the commissioner set none.
+        /// </summary>
+        private const string DefaultLeagueName = "Fantasy Football League";
+
         /// <summary>The string Sleeper puts in <c>starters</c> for a slot nobody filled.</summary>
         private const string EmptySlot = "0";
 
@@ -35,7 +40,10 @@ namespace FantasyLeague.Sleeper
             foreach (var (id, player) in dump)
             {
                 var positions = player.FantasyPositions;
-                if (positions is not { Count: > 0 }) continue;
+                if (positions is not { Count: > 0 })
+                {
+                    continue;
+                }
 
                 map[id] = new PlayerRef(player.FullName ?? id, player.Team, positions);
             }
@@ -44,12 +52,19 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
-        /// Resolves each roster to the name it should be shown under.
+        /// Keeps the two fields of the NFL state anything downstream reads.
+        /// </summary>
+        /// <param name="state">The state as Sleeper returned it.</param>
+        /// <returns>The current season and week.</returns>
+        internal static NFLState ToNFLState(NFLStateDto state) => new(state.Season, state.Week);
+
+        /// <summary>
+        /// Joins each roster to its owner, and so to the name it is shown under.
         /// </summary>
         /// <param name="users">The league's users.</param>
         /// <param name="rosters">The league's rosters.</param>
-        /// <returns>A map of roster id to display name.</returns>
-        internal static IReadOnlyDictionary<int, string> ToTeamNames(
+        /// <returns>Every roster by roster id.</returns>
+        internal static IReadOnlyDictionary<int, SleeperTeam> ToTeams(
             IReadOnlyList<LeagueUserDto> users,
             IReadOnlyList<RosterDto> rosters)
         {
@@ -57,10 +72,30 @@ namespace FantasyLeague.Sleeper
 
             return rosters.ToDictionary(
                 roster => roster.RosterId,
-                roster => roster.OwnerId is not null && byUserId.TryGetValue(roster.OwnerId, out var user)
-                    ? ResolveTeamName(user, roster.RosterId)
-                    : $"Roster {roster.RosterId}");
+                roster => new SleeperTeam(
+                    roster.OwnerId is not null && byUserId.TryGetValue(roster.OwnerId, out var user)
+                        ? ResolveTeamName(user, roster.RosterId)
+                        : SleeperTeam.FallbackName(roster.RosterId),
+                    roster.OwnerId));
         }
+
+        /// <summary>
+        /// The league's display name, or a default when the commissioner set none.
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns>A name that is never blank.</returns>
+        internal static string ToLeagueName(LeagueDto league) =>
+            string.IsNullOrWhiteSpace(league.Name) ? DefaultLeagueName : league.Name;
+
+        /// <summary>
+        /// The league's startable slots, in roster order.
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns>Every startable slot.</returns>
+        /// <exception cref="InvalidDataException">The league has no roster positions.</exception>
+        internal static IReadOnlyList<Slot> ToSlots(LeagueDto league) =>
+            Slot.Parse(league.RosterPositions
+                ?? throw new InvalidDataException("Sleeper returned a league with no roster positions."));
 
         /// <summary>
         /// Picks a display name for one manager: their team name, else their
@@ -70,20 +105,32 @@ namespace FantasyLeague.Sleeper
         /// <param name="rosterId">Their roster, used for the last-resort name.</param>
         /// <returns>A non-empty display name.</returns>
         /// <remarks>
-        /// The design expects an unset team name to arrive as an empty string. It
-        /// does not: for two of six managers in this league the <c>team_name</c>
-        /// key is absent from <c>metadata</c> entirely, and <c>metadata</c> itself
-        /// can be null. All three cases have to collapse to the same fallback,
-        /// which is what <see cref="string.IsNullOrWhiteSpace"/> buys.
+        /// An unset team name arrives as an absent key, a null <c>metadata</c>, or
+        /// an empty string (A6). All three fall back alike.
         /// </remarks>
         internal static string ResolveTeamName(LeagueUserDto user, int rosterId)
         {
             var teamName = user.Metadata?.TeamName;
-            if (!string.IsNullOrWhiteSpace(teamName)) return teamName;
-            if (!string.IsNullOrWhiteSpace(user.DisplayName)) return user.DisplayName;
+            if (!string.IsNullOrWhiteSpace(teamName))
+            {
+                return teamName;
+            }
 
-            return $"Roster {rosterId}";
+            if (!string.IsNullOrWhiteSpace(user.DisplayName))
+            {
+                return user.DisplayName;
+            }
+
+            return SleeperTeam.FallbackName(rosterId);
         }
+
+        /// <summary>
+        /// Reads the lineup in slot order, keeping each empty slot in its place.
+        /// </summary>
+        /// <param name="matchup">The roster's entry for that week.</param>
+        /// <returns>One entry per startable slot, null where Sleeper sent <c>"0"</c>.</returns>
+        internal static IReadOnlyList<string?> ToSlotStarters(MatchupDto matchup) =>
+            [.. (matchup.Starters ?? []).Select(id => id == EmptySlot ? null : id)];
 
         /// <summary>
         /// Turns one matchup entry into the shape the solver and the invariants
@@ -133,18 +180,14 @@ namespace FantasyLeague.Sleeper
                 players.Add(new RosteredPlayer(new PlayerId(id), reference.Name, reference.FantasyPositions, points));
             }
 
-            var starters = (matchup.Starters ?? [])
-                .Where(id => id != EmptySlot)
-                .Select(id => new PlayerId(id))
-                .ToList();
-
             return new RosterWeek(
                 matchup.RosterId,
                 matchup.CustomPoints ?? matchup.Points ?? 0m,
                 matchup.Points ?? 0m,
                 players,
-                starters,
                 matchup.StartersPoints ?? [],
+                ToSlotStarters(matchup),
+                matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
                 unresolved);
         }
     }

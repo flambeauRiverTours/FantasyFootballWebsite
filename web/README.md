@@ -1,32 +1,21 @@
-# React + TypeScript + Vite
+# Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The page: React 19, TypeScript, Vite. D3 is used for maths only; React owns the DOM (D9).
 
-Currently, two official plugins are available:
+| Command                | Effect                                            |
+| ---------------------- | ------------------------------------------------- |
+| `npm run dev`          | Dev server. `/api` is proxied to the deployed API |
+| `npm test`             | Vitest, jsdom, Testing Library, axe               |
+| `npm run lint`         | oxlint                                            |
+| `npm run format:check` | Prettier                                          |
+| `npm run build`        | `tsc -b`, then the bundle in `dist/`              |
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Variable                | Read by        | Purpose                                             |
+| ----------------------- | -------------- | --------------------------------------------------- |
+| `VITE_API_ORIGIN`       | the build      | API origin baked into the bundle. Set by the deploy |
+| `VITE_DEV_PROXY_TARGET` | the dev server | Proxy target. Default: the deployed API             |
 
-## React Compiler
+The proxy does not reuse `VITE_API_ORIGIN`: that value is inlined into the bundle, so the browser
+would call the absolute origin, bypass the proxy and fail CORS.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+CI limits initial JavaScript to 125 KB gzipped (standards, domain 2).

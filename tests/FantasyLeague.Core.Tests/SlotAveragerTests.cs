@@ -6,18 +6,18 @@ namespace FantasyLeague.Core.Tests
     /// Covers <see cref="SlotAverager"/>: T46's per-week attribution and T47's
     /// season and league averages.
     /// </summary>
-    public class MakeSlotAveragesTests
+    public class WeekAveragesTests
     {
         private static readonly IReadOnlyList<Slot> TwoRbFlex = Slot.Parse(["QB", "RB", "RB", "FLEX"]);
         private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> NoPositions =
             new Dictionary<string, IReadOnlyList<string>>();
 
         private static IReadOnlyDictionary<string, decimal>? Averages(
-            string[] starters,
+            string?[] starters,
             Dictionary<string, decimal> points,
             IReadOnlyList<Slot> slots,
             IReadOnlyDictionary<string, IReadOnlyList<string>>? positions = null) =>
-            SlotAverager.MakeSlotAverages(starters, points, positions ?? NoPositions, slots);
+            SlotAverager.WeekAverages(starters, points, positions ?? NoPositions, slots);
 
         [Fact]
         public void A_two_RB_league_produces_an_RB_average_not_a_total()
@@ -31,9 +31,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void An_empty_slot_string_zero_contributes_a_real_zero_and_still_counts()
+        public void An_empty_slot_contributes_a_real_zero_and_still_counts()
         {
-            var starters = new[] { "qb1", "rb1", "0", "wr1" };
+            var starters = new[] { "qb1", "rb1", null, "wr1" };
             var points = new Dictionary<string, decimal> { ["qb1"] = 20m, ["rb1"] = 10m, ["wr1"] = 8m };
 
             var averages = Averages(starters, points, TwoRbFlex);
@@ -191,9 +191,6 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void No_teams_returns_empty_not_a_divide_by_zero()
-        {
-            SlotAverager.LeagueAverages([]).Should().BeEmpty();
-        }
+        public void No_teams_returns_empty_not_a_divide_by_zero() => SlotAverager.LeagueAverages([]).Should().BeEmpty();
     }
 }
