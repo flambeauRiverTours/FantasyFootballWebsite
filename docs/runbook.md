@@ -2,6 +2,8 @@
 
 The site reads one Sleeper league and renders it as a web page. This guide deploys a copy and assumes no prior deployment experience.
 
+Scope: the regular season only. Fantasy playoffs and the NFL postseason are out of scope (Q4).
+
 First setup: ≈ 2 h, mostly form entry. Upkeep afterwards: ≈ 10 min/year.
 
 ---
@@ -12,7 +14,7 @@ Four accounts, all free.
 
 1. **A Sleeper league.** The one to display.
 2. **A GitHub account.** Hosts the code. github.com.
-3. **A Microsoft Azure account.** Runs the site. azure.com. Sign-up requires a card; this guide incurs no charge.
+3. **A Microsoft Azure account.** Runs the site. azure.com. Sign-up requires a card; the site costs ≈ $0.25/month, with an alert at $0.50.
 4. **A computer with three tools installed:**
    - Git, to copy the code. git-scm.com.
    - Azure CLI, to control Azure from the terminal. Search "install Azure CLI".

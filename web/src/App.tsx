@@ -3,6 +3,8 @@ import { useSeason } from './hooks/useSeason';
 import StandingsPanel from './components/StandingsPanel';
 import ChartPanel from './components/ChartPanel';
 import RadarPanel from './components/RadarPanel';
+import ConsistencyPanel from './components/ConsistencyPanel';
+import { consistencyRows } from './api/calculations';
 import { useRelativeTime } from './hooks/useRelativeTime';
 import { useElapsedSince } from './hooks/useElapsedSince';
 import Skeleton from './components/Skeleton';
@@ -43,6 +45,8 @@ export default function App() {
 
   // the radar appears once any slot has a league average to compare against
   const hasRadar = Object.keys(payload?.leagueSlotAverages ?? {}).length > 0;
+  // consistency appears once sigma exists, at four finalized weeks (D1)
+  const consistency = consistencyRows(payload?.teams ?? []);
 
   return (
     // reducedMotion="user" makes layout animations, not only explicit ones, respect the preference
@@ -62,6 +66,9 @@ export default function App() {
 
             <main className="panels">
               <StandingsPanel teams={payload.teams} />
+              {consistency.length > 0 ? (
+                <ConsistencyPanel payload={payload} rows={consistency} />
+              ) : null}
               <ChartPanel payload={payload} />
               {hasRadar ? <RadarPanel payload={payload} /> : null}
             </main>

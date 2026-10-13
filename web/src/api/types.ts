@@ -41,6 +41,21 @@ export interface TotalsPayload {
   max: number | null;
 }
 
+/** Totals once a team has four finalized weeks: sigma, mean, min and max are known (D1). */
+export type ConsistentTotals = TotalsPayload & {
+  sigma: number;
+  mean: number;
+  min: number;
+  max: number;
+};
+
+/** True when the consistency figures exist; they are null together below four weeks. */
+export function hasConsistency(totals: TotalsPayload): totals is ConsistentTotals {
+  return (
+    totals.sigma !== null && totals.mean !== null && totals.min !== null && totals.max !== null
+  );
+}
+
 export interface WeekPayload {
   week: number;
   actual: number;

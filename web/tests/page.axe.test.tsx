@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import App from '../src/App';
 import type { SeasonPayload } from '../src/api/types';
@@ -16,13 +16,15 @@ async function violations(container: HTMLElement) {
   return results.violations.map((v) => `${v.id}: ${v.nodes.length} node(s)`);
 }
 
-// slot data too, so the radar panel is on the page
+// slot data and sigma too, so the radar and consistency panels are on the page
 const withRadar: SeasonPayload = {
   ...payload,
+  finalThroughWeek: 4,
   slotOrder: ['QB', 'RB'],
   leagueSlotAverages: { QB: 20, RB: 10 },
   teams: payload.teams.map((team, i) => ({
     ...team,
+    totals: { ...team.totals, sigma: 10 + i, cv: 0.1, mean: 100, min: 80, max: 120 },
     slotAverages: i === 0 ? { QB: 24, RB: 5 } : { QB: 20, RB: 10 },
   })),
 };
@@ -38,8 +40,9 @@ describe('The page', () => {
     );
     const { container } = render(<App />);
 
-    await screen.findByRole('table');
-    expect(screen.getAllByRole('region').length).toBeGreaterThanOrEqual(3);
+    // standings and consistency
+    await waitFor(() => expect(screen.getAllByRole('table')).toHaveLength(2));
+    expect(screen.getAllByRole('region').length).toBeGreaterThanOrEqual(4);
     expect(await violations(container)).toEqual([]);
   });
 

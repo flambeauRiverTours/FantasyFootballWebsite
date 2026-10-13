@@ -3,7 +3,7 @@
 > Source: the published artifact
 > https://claude.ai/code/artifact/6191a761-1035-4684-947a-1f2fb063c645
 >
-> **Corrected in place on 2026-09-13 against the built system.** This file is edited directly; a re-sync would reinstate the errors marked **Corrected**. The reasoning for each change is in [`amendments.md`](amendments.md), keyed A1–A32.
+> **Corrected in place on 2026-09-13 against the built system.** This file is edited directly; a re-sync would reinstate the errors marked **Corrected**. The reasoning for each change is in [`amendments.md`](amendments.md), keyed A1–A33.
 >
 > 11 decisions · 2 risks · 8 open questions, 5 answered.
 
@@ -139,7 +139,7 @@ CV is less intuitive. A league-mate says "I swing about twenty-five points a wee
 
 **Corrected (A17): this did not work in a table cell.** At ≈ 140px the range mark was illegible, and it shipped without the figure. It moves, with the figure, to its own panel (T59), where the reasoning below still applies.
 
-A bare standard deviation is hard to interpret at a glance. Pair the figure with an inline range mark: a horizontal rule from the team's minimum to maximum weekly score, a tick at the mean, and a shaded band at ±σ, on a scale shared by every row. The number gives precision; the mark makes rows comparable without reading them.
+A bare standard deviation is hard to interpret at a glance. Pair the figure with an inline range mark: a horizontal rule from the team's minimum to maximum weekly score, a tick at the mean, and a shaded band at ±σ, on a scale shared by every row. The number gives precision; the mark makes rows comparable without reading them. **Corrected (A33):** each mark is centred on its team's mean, so the shared scale measures distance from the mean and widths compare spread directly.
 
 No extra cost: minimum, maximum and mean come from the same weekly array as σ.
 
@@ -547,7 +547,7 @@ Configure two settings explicitly rather than assuming them: the App Insights da
 
 ## 14 · Open questions
 
-**Five of the eight were settled on 2026-09-10 against the live league:** Q1, Q2, Q3, Q7 and Q8. Answers and consequences are in [`amendments.md`](amendments.md). Q5 was settled later, at four weeks. Q4 and Q6 are tracked in [`tasks/todo.md`](../tasks/todo.md).
+**Five of the eight were settled on 2026-09-10 against the live league:** Q1, Q2, Q3, Q7 and Q8. Answers and consequences are in [`amendments.md`](amendments.md). Q5 was settled later, at four weeks, and Q4 on 2026-10-13: regular season only (A33). Q6 is tracked in [`tasks/todo.md`](../tasks/todo.md).
 
 - **Q1 answered** — six rosters; eleven startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus eight `BN`. The league ID is a secret (A2).
 - **Q2 answered** — SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3).
@@ -560,7 +560,7 @@ Original text of all eight, retained for the reasoning behind the open ones:
 - Q1 · **League ID and `roster_positions`.** Required to pin solver fixtures. All of §05 depends on the slot list.
 - Q2 · **Does the league use SUPER_FLEX or IDP slots?** Determines which parts of the eligibility map are live code and which are dead branches. IDP raises the solver's slot count, not enough to threaten the DP.
 - Q3 · **Should players in IR slots count toward ideal points?** Default: no; ideal is the best legally startable lineup. Settle it early; a league disputes exactly this in December.
-- Q4 · **Regular season only, or through the playoffs?** Sleeper's playoff weeks have a different matchup structure, and only some teams play. A league decided on total points is assumed to want regular season only. σ would be badly distorted by weeks where half the league does not play, and the chart's x-axis depends on the answer.
+- **Q4 answered (A33)** — regular season only; fantasy playoffs and the NFL postseason are out of scope. The question as asked: **Regular season only, or through the playoffs?** Sleeper's playoff weeks have a different matchup structure, and only some teams play. A league decided on total points is assumed to want regular season only. σ would be badly distorted by weeks where half the league does not play, and the chart's x-axis depends on the answer.
 - **Q5 answered** — four, per D1; `SpreadCalculator.MinWeeks` is the one place it lives. The question as asked: **Minimum weeks before σ appears — four, or five?** Four is assumed throughout this document. Five buys another week of noise reduction at the cost of a longer empty column early in the season.
 - Q6 · **Should the table show σ or CV?** D3 chooses σ for legibility, with CV on the chart. If the scoring spread is wide (a gap of ≥ 30 points between the highest and lowest team means), CV is the fairer default and D3 should be revisited.
 - Q7 · **Is the league’s season chain intact?** Follow `previous_league_id` back from the current league and count the hops. A null before the league’s first season means those years need explicit `League:SeasonOverrides` entries, with the old IDs retrieved from Sleeper by hand. Cheap to check now; costly to discover later.
