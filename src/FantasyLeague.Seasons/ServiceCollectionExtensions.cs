@@ -35,6 +35,7 @@ namespace FantasyLeague.Seasons
             // singleton: the map it holds is shared state
             services.TryAddSingleton<IPlayerMapRefresher, PlayerMapRefresher>();
             services.TryAddSingleton<ReportedProblems>();
+            services.TryAddTransient<ISeasonChain, SeasonChain>();
             services.TryAddTransient<ISeasonService, SeasonService>();
 
             return services;

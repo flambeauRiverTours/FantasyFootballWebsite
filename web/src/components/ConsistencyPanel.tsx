@@ -24,10 +24,6 @@ export default function ConsistencyPanel({ payload, rows }: ConsistencyPanelProp
 
   return (
     <Panel id="consistency" title="Consistency">
-      <p className="muted">
-        Weeks 1–{payload.finalThroughWeek}. Each mark is centred on the team's mean: the line spans
-        its lowest to highest week and the band is ± σ. A narrower band is steadier.
-      </p>
       <div className="table-wrap">
         <table className="consistency">
           <thead>

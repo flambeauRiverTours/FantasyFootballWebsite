@@ -28,7 +28,7 @@ namespace FantasyLeague.Core.Tests
             int finalThroughWeek = 4) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], []);
+                teams ?? [], [], [], IsCurrent: true);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,
@@ -253,12 +253,20 @@ namespace FantasyLeague.Core.Tests
     public class SeasonsPayloadMapperTests
     {
         [Fact]
-        public void Only_the_current_season_is_available_before_the_chain_walk()
+        public void A_first_season_lists_only_itself()
         {
-            var payload = SeasonPayloadMapper.ToSeasonsPayload(2026);
+            var payload = SeasonPayloadMapper.ToSeasonsPayload(2026, []);
 
             payload.Current.Should().Be(2026);
             payload.Available.Should().Equal(2026);
+        }
+
+        [Fact]
+        public void Seasons_are_listed_newest_first_with_the_current_one_once()
+        {
+            // what the season picker binds to
+            SeasonPayloadMapper.ToSeasonsPayload(2026, [2024, 2026, 2025])
+                .Available.Should().Equal(2026, 2025, 2024);
         }
     }
 }

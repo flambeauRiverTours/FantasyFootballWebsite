@@ -88,6 +88,16 @@ namespace FantasyLeague.Sleeper
             string.IsNullOrWhiteSpace(league.Name) ? DefaultLeagueName : league.Name;
 
         /// <summary>
+        /// The league's place in the season chain.
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns>Its season and predecessor; an empty or <c>"0"</c> predecessor means none.</returns>
+        internal static SeasonLink ToSeasonLink(LeagueDto league) =>
+            new(league.Season, string.IsNullOrWhiteSpace(league.PreviousLeagueId) || league.PreviousLeagueId == "0"
+                ? null
+                : league.PreviousLeagueId);
+
+        /// <summary>
         /// The league's startable slots, in roster order.
         /// </summary>
         /// <param name="league">The league as Sleeper returned it.</param>

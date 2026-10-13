@@ -26,6 +26,12 @@ namespace FantasyLeague.Sleeper
         Task<SleeperLeague> GetLeagueAsync(string leagueId, CancellationToken cancellationToken);
 
         /// <summary>
+        /// Gets a league's season and the league it rolled over from, from the league object alone.
+        /// </summary>
+        /// <returns>One link in the season chain (D8).</returns>
+        Task<SeasonLink> GetSeasonLinkAsync(string leagueId, CancellationToken cancellationToken);
+
+        /// <summary>
         /// Gets every roster's week, joined to the player map.
         /// </summary>
         /// <param name="playerMap">The projected player map.</param>
@@ -90,11 +96,7 @@ namespace FantasyLeague.Sleeper
         /// <inheritdoc />
         public async Task<SleeperLeague> GetLeagueAsync(string leagueId, CancellationToken cancellationToken)
         {
-            var league = await GetOrFetchAsync(
-                $"league:{leagueId}",
-                async token => Required(await client.GetLeagueAsync(leagueId, token), "league"),
-                League,
-                cancellationToken);
+            var league = await GetLeagueDtoAsync(leagueId, cancellationToken);
 
             var users = await GetOrFetchAsync(
                 $"users:{leagueId}",
@@ -138,6 +140,21 @@ namespace FantasyLeague.Sleeper
 
             return SleeperMapper.ToPlayerMap(dump);
         }
+
+        /// <inheritdoc />
+        public async Task<SeasonLink> GetSeasonLinkAsync(string leagueId, CancellationToken cancellationToken) =>
+            SleeperMapper.ToSeasonLink(await GetLeagueDtoAsync(leagueId, cancellationToken));
+
+        /// <summary>
+        /// Reads the league object through its 24-hour cache, shared by the standings and the chain walk.
+        /// </summary>
+        /// <returns>The league object.</returns>
+        private Task<LeagueDto> GetLeagueDtoAsync(string leagueId, CancellationToken cancellationToken) =>
+            GetOrFetchAsync(
+                $"league:{leagueId}",
+                async token => Required(await client.GetLeagueAsync(leagueId, token), "league"),
+                League,
+                cancellationToken);
 
         /// <summary>
         /// Reads through the cache, keeping the response as the one instance it was fetched as.

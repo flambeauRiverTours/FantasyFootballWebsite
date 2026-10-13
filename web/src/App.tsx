@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useSeason } from './hooks/useSeason';
+import { useSeasons } from './hooks/useSeasons';
 import StandingsPanel from './components/StandingsPanel';
 import ChartPanel from './components/ChartPanel';
 import RadarPanel from './components/RadarPanel';
@@ -20,8 +21,11 @@ import { useQueryState } from './hooks/useQueryState';
  */
 export default function App() {
   // ?season=2025 asks for a past season; anything that is not a year means the current one
-  const [seasonParam] = useQueryState('season', '');
+  const [seasonParam, setSeasonParam] = useQueryState('season', '');
   const season = /^\d{4}$/.test(seasonParam) ? Number(seasonParam) : null;
+  const seasons = useSeasons();
+  // the newest season is the current one, and the URL stays clean for it
+  const chooseSeason = (year: number) => setSeasonParam(year === seasons[0] ? '' : String(year));
 
   const { payload, error, loading, refetch } = useSeason(season);
   const updated = useRelativeTime(payload?.asOfUtc);
@@ -52,7 +56,12 @@ export default function App() {
     // reducedMotion="user" makes layout animations, not only explicit ones, respect the preference
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
-        <Masthead payload={payload} updatedAgo={updated} />
+        <Masthead
+          payload={payload}
+          updatedAgo={updated}
+          seasons={seasons}
+          onSeason={chooseSeason}
+        />
 
         {!payload ? (
           loading ? (
