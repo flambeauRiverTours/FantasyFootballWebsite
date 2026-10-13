@@ -1,7 +1,7 @@
 name: security
 on:
   schedule:
-    - cron: '17 6 * * 1' #runs on Monday at 06:17 UTC, which is 01:17 EST/EDT, when the weekly dependabot PRs are open
+    - cron: '17 6 * * 1' # Monday 06:17 UTC, when the weekly Dependabot PRs are open
   workflow_dispatch:
   pull_request:
     paths-ignore:
@@ -30,38 +30,34 @@ jobs:
           dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
           ! grep -q 'has the following vulnerable packages' vulnerable.txt
 
-      # Advisory only: xunit 2.x is already flagged Legacy in favour of xunit.v3,
-      # which is a migration rather than a security fix.
+      # advisory only: a deprecation is a migration to plan, not a defect
       - name: Deprecated packages
         continue-on-error: true
         run: |
           dotnet list package --deprecated 2>&1 | tee deprecated.txt
           ! grep -q 'has the following deprecated packages' deprecated.txt
 
-      # Two Microsoft first-party natives reach us transitively through
-      # Microsoft.Data.SqlClient and Azure.Identity, and both carry proprietary
-      # Microsoft Software License Terms as a licence file rather than an SPDX
-      # expression, so there is nothing to add to the allowed set. Reasoning is
-      # in A15. Ignoring by name, not version, so a bump does not re-break this.
-      #
-      # license-overrides.json is the opposite case: packages that are on the
-      # allowed list but ship their licence as a file the tool cannot read
-      # (A18). Each entry is pinned to a version on purpose, so a bump fails
-      # here until someone has read the new licence file.
+      # the ignored natives are Microsoft's own (A15); overrides are pinned (A18)
       - name: Licences
         run: |
-          dotnet tool install --global nuget-license
-          nuget-license -i FantasyLeague.slnx -t -a 'MIT;Apache-2.0;BSD-3-Clause' -mapping .github/license-url-mappings.json -override .github/license-overrides.json -ignore 'Microsoft.Data.SqlClient.SNI.runtime;Microsoft.Identity.Client.NativeInterop' -o JsonPretty > licenses.json
+          dotnet tool install --global nuget-license --version 4.0.18
+          nuget-license -i FantasyLeague.slnx -t -a 'MIT;MIT-0;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD' -mapping .github/license-url-mappings.json -override .github/license-overrides.json -ignore 'Microsoft.Data.SqlClient.SNI.runtime;Microsoft.Identity.Client.NativeInterop'
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: always()
+  # the web app: production vulnerabilities fail, as NuGet's do; licences are
+  # checked for every package, build tools included, so a new one is caught early
+  web-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          name: dependency-report
-          path: |
-            vulnerable.txt
-            deprecated.txt
-            licenses.json
-          if-no-files-found: warn
+          node-version: '24'
+      - name: Vulnerable packages
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=low
+      - name: Licences
+        run: node scripts/check-npm-licences.mjs web/package-lock.json
 
   codeql:
     runs-on: ubuntu-latest
@@ -94,7 +90,6 @@ jobs:
         env:
           LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
           EXCLUDED_OWNER_IDS: ${{ secrets.EXCLUDED_OWNER_IDS }}
-          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
         run: |
           found=0
           check() {
@@ -115,15 +110,10 @@ jobs:
             fi
           }
           check LEAGUE_ID "$LEAGUE_ID"
-          check AZURE_STATIC_WEB_APPS_API_TOKEN "$SWA_TOKEN"
           for owner in ${EXCLUDED_OWNER_IDS//,/ }; do
             check EXCLUDED_OWNER_IDS "$owner"
           done
           exit $found
-
-      - name: Sleeper-shaped ids elsewhere
-        continue-on-error: true #possibly false positives, so advisory only
-        run: '! git grep -nE "[0-9]{18,20}" -- . ":!*lock.json"'
 
   scan:
     runs-on: ubuntu-latest

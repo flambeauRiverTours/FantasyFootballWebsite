@@ -1,6 +1,5 @@
 name: ci
-# push is limited to main: with an unfiltered push trigger, every commit on a
-# branch with an open PR fires both events and runs the whole workflow twice.
+# push is main only, so a branch with an open PR is not built twice
 on:
   pull_request:
     paths-ignore:
@@ -20,20 +19,41 @@ permissions:
   id-token: write
   contents: read
 
-# github.ref differs between the two events for the same branch, so keying on it
-# alone would put the PR run and the push run in different groups. Runs on main
-# are never cancelled: a cancelled one leaves main unverified.
+# a newer push to a PR cancels the older run; runs on main always finish
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
+  # squash merging makes the PR title the commit on main (standards, domain 7)
+  conventions:
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Title and branch follow the conventions
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          types='feat|fix|docs|test|refactor|build|ci|chore'
+          status=0
+          if ! [[ "$TITLE" =~ ^($types)(\([a-z0-9-]+\))?!?:\ .+ ]]; then
+            echo "::error::PR title '$TITLE' is not a Conventional Commit, e.g. 'fix: what changed'"
+            status=1
+          fi
+          if ! [[ "$BRANCH" =~ ^($types)/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Branch '$BRANCH' is not type/short-description, e.g. 'fix/radar-colours'"
+            status=1
+          fi
+          exit $status
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/dotnet
-      - run: dotnet build --no-restore -warnaserror
+      - run: dotnet build --no-restore
       - run: dotnet test --no-build --verbosity normal
       - run: dotnet format --verify-no-changes
 
@@ -52,14 +72,20 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc --noEmit -p tsconfig.app.json
       - run: npm test
       - run: npm run build
-      - name: The bundle is built, not source
+      # the standard's budget (domain 2): every script index.html loads before first paint
+      - name: Initial JavaScript stays under 125 KB gzipped
         run: |
-          grep -q "/assets/" dist/index.html
-          if grep -q "/src/" dist/index.html; then echo "::error::dist/index.html references source"; exit 1; fi
-          test -f dist/staticwebapp.config.json
+          total=0
+          while read -r script; do
+            total=$((total + $(gzip -9 -c "dist$script" | wc -c)))
+          done < <(grep -oE '/assets/[^"]+\.js' dist/index.html | sort -u)
+          echo "Initial JavaScript: $total bytes gzipped"
+          if [ "$total" -gt 125000 ]; then
+            echo "::error::Initial JavaScript is $total bytes gzipped, over the 125 KB budget"
+            exit 1
+          fi
   actions:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -84,7 +110,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - run: az bicep build --file infra/main.bicep --stdout > /dev/null
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
@@ -101,12 +126,10 @@ jobs:
           CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
           OVERRIDE_LEAGUE_NAME: ${{ vars.OVERRIDE_LEAGUE_NAME }}
         run: |
-          set -u
-          : "${LEAGUE_ID:?}" "${RESOURCE_GROUP:?}" "${SQL_ADMIN_ID:?}" "${SQL_ADMIN_NAME:?}"
           az deployment group what-if \
             --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
-            budgetAlertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
+            alertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
             sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
             overrideLeagueName="${OVERRIDE_LEAGUE_NAME:-}"

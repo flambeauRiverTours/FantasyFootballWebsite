@@ -1,21 +1,43 @@
-﻿namespace FantasyLeague.Core
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace FantasyLeague.Core
 {
     /// <summary>
-    /// Represents a player that is rostered on a fantasy team, including their unique identifier, name, eligible fantasy positions, and total points scored.
+    /// One player on a roster in one week, as the solver sees them.
     /// </summary>
-    /// <param name="Id">The unique identifier for the player.</param>
-    /// <param name="Name">The name of the player.</param>
-    /// <param name="FantasyPositions">The list of fantasy positions the player can play.</param>
-    /// <param name="Points">The total points scored by the player.</param>
+    /// <param name="Id">Sleeper's player id.</param>
+    /// <param name="Name">The player's name.</param>
+    /// <param name="FantasyPositions">Every position the player may start at, which is what flex eligibility checks.</param>
+    /// <param name="Points">What the player scored that week, zero when Sleeper has no entry.</param>
     public sealed record RosteredPlayer(
-    PlayerId Id,
-    string Name,
-    IReadOnlyList<string> FantasyPositions,
-    decimal Points);
+        PlayerId Id,
+        string Name,
+        IReadOnlyList<string> FantasyPositions,
+        decimal Points);
 
     /// <summary>
-    /// Represents a unique identifier for a player in the fantasy league system. This record struct is immutable and provides a simple way to encapsulate the player's ID as a string.
+    /// Sleeper's player id: numeric for most players, a team abbreviation such as <c>DEN</c> for a defence.
     /// </summary>
-    /// <param name="Value">The value of the player ID.</param>
+    /// <param name="Value">The id.</param>
+    /// <remarks>
+    /// Serialized as the bare string, so the blob, the SQL row and the cache all
+    /// store a lineup as <c>["4046","BAL"]</c> rather than as wrapped objects.
+    /// </remarks>
+    [JsonConverter(typeof(PlayerIdJsonConverter))]
     public readonly record struct PlayerId(string Value);
+
+    /// <summary>
+    /// Reads and writes a <see cref="PlayerId"/> as its string.
+    /// </summary>
+    public sealed class PlayerIdJsonConverter : JsonConverter<PlayerId>
+    {
+        /// <inheritdoc />
+        public override PlayerId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+            new(reader.GetString() ?? throw new JsonException("A player id cannot be null."));
+
+        /// <inheritdoc />
+        public override void Write(Utf8JsonWriter writer, PlayerId value, JsonSerializerOptions options) =>
+            writer.WriteStringValue(value.Value);
+    }
 }

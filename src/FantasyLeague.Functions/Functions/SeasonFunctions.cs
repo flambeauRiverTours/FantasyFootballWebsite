@@ -1,35 +1,43 @@
-﻿using Azure;
-using FantasyLeague.Sleeper;
+﻿using System.Reflection;
+using FantasyLeague.Seasons;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Functions.Functions
 {
     /// <summary>
     /// The two read-only endpoints the site is built on.
     /// </summary>
-    /// <param name="seasons">Season assembly.</param>
-    /// <param name="league">The configured league. Never taken from the request.</param>
-    /// <param name="logger">Logger.</param>
-    public sealed class SeasonFunctions(
-        ISeasonService seasons,
-        IOptions<LeagueOptions> league,
-        ILogger<SeasonFunctions> logger)
+    /// <remarks>
+    /// The league is configuration, never a request parameter: a league id in a
+    /// query string would make this an open relay against Sleeper's rate limit.
+    /// </remarks>
+    /// <param name="seasons">Season assembly for the configured league.</param>
+    /// <param name="time">Clock for the response timestamp.</param>
+    public sealed class SeasonFunctions(ISeasonService seasons, TimeProvider time)
     {
+        /// <summary>
+        /// The commit this build was made from, sent as <c>X-Build</c> so the
+        /// deploy can tell its own build from the one it replaced.
+        /// </summary>
+        private static readonly string Build =
+            typeof(SeasonFunctions).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+') is [_, var commit]
+                ? commit
+                : "local";
+
         /// <summary>
         /// Serves one season.
         /// </summary>
         /// <param name="req">The request. Only <c>season</c> is read.</param>
-        /// <param name="ct">CancellationToken.</param>
         /// <returns>The season payload, 400 for a malformed year, 404 for one with no data.</returns>
         [Function("GetSeason")]
         public async Task<IActionResult> GetSeason(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "season")] HttpRequest req,
-            CancellationToken ct)
+            CancellationToken cancellationToken)
         {
+            req.HttpContext.Response.Headers["X-Build"] = Build;
+
             var raw = req.Query["season"].ToString();
             int? requested = null;
 
@@ -43,98 +51,47 @@ namespace FantasyLeague.Functions.Functions
                 requested = parsed;
             }
 
-            var snapshot = await seasons.BuildAsync(league.Value.CurrentLeagueId, ct);
-
-            LogViolations(snapshot);
-            LogUnresolvedPlayerIds(snapshot);
-
             var response = req.HttpContext.Response;
+            var current = await seasons.GetCurrentSeasonAsync(cancellationToken);
 
             // a year with no data is a well-formed request for something absent
-            if (requested != null && requested != snapshot.Season)
+            if (requested != null && requested != current)
             {
                 response.Headers.CacheControl = "no-store";
 
-                return new NotFoundObjectResult(
-                    SeasonPayloadMapper.ToSeasonsPayload(snapshot.Season));
+                return new NotFoundObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
             }
 
-            var isCurrent = requested == null || requested == snapshot.Season;
-            var etag = SeasonPayloadMapper.ComputeETag(snapshot);
+            var snapshot = await seasons.BuildAsync(cancellationToken);
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, time.GetUtcNow());
+            var etag = SeasonETag.Compute(payload);
 
-            response.Headers.CacheControl = isCurrent
-                ? "public, max-age=5"
-                : "public, max-age=31536000, immutable";
+            // short on purpose, to stay close to live during games; the 5 s
+            // season cache behind it makes a request inside the window cost nothing
+            response.Headers.CacheControl = "public, max-age=5";
             response.Headers.ETag = etag;
 
-            if (SeasonPayloadMapper.MatchesETag(req.Headers.IfNoneMatch, etag))
-            {
-                return new StatusCodeResult(StatusCodes.Status304NotModified);
-            }
-
-            return new OkObjectResult(SeasonPayloadMapper.ToIndividualSeasonPayload(
-                snapshot, DateTimeOffset.UtcNow, requested, ExcludedRosterIds(snapshot), league.Value.OverrideLeagueName));
+            return SeasonETag.Matches(req.Headers.IfNoneMatch, etag)
+                ? new StatusCodeResult(StatusCodes.Status304NotModified)
+                : new OkObjectResult(payload);
         }
 
         /// <summary>
         /// Serves the seasons that can be asked for.
         /// </summary>
         /// <param name="req">The request. Nothing is read from it.</param>
-        /// <param name="ct">CancellationToken.</param>
         /// <returns>The current season and every season with data.</returns>
         [Function("GetSeasons")]
         public async Task<IActionResult> GetSeasons(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "seasons")] HttpRequest req,
-            CancellationToken ct)
+            CancellationToken cancellationToken)
         {
-            var snapshot = await seasons.BuildAsync(league.Value.CurrentLeagueId, ct);
+            var current = await seasons.GetCurrentSeasonAsync(cancellationToken);
 
-            req.HttpContext.Response.Headers.CacheControl = "public, max-age=300";
+            // a new season appears once a year, so a day's delay at the rollover costs nothing
+            req.HttpContext.Response.Headers.CacheControl = "public, max-age=86400";
 
-            return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(snapshot.Season));
-        }
-
-        /// <summary>
-        /// Resolves the configured excluded owners to this season's roster ids.
-        /// </summary>
-        /// <param name="snapshot">The assembled season.</param>
-        /// <returns>Roster ids to leave out of every metric.</returns>
-        private IReadOnlySet<int> ExcludedRosterIds(SeasonSnapshot snapshot)
-        {
-            var excluded = SeasonPayloadMapper.ResolveExcludedRosters(snapshot, league.Value.ExcludedOwnerIds);
-
-            foreach (var ownerId in excluded.UnmatchedOwnerIds)
-            {
-                logger.LogWarning("Excluded owner {OwnerId} matches no roster in season {Season}; that team is still counted in every metric.", ownerId, snapshot.Season);
-            }
-
-            return excluded.RosterIds;
-        }
-
-        /// <summary>
-        /// Records every invariant breach without failing the request.
-        /// </summary>
-        /// <param name="snapshot">The assembled season.</param>
-        private void LogViolations(SeasonSnapshot snapshot)
-        {
-            foreach (var violation in snapshot.Violations)
-            {
-                logger.LogWarning(
-                    "Invariant {Invariant} failed for roster {RosterId} in week {Week}: expected {Expected}, got {Actual}.",
-                    violation.Invariant, violation.RosterId, violation.Week, violation.Expected, violation.Actual);
-            }
-        }
-
-        /// <summary>
-        /// Records every rostered player the map could not explain.
-        /// </summary>
-        /// <param name="snapshot">The assembled season.</param>
-        private void LogUnresolvedPlayerIds(SeasonSnapshot snapshot)
-        {
-            foreach (var playerId in snapshot.UnresolvedPlayerIds)
-            {
-                logger.LogWarning("Rostered player {PlayerId} is missing from the player map.", playerId);
-            }
+            return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
         }
     }
 }

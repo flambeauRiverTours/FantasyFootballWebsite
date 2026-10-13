@@ -44,17 +44,14 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void Parse_returns_empty_when_nothing_is_startable()
-        {
-            Slot.Parse(["BN", "BN", "IR"]).Should().BeEmpty();
-        }
+        public void Parse_returns_empty_when_nothing_is_startable() => Slot.Parse(["BN", "BN", "IR"]).Should().BeEmpty();
 
-        [Fact(Skip = "Enable when A3's unknown-slot guard lands; see docs/amendments.md.")]
+        [Fact]
         public void Parse_rejects_an_unrecognised_slot_code()
         {
-            // Today an unknown code becomes a startable slot that accepts nobody,
-            // so ideal is silently undercounted -- and ideal >= actual cannot
-            // catch it, because undercounting is the restrictive direction.
+            // If accepted, an unknown code would become a slot that fits nobody, so
+            // ideal would be silently undercounted. ideal >= actual cannot catch
+            // that, because undercounting is the direction it never sees.
             var act = () => Slot.Parse(["QB", "WR/TE FLEX"]);
 
             act.Should().Throw<ArgumentException>()
@@ -138,11 +135,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void Super_flex_accepts_a_quarterback()
-        {
+        public void Super_flex_accepts_a_quarterback() =>
             // This league's live case: two QB slots and a SUPER_FLEX (Q2).
             new Slot("SUPER_FLEX").Accepts(["QB"]).Should().BeTrue();
-        }
 
         [Fact]
         public void A_slot_accepts_nobody_when_the_player_has_no_positions()

@@ -6,5 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1573: a parameter whose name and type say everything carries no <param> -->
+    <NoWarn>$(NoWarn);CS1573</NoWarn>
   </PropertyGroup>
 </Project>

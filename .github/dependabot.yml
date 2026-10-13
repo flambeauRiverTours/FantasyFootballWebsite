@@ -9,6 +9,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
     groups:
       microsoft-extensions:
         patterns:
@@ -30,9 +33,31 @@ updates:
         versions:
           - '>=8.0.0'
 
-  - package-ecosystem: github-actions
-    directory: /
+  - package-ecosystem: npm
+    directory: /web
     schedule:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      # one PR for routine updates; a major version still gets its own
+      web-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # the composite action pins actions too, and Dependabot reads only the
+  # directories it is given
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/dotnet
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci

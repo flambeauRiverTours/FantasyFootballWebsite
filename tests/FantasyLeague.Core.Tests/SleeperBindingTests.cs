@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using FantasyLeague.Core;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 
@@ -73,16 +72,15 @@ namespace FantasyLeague.Core.Tests
         {
             // Sleeper sends "2026", not 2026. Without
             // JsonNumberHandling.AllowReadingFromString this throws.
-            var state = Read<NflStateDto>(
+            var state = Read<NFLStateDto>(
                 """{"season":"2026","season_type":"regular","week":1,"display_week":1,"previous_season":"2025"}""");
 
             state.Season.Should().Be(2026);
             state.Week.Should().Be(1);
-            state.PreviousSeason.Should().Be(2025);
         }
 
         [Fact]
-        public void A_first_season_league_binds_with_a_null_previous_league()
+        public void A_league_binds_its_slots_from_a_full_response()
         {
             var league = Read<LeagueDto>(
                 """
@@ -91,24 +89,22 @@ namespace FantasyLeague.Core.Tests
                  "roster_positions":["QB","QB","RB","RB","WR","WR","TE","FLEX","SUPER_FLEX","K","DEF","BN"]}
                 """);
 
-            league.PreviousLeagueId.Should().BeNull("a first season has nothing to roll over from");
-            league.Season.Should().Be(2026);
+            league.Name.Should().Be("Test");
             Slot.Parse(league.RosterPositions!).Should().HaveCount(11);
         }
 
         [Fact]
-        public void Nulls_that_are_not_booleans_or_lists_still_bind()
+        public void Fields_this_app_does_not_read_are_ignored_when_binding()
         {
             // is_bot came back null on a real user, and co_owners null on every
-            // roster. Neither is false or empty.
+            // roster; neither is on a DTO any more, and neither may break binding
             var user = Read<LeagueUserDto>(
                 """{"user_id":"1","display_name":"someone","is_bot":null,"metadata":null}""");
             var roster = Read<RosterDto>(
                 """{"roster_id":3,"owner_id":"1","co_owners":null}""");
 
-            user.IsBot.Should().BeNull();
             user.Metadata.Should().BeNull();
-            roster.CoOwners.Should().BeNull();
+            roster.OwnerId.Should().Be("1");
         }
     }
 
@@ -118,7 +114,7 @@ namespace FantasyLeague.Core.Tests
     public class SleeperMapperTests
     {
         private static LeagueUserDto User(string? displayName, string? teamName, bool metadataPresent = true) =>
-            new("u1", displayName, IsBot: false,
+            new("u1", displayName,
                 metadataPresent ? new LeagueUserMetadataDto(teamName) : null);
 
         [Fact]
@@ -146,11 +142,9 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void A_manager_with_no_name_at_all_still_gets_a_label()
-        {
+        public void A_manager_with_no_name_at_all_still_gets_a_label() =>
             // Never render an empty string into the standings table.
             SleeperMapper.ResolveTeamName(User(null, null), 4).Should().Be("Roster 4");
-        }
 
         [Fact]
         public void A_commissioner_override_beats_the_scored_points()
@@ -158,22 +152,34 @@ namespace FantasyLeague.Core.Tests
             // custom_points is what Sleeper displays once a commissioner has
             // corrected a score. Ignoring it desyncs the standings from the app.
             var matchup = new MatchupDto(
-                RosterId: 2, MatchupId: 1, Points: 88.4m, CustomPoints: 91m,
-                Players: [], Starters: [], StartersPoints: [], PlayersPoints: []);
+                RosterId: 2, Points: 88.4m, CustomPoints: 91m,
+                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
-                .Actual.Should().Be(91m);
+                .ActualPts.Should().Be(91m);
+        }
+
+        [Fact]
+        public void An_empty_starter_slot_keeps_its_place_as_null()
+        {
+            // Sleeper sends the string "0"; the slot averages must still line up
+            var matchup = new MatchupDto(
+                RosterId: 2, Points: 10m, CustomPoints: null,
+                Players: ["qb1"], Starters: ["qb1", "0", "wr1"], StartersPoints: [10m, 0m, 0m],
+                PlayersPoints: new Dictionary<string, decimal>());
+
+            SleeperMapper.ToSlotStarters(matchup).Should().Equal("qb1", null, "wr1");
         }
 
         [Fact]
         public void Without_an_override_the_scored_points_stand()
         {
             var matchup = new MatchupDto(
-                RosterId: 2, MatchupId: 1, Points: 88.4m, CustomPoints: null,
-                Players: [], Starters: [], StartersPoints: [], PlayersPoints: []);
+                RosterId: 2, Points: 88.4m, CustomPoints: null,
+                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
-                .Actual.Should().Be(88.4m);
+                .ActualPts.Should().Be(88.4m);
         }
 
         [Fact]
@@ -185,7 +191,7 @@ namespace FantasyLeague.Core.Tests
                 ["2"] = new("On a bye", "BAL", ["RB"]),
             };
             var matchup = new MatchupDto(
-                RosterId: 1, MatchupId: 1, Points: 20m, CustomPoints: null,
+                RosterId: 1, Points: 20m, CustomPoints: null,
                 Players: ["1", "2"], Starters: ["1"], StartersPoints: [20m],
                 PlayersPoints: new Dictionary<string, decimal> { ["1"] = 20m });
 
@@ -204,7 +210,7 @@ namespace FantasyLeague.Core.Tests
             // an undercount.
             var map = new Dictionary<string, PlayerRef> { ["1"] = new("Known", "KC", ["QB"]) };
             var matchup = new MatchupDto(
-                RosterId: 1, MatchupId: 1, Points: 10m, CustomPoints: null,
+                RosterId: 1, Points: 10m, CustomPoints: null,
                 Players: ["1", "99999"], Starters: ["1"], StartersPoints: [10m],
                 PlayersPoints: new Dictionary<string, decimal> { ["1"] = 10m });
 
@@ -219,7 +225,7 @@ namespace FantasyLeague.Core.Tests
         {
             var map = new Dictionary<string, PlayerRef> { ["1"] = new("Known", "KC", ["QB"]) };
             var matchup = new MatchupDto(
-                RosterId: 1, MatchupId: 1, Points: 10m, CustomPoints: null,
+                RosterId: 1, Points: 10m, CustomPoints: null,
                 Players: ["1", "0"], Starters: ["1", "0"], StartersPoints: [10m, 0m],
                 PlayersPoints: new Dictionary<string, decimal> { ["1"] = 10m });
 
@@ -227,6 +233,7 @@ namespace FantasyLeague.Core.Tests
 
             week.Players.Should().ContainSingle();
             week.Starters.Should().ContainSingle();
+            week.SlotStarters.Should().Equal("1", null);
             week.UnresolvedPlayerIds.Should().BeEmpty("\"0\" is an empty slot, not a missing player");
         }
 
@@ -237,16 +244,45 @@ namespace FantasyLeague.Core.Tests
             // be started at no position.
             var dump = new Dictionary<string, SleeperPlayerDto>
             {
-                ["1"] = new("1", "Startable", "KC", "QB", ["QB"]),
-                ["2"] = new("2", "Long snapper", "KC", "LS", []),
-                ["3"] = new("3", null, "KC", null, null),
-                ["BAL"] = new("BAL", null, "BAL", "DEF", ["DEF"]),
+                ["1"] = new("Startable", "KC", ["QB"]),
+                ["2"] = new("Long snapper", "KC", []),
+                ["3"] = new(null, "KC", null),
+                ["BAL"] = new(null, "BAL", ["DEF"]),
             };
 
             var map = SleeperMapper.ToPlayerMap(dump);
 
             map.Keys.Should().BeEquivalentTo(["1", "BAL"]);
             map["BAL"].Name.Should().Be("BAL", "a defence has no full name, so the id stands in");
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void An_unnamed_league_gets_the_default_name(string? name)
+        {
+            var league = new LeagueDto(name, ["QB"]);
+
+            SleeperMapper.ToLeagueName(league).Should().Be("Fantasy Football League");
+        }
+
+        [Fact]
+        public void A_named_league_keeps_its_name()
+        {
+            var league = new LeagueDto("Bosty Base", ["QB"]);
+
+            SleeperMapper.ToLeagueName(league).Should().Be("Bosty Base");
+        }
+
+        [Fact]
+        public void A_league_with_no_roster_positions_is_rejected()
+        {
+            var league = new LeagueDto("Bosty Base", null);
+
+            var act = () => SleeperMapper.ToSlots(league);
+
+            act.Should().Throw<InvalidDataException>();
         }
 
         [Fact]
@@ -259,16 +295,16 @@ namespace FantasyLeague.Core.Tests
             };
             var rosters = new List<RosterDto>
             {
-                new(RosterId: 1, OwnerId: "u1", CoOwners: null),
-                new(RosterId: 2, OwnerId: "u2", CoOwners: null),
-                new(RosterId: 3, OwnerId: null, CoOwners: null),   // orphaned roster
+                new(RosterId: 1, OwnerId: "u1"),
+                new(RosterId: 2, OwnerId: "u2"),
+                new(RosterId: 3, OwnerId: null),   // orphaned roster
             };
 
-            var names = SleeperMapper.ToTeamNames(users, rosters);
+            var teams = SleeperMapper.ToTeams(users, rosters);
 
-            names[1].Should().Be("Aaron Donald Relief Fund");
-            names[2].Should().Be("kuzma4prez");
-            names[3].Should().Be("Roster 3");
+            teams[1].Should().Be(new SleeperTeam("Aaron Donald Relief Fund", "u1"));
+            teams[2].Should().Be(new SleeperTeam("kuzma4prez", "u2"));
+            teams[3].Should().Be(new SleeperTeam("Roster 3", null), "an orphaned roster has no owner to match");
         }
     }
 }

@@ -26,6 +26,28 @@ namespace FantasyLeague.Core.Tests
     }
 
     /// <summary>
+    /// Hangs on the first request until it is cancelled, then answers normally.
+    /// </summary>
+    internal sealed class StallOnceHandler : HttpMessageHandler
+    {
+        public int Attempts { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (++Attempts == 1)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+
+    /// <summary>
     /// The handler in isolation: does it spend a token, and does it refuse when
     /// there are none left?
     /// </summary>
@@ -56,8 +78,8 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler();
             using var http = ClientWith(limiter, socket);
 
-            await http.GetAsync("state/nfl");
-            await http.GetAsync("state/nfl");
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
 
             socket.Attempts.Should().Be(2);
         }
@@ -71,7 +93,7 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler();
             using var http = ClientWith(limiter, socket);
 
-            await http.GetAsync("state/nfl");
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
 
             await FluentActions.Awaiting(() => http.GetAsync("state/nfl"))
                 .Should().ThrowAsync<HttpRequestException>();
@@ -85,7 +107,7 @@ namespace FantasyLeague.Core.Tests
             // Distinct so the retry policy can exclude it, but still an
             // HttpRequestException so existing catch blocks are not surprised.
             using var limiter = Bucket(tokens: 1, queue: 0);
-            using (await limiter.AcquireAsync(1)) { }   // TokenLimit must be > 0, so drain it
+            using (await limiter.AcquireAsync(1, TestContext.Current.CancellationToken)) { }   // TokenLimit must be > 0, so drain it
             var socket = new CountingHandler();
             using var http = ClientWith(limiter, socket);
 
@@ -109,7 +131,7 @@ namespace FantasyLeague.Core.Tests
                 .Should().ThrowAsync<OperationCanceledException>();
 
             // The token survived, so a later call still gets through.
-            await http.GetAsync("state/nfl");
+            await http.GetAsync("state/nfl", TestContext.Current.CancellationToken);
             socket.Attempts.Should().Be(1);
         }
     }
@@ -122,7 +144,10 @@ namespace FantasyLeague.Core.Tests
         private static ServiceProvider ProviderWith(CountingHandler socket, RateLimiter? limiter = null)
         {
             var services = new ServiceCollection();
-            if (limiter is not null) services.AddSingleton(limiter);
+            if (limiter is not null)
+            {
+                services.AddSingleton(limiter);
+            }
 
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                 .ConfigurePrimaryHttpMessageHandler(() => socket);
@@ -148,7 +173,7 @@ namespace FantasyLeague.Core.Tests
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = false,
             });
-            using (await limiter.AcquireAsync(1)) { }   // drain it; the bucket may not start empty
+            using (await limiter.AcquireAsync(1, TestContext.Current.CancellationToken)) { }   // drain it; the bucket may not start empty
             var socket = new CountingHandler();
             using var provider = ProviderWith(socket, limiter);
 
@@ -183,7 +208,7 @@ namespace FantasyLeague.Core.Tests
 
             try
             {
-                await Client(provider).GetAsync("state/nfl");
+                await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken);
             }
             catch
             {
@@ -200,9 +225,40 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler(HttpStatusCode.ServiceUnavailable);
             using var provider = ProviderWith(socket);
 
-            try { await Client(provider).GetAsync("state/nfl"); } catch { }
+            try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
 
             socket.Attempts.Should().BeGreaterThan(1, "503 is transient and worth repeating");
+        }
+
+        [Fact]
+        public async Task A_server_error_is_retried()
+        {
+            var socket = new CountingHandler(HttpStatusCode.InternalServerError);
+            using var provider = ProviderWith(socket);
+
+            try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
+
+            socket.Attempts.Should().BeGreaterThan(1);
+        }
+
+        [Fact]
+        public async Task An_attempt_that_times_out_is_retried()
+        {
+            // The pipeline's own per-attempt timeout throws TimeoutRejectedException,
+            // not TimeoutException, so a predicate naming the latter never retries it.
+            var socket = new StallOnceHandler();
+            var services = new ServiceCollection();
+            services.AddSleeperClient(o =>
+            {
+                o.Retry.Delay = TimeSpan.Zero;
+                o.AttemptTimeout.Timeout = TimeSpan.FromMilliseconds(200);
+            }).ConfigurePrimaryHttpMessageHandler(() => socket);
+            using var provider = services.BuildServiceProvider();
+
+            var response = await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken);
+
+            response.IsSuccessStatusCode.Should().BeTrue();
+            socket.Attempts.Should().Be(2);
         }
 
         [Fact]
@@ -212,7 +268,7 @@ namespace FantasyLeague.Core.Tests
             var socket = new CountingHandler(HttpStatusCode.NotFound);
             using var provider = ProviderWith(socket);
 
-            try { await Client(provider).GetAsync("state/nfl"); } catch { }
+            try { await Client(provider).GetAsync("state/nfl", TestContext.Current.CancellationToken); } catch { }
 
             socket.Attempts.Should().Be(1);
         }

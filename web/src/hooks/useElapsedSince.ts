@@ -11,6 +11,7 @@ export function useElapsedSince(active: boolean, ms: number): boolean {
     return () => window.clearTimeout(id);
   }, [active, ms]);
 
-  //masked rather than reset so nothing is set during an effect
+  // `passed` stays true once set; ANDing with `active` hides it again when
+  // loading restarts, without a state update inside the effect
   return active && passed;
 }

@@ -1,9 +1,12 @@
 ﻿using System.Net;
 using System.Text;
 using System.Text.Json;
+using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Core.Tests
 {
@@ -20,6 +23,51 @@ namespace FantasyLeague.Core.Tests
         public string DefaultMatchups { get; set; } = "[]";
         public string Players { get; set; } = Bodies.Players();
 
+        /// <summary>
+        /// The real league as captured: every <c>wk*-matchups.json</c> verbatim,
+        /// the latest served as the week in progress, the league's own slots and
+        /// a player dump built from the captured positions. Users and rosters are
+        /// invented, because a capture of them is personal data (A2).
+        /// </summary>
+        /// <returns>A socket serving the captured season.</returns>
+        public static LeagueSocket Captured()
+        {
+            var fixtures = Path.Combine(AppContext.BaseDirectory, "fixtures");
+            var weeks = Directory.GetFiles(fixtures, "wk*-matchups.json")
+                .ToDictionary(
+                    path => int.Parse(Path.GetFileName(path)[2..^"-matchups.json".Length]),
+                    File.ReadAllText);
+
+            using var slots = JsonDocument.Parse(File.ReadAllText(Path.Combine(fixtures, "roster-positions.json")));
+            using var positions = JsonDocument.Parse(File.ReadAllText(Path.Combine(fixtures, "player-positions.json")));
+            var dump = positions.RootElement.EnumerateObject().ToDictionary(
+                p => p.Name,
+                p => new
+                {
+                    player_id = p.Name,
+                    full_name = p.Value.GetProperty("name").GetString(),
+                    team = p.Value.GetProperty("team").GetString(),
+                    fantasy_positions = p.Value.GetProperty("fantasyPositions"),
+                });
+
+            var rosterIds = Enumerable.Range(1, 6).ToList();
+            var socket = new LeagueSocket
+            {
+                State = Bodies.State(week: weeks.Keys.Max()),
+                League = Bodies.League([.. slots.RootElement.GetProperty("roster_positions").EnumerateArray().Select(e => e.GetString()!)]),
+                Users = JsonSerializer.Serialize(rosterIds.Select(i => new { user_id = $"u{i}", display_name = $"manager{i}", metadata = new { team_name = $"Team {i}" } })),
+                Rosters = JsonSerializer.Serialize(rosterIds.Select(i => new { roster_id = i, owner_id = $"u{i}" })),
+                Players = JsonSerializer.Serialize(dump),
+            };
+
+            foreach (var (week, body) in weeks)
+            {
+                socket.Matchups[week] = body;
+            }
+
+            return socket;
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -34,10 +82,25 @@ namespace FantasyLeague.Core.Tests
 
         private string BodyFor(string path)
         {
-            if (path.EndsWith("state/nfl", StringComparison.Ordinal)) return State;
-            if (path.EndsWith("players/nfl", StringComparison.Ordinal)) return Players;
-            if (path.EndsWith("/users", StringComparison.Ordinal)) return Users;
-            if (path.EndsWith("/rosters", StringComparison.Ordinal)) return Rosters;
+            if (path.EndsWith("state/nfl", StringComparison.Ordinal))
+            {
+                return State;
+            }
+
+            if (path.EndsWith("players/nfl", StringComparison.Ordinal))
+            {
+                return Players;
+            }
+
+            if (path.EndsWith("/users", StringComparison.Ordinal))
+            {
+                return Users;
+            }
+
+            if (path.EndsWith("/rosters", StringComparison.Ordinal))
+            {
+                return Rosters;
+            }
 
             var marker = path.LastIndexOf("/matchups/", StringComparison.Ordinal);
             if (marker >= 0)
@@ -114,10 +177,10 @@ namespace FantasyLeague.Core.Tests
     {
         private static async Task<(ISeasonService Service, ServiceProvider Provider)> BuildAsync(LeagueSocket socket)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
+            var services = TestServices.Create();
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
+            services.AddSeasonServiceWithNullStores();
 
             var provider = services.BuildServiceProvider();
             await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
@@ -137,43 +200,59 @@ namespace FantasyLeague.Core.Tests
         public async Task The_player_map_is_loaded_without_an_explicit_refresh()
         {
             // the deployed endpoint had nothing calling the refresher, and every request 500'd
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddSleeperClient().ConfigurePrimaryHttpMessageHandler(TwoTeamsTwoWeeks);
+            var services = TestServices.Create();
+            services.AddSleeperClient().ConfigurePrimaryHttpMessageHandler(LeagueSocket.Captured);
+            services.AddSeasonServiceWithNullStores();
             using var provider = services.BuildServiceProvider();
 
-            var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync("L1", default);
+            var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
 
             snapshot.Teams.Should().NotBeEmpty();
-            provider.GetRequiredService<IPlayerMapRefresher>().LastRefreshedUtc.Should().NotBeNull();
+            snapshot.UnresolvedPlayerIds.Should().BeEmpty("every player was found in the loaded map");
         }
 
         [Fact]
         public async Task A_dump_that_cannot_be_read_is_still_refused()
         {
             // A8: an empty map would report every player unresolved instead of failing
-            var services = new ServiceCollection();
-            services.AddLogging();
+            var services = TestServices.Create();
             services.AddSleeperClient()
                 .ConfigurePrimaryHttpMessageHandler(() => new LeagueSocket { Players = "null" });
+            services.AddSeasonServiceWithNullStores();
             using var provider = services.BuildServiceProvider();
 
-            await FluentActions.Awaiting(() => provider.GetRequiredService<ISeasonService>().BuildAsync("L1", default))
-                .Should().ThrowAsync<InvalidOperationException>();
+            await FluentActions.Awaiting(() => provider.GetRequiredService<ISeasonService>().BuildAsync(default))
+                .Should().ThrowAsync<InvalidDataException>();
         }
 
         [Fact]
         public async Task Every_roster_becomes_one_team_with_its_weeks_in_order()
         {
-            var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
+            var (service, provider) = await BuildAsync(LeagueSocket.Captured());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+                var weeks = Enumerable.Range(1, snapshot.CurrentWeek);
 
-                snapshot.Teams.Should().HaveCount(2);
-                snapshot.Teams.Select(t => t.RosterId).Should().Equal(1, 2);
-                snapshot.Teams.Should().OnlyContain(t => t.Weeks.Count == 2);
-                snapshot.Teams[0].Weeks.Select(w => w.Week).Should().Equal(1, 2);
+                snapshot.Teams.Select(t => t.RosterId).Should().Equal(1, 2, 3, 4, 5, 6);
+                snapshot.Teams.Should().OnlyContain(t => t.Weeks.Select(w => w.Week).SequenceEqual(weeks));
+            }
+        }
+
+        [Fact]
+        public async Task A_captured_season_assembles_with_every_player_known_and_no_breach()
+        {
+            // the whole read path over what Sleeper actually sent, not over shapes we invented
+            var (service, provider) = await BuildAsync(LeagueSocket.Captured());
+            using (provider)
+            {
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+                var weeks = snapshot.Teams.SelectMany(t => t.Weeks).ToList();
+
+                snapshot.UnresolvedPlayerIds.Should().BeEmpty();
+                snapshot.Violations.Should().BeEmpty();
+                weeks.Should().OnlyContain(w => w.IdealPts >= w.ActualPts);
+                weeks.Should().OnlyContain(w => w.SlotAverages.Count > 0, "every captured lineup lines up with its slots");
             }
         }
 
@@ -183,7 +262,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Teams[0].Name.Should().Be("START TOMMY CUTLETS");
                 snapshot.Teams[1].Name.Should().Be("kuzma4prez");
@@ -193,13 +272,12 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task Final_through_week_stops_before_the_week_in_progress()
         {
-            var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
+            var (service, provider) = await BuildAsync(LeagueSocket.Captured());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
-                snapshot.CurrentWeek.Should().Be(2);
-                snapshot.FinalThroughWeek.Should().Be(1);
+                snapshot.FinalThroughWeek.Should().Be(snapshot.CurrentWeek - 1);
             }
         }
 
@@ -212,7 +290,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.FinalThroughWeek.Should().Be(0);
                 snapshot.Teams.SelectMany(t => t.Weeks).Should().OnlyContain(w => !w.IsFinal);
@@ -222,14 +300,39 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task Only_completed_weeks_are_marked_final()
         {
-            var (service, provider) = await BuildAsync(TwoTeamsTwoWeeks());
+            var (service, provider) = await BuildAsync(LeagueSocket.Captured());
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
-                var weeks = snapshot.Teams[0].Weeks;
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
-                weeks.Single(w => w.Week == 1).IsFinal.Should().BeTrue();
-                weeks.Single(w => w.Week == 2).IsFinal.Should().BeFalse();
+                snapshot.Teams.SelectMany(t => t.Weeks).Should()
+                    .OnlyContain(w => w.IsFinal == (w.Week < snapshot.CurrentWeek));
+            }
+        }
+
+        [Fact]
+        public async Task Requests_inside_the_cache_window_share_one_build()
+        {
+            // one build per window is what keeps its error logs to one per window
+            var (service, provider) = await BuildAsync(LeagueSocket.Captured());
+            using (provider)
+            {
+                var first = await service.BuildAsync(TestContext.Current.CancellationToken);
+                var second = await service.BuildAsync(TestContext.Current.CancellationToken);
+
+                second.Should().BeSameAs(first);
+            }
+        }
+
+        [Fact]
+        public async Task The_current_season_is_read_without_building_one()
+        {
+            var socket = TwoTeamsTwoWeeks();
+            socket.DefaultMatchups = "not json";
+            var (service, provider) = await BuildAsync(socket);
+            using (provider)
+            {
+                (await service.GetCurrentSeasonAsync(TestContext.Current.CancellationToken)).Should().Be(2026);
             }
         }
 
@@ -242,7 +345,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Slots.Select(s => s.Code).Should().Equal("QB", "RB", "WR", "FLEX");
             }
@@ -263,24 +366,83 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
                 var week = snapshot.Teams[0].Weeks[0];
 
-                week.Actual.Should().Be(12m);
-                week.Ideal.Should().Be(42m);
+                week.ActualPts.Should().Be(12m);
+                week.IdealPts.Should().Be(42m);
                 snapshot.Violations.Should().BeEmpty();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Keeps every log entry at warning or above, for tests that count them.
+    /// </summary>
+    internal sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public List<string> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new Capturing(Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Capturing(List<string> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (IsEnabled(logLevel))
+                {
+                    lock (entries)
+                    {
+                        entries.Add(formatter(state, exception));
+                    }
+                }
             }
         }
     }
 
     public class SeasonServiceReportingTests
     {
+        [Fact]
+        public async Task A_problem_is_logged_once_however_often_the_season_is_rebuilt()
+        {
+            // a build every 5 s would otherwise repeat the same warning all Sunday
+            var logs = new CapturingLoggerProvider();
+            var services = TestServices.Create();
+            services.AddLogging(b => b.AddProvider(logs));
+            services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
+                    .ConfigurePrimaryHttpMessageHandler(() => OneWeek(Bodies.Matchup(
+                        rosterId: 1,
+                        points: 99m,
+                        players: ["qb1", "rb1", "wr1", "ghost"])));
+            services.AddSeasonServiceWithNullStores();
+            using var provider = services.BuildServiceProvider();
+
+            for (var build = 0; build < 3; build++)
+            {
+                await provider.GetRequiredService<HybridCache>().RemoveAsync("season:L1", TestContext.Current.CancellationToken);
+                await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
+            }
+
+            logs.Entries.Should().ContainSingle(e => e.Contains("ghost"));
+            logs.Entries.Where(e => e.StartsWith("Invariant", StringComparison.Ordinal))
+                .Should().HaveCount(2, "two invariants fail, each logged once");
+        }
+
         private static async Task<(ISeasonService Service, ServiceProvider Provider)> BuildAsync(LeagueSocket socket)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
+            var services = TestServices.Create();
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
+            services.AddSeasonServiceWithNullStores();
 
             var provider = services.BuildServiceProvider();
             await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
@@ -308,7 +470,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.UnresolvedPlayerIds.Should().Equal("signed_tuesday");
             }
@@ -332,7 +494,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.UnresolvedPlayerIds.Should().Equal("signed_tuesday");
             }
@@ -344,7 +506,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(OneWeek(Bodies.Matchup(1, 35m)));
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
                 snapshot.UnresolvedPlayerIds.Should().BeEmpty();
@@ -359,7 +521,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().ContainSingle()
                     .Which.Invariant.Should().Be(InvariantKind.StartersSumMatchesPoints);
@@ -374,12 +536,12 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 var violation = snapshot.Violations.Should().ContainSingle().Subject;
                 violation.Invariant.Should().Be(InvariantKind.StartersSumMatchesPoints);
-                violation.Expected.Should().Be(30m);
-                violation.Actual.Should().Be(35m);
+                violation.SleeperPts.Should().Be(30m);
+                violation.ComparedPts.Should().Be(35m);
             }
         }
 
@@ -391,7 +553,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
             }
@@ -405,10 +567,10 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
-                snapshot.Teams[0].Weeks[0].Actual.Should().Be(41m);
+                snapshot.Teams[0].Weeks[0].ActualPts.Should().Be(41m);
             }
         }
 
@@ -420,11 +582,11 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().BeEmpty();
-                snapshot.Teams[0].Weeks[0].Actual.Should().Be(500m);
-                snapshot.Teams[0].Weeks[0].Ideal.Should().Be(35m);
+                snapshot.Teams[0].Weeks[0].ActualPts.Should().Be(500m);
+                snapshot.Teams[0].Weeks[0].IdealPts.Should().Be(35m);
             }
         }
 
@@ -436,7 +598,7 @@ namespace FantasyLeague.Core.Tests
 
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Violations.Should().ContainSingle()
                     .Which.Invariant.Should().Be(InvariantKind.IdealNotBelowActual);
@@ -453,7 +615,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(socket);
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 var violation = snapshot.Violations.Should().ContainSingle().Subject;
                 violation.Week.Should().Be(2);
@@ -467,7 +629,7 @@ namespace FantasyLeague.Core.Tests
             var (service, provider) = await BuildAsync(OneWeek(Bodies.Matchup(9, 35m)));
             using (provider)
             {
-                var snapshot = await service.BuildAsync("L1", default);
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.Teams[0].Name.Should().Be("Roster 9");
             }

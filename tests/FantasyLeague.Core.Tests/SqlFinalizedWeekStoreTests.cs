@@ -1,0 +1,305 @@
+﻿using FantasyLeague.Data;
+using FantasyLeague.Data.Model;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace FantasyLeague.Core.Tests
+{
+    internal sealed class InMemoryContextFactory(string name) : IDbContextFactory<FantasyDataContext>
+    {
+        public FantasyDataContext CreateDbContext() =>
+            new(new DbContextOptionsBuilder<FantasyDataContext>()
+                .UseInMemoryDatabase(name)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                .Options);
+    }
+
+    internal sealed class BrokenContextFactory(Exception? error = null) : IDbContextFactory<FantasyDataContext>
+    {
+        public FantasyDataContext CreateDbContext() =>
+            throw error ?? new InvalidOperationException("no database");
+    }
+
+    public class SqlFinalizedWeekStoreTests
+    {
+        private const string League = "L1";
+
+        private static SqlFinalizedWeekStore Store() =>
+            new(new InMemoryContextFactory(Guid.NewGuid().ToString()), TimeProvider.System,
+                NullLogger<SqlFinalizedWeekStore>.Instance);
+
+        private static TeamWeek Week(
+            int rosterId = 1,
+            int week = 1,
+            decimal actual = 100m,
+            decimal ideal = 120m,
+            bool isFinal = true,
+            IReadOnlyList<RosteredPlayer>? players = null,
+            IReadOnlyDictionary<string, decimal>? slotAverages = null) =>
+            new(rosterId, week, actual, ideal,
+                [new PlayerId("s1"), new PlayerId("s2")],
+                [new PlayerId("s1"), new PlayerId("i9")],
+                players ?? [new RosteredPlayer(new PlayerId("s1"), "Patrick Mahomes", ["QB"], 27.5m)],
+                isFinal, slotAverages ?? new Dictionary<string, decimal>());
+
+        [Fact]
+        public async Task An_empty_store_reads_back_nothing() => (await Store().ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+
+        [Fact]
+        public async Task A_written_week_reads_back()
+        {
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            read.Should().ContainSingle();
+            read[0].RosterId.Should().Be(1);
+            read[0].Week.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task The_scores_survive_the_round_trip_exactly()
+        {
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(actual: 123.45m, ideal: 167.89m)], TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            read[0].ActualPts.Should().Be(123.45m);
+            read[0].IdealPts.Should().Be(167.89m);
+        }
+
+        [Fact]
+        public async Task The_lineups_survive_the_round_trip()
+        {
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week()], TestContext.Current.CancellationToken);
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            read[0].Starters.Should().Equal(new PlayerId("s1"), new PlayerId("s2"));
+            read[0].IdealLineup.Should().Equal(new PlayerId("s1"), new PlayerId("i9"));
+        }
+        [Fact]
+        public async Task The_rostered_players_survive_the_round_trip()
+        {
+            // the whole reason TeamWeek was widened: a stored week must be re-solvable
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(players:
+                [
+                    new RosteredPlayer(new PlayerId("4046"), "Patrick Mahomes", ["QB"], 27.5m),
+                    new RosteredPlayer(new PlayerId("1234"), "Multi Eligible", ["RB", "WR"], 8.25m),
+                ])], TestContext.Current.CancellationToken);
+
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            // BeEquivalentTo, not Be: RosteredPlayer is a record whose list member
+            // compares by reference, so two identical players are never ==
+            read[0].Players.Should().HaveCount(2);
+            read[0].Players[0].Should().BeEquivalentTo(
+                new RosteredPlayer(new PlayerId("4046"), "Patrick Mahomes", ["QB"], 27.5m));
+            read[0].Players[1].Points.Should().Be(8.25m);
+            read[0].Players[1].FantasyPositions.Should().Equal("RB", "WR");
+        }
+
+        private static async Task<SqlFinalizedWeekStore> StoreHoldingAsync(WeekScore row)
+        {
+            var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());
+            await using (var db = factory.CreateDbContext())
+            {
+                db.WeekScores.Add(row);
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+
+            return new SqlFinalizedWeekStore(factory, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+        }
+
+        private static WeekScore Row(string slotAveragesJson = "{}", string startersJson = "[]") => new()
+        {
+            LeagueId = League,
+            Season = 2026,
+            Week = 1,
+            RosterId = 1,
+            StartersJson = startersJson,
+            IdealLineupJson = "[]",
+            PlayersJson = "[]",
+            SlotAveragesJson = slotAveragesJson,
+            IsFinal = true,
+        };
+
+        [Fact]
+        public async Task A_row_from_before_slot_averages_reads_with_no_attribution()
+        {
+            // AddSlotAveragesJson gave existing rows an empty string
+            var store = await StoreHoldingAsync(Row(slotAveragesJson: ""));
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken))
+                .Should().ContainSingle().Which.SlotAverages.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task An_empty_lineup_column_is_a_loud_failure_not_an_empty_lineup()
+        {
+            // only this store writes the column, and it never writes it empty
+            var store = await StoreHoldingAsync(Row(startersJson: ""));
+
+            await store.Invoking(s => s.ReadAsync(League, 2026, default))
+                .Should().ThrowAsync<System.Text.Json.JsonException>();
+        }
+
+        [Fact]
+        public void A_player_id_is_stored_as_a_bare_string()
+        {
+            // the blob and the SQL row share one shape (3b item 13)
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                new RosteredPlayer(new PlayerId("BAL"), "BAL", ["DEF"], 7m));
+
+            json.Should().Be("""{"Id":"BAL","Name":"BAL","FantasyPositions":["DEF"],"Points":7}""");
+            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PlayerId>>("""["4046","BAL"]""")
+                .Should().Equal(new PlayerId("4046"), new PlayerId("BAL"));
+        }
+
+        [Fact]
+        public async Task The_slot_averages_survive_the_round_trip()
+        {
+            // M6's stored column; an empty dict is the only shape prior tests exercised
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(slotAverages: new Dictionary<string, decimal>
+            {
+                ["QB"] = 21.5m,
+                ["SUPER FLEX"] = 14.25m,
+            })], TestContext.Current.CancellationToken);
+
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            read[0].SlotAverages.Should().BeEquivalentTo(new Dictionary<string, decimal>
+            {
+                ["QB"] = 21.5m,
+                ["SUPER FLEX"] = 14.25m,
+            });
+        }
+
+        [Fact]
+        public async Task Writing_the_same_week_twice_updates_rather_than_duplicating()
+        {
+            // T30 re-runs the backfill after a solver fix; that is designed, not accidental
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(ideal: 120m)], TestContext.Current.CancellationToken);
+            await store.WriteAsync(League, 2026, [Week(ideal: 155m)], TestContext.Current.CancellationToken);
+
+            var read = await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken);
+
+            read.Should().ContainSingle();
+            read[0].IdealPts.Should().Be(155m);
+        }
+
+        [Fact]
+        public async Task Each_roster_and_week_is_its_own_row()
+        {
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(rosterId: 1, week: 1), Week(rosterId: 2, week: 1), Week(rosterId: 1, week: 2)], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().HaveCount(3);
+        }
+
+        [Fact]
+        public async Task A_different_season_is_not_returned()
+        {
+            var store = Store();
+
+            await store.WriteAsync(League, 2025, [Week()], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_different_league_is_not_returned()
+        {
+            // roster ids repeat across leagues; the key is what keeps them apart
+            var store = Store();
+
+            await store.WriteAsync("L1", 2026, [Week()], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync("L2", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task A_week_still_in_progress_is_refused()
+        {
+            var store = Store();
+
+            await store.Invoking(s => s.WriteAsync(League, 2026, [Week(week: 1), Week(week: 2, isFinal: false)], default))
+                .Should().ThrowAsync<ArgumentException>();
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken))
+                .Should().BeEmpty("one live week refuses the whole write");
+        }
+
+        [Fact]
+        public async Task Writing_nothing_is_not_an_error()
+        {
+            await Store().Invoking(s => s.WriteAsync(League, 2026, [], default))
+                .Should().NotThrowAsync();
+        }
+
+        [Fact]
+        public async Task An_unreachable_database_throws_on_read()
+        {
+            // an empty answer here would be cached as if the season had no weeks;
+            // the cached store decides what a failure means
+            var store = new SqlFinalizedWeekStore(
+                new BrokenContextFactory(new RetryLimitExceededException("still paused", new TimeoutException())),
+                TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+
+            await store.Invoking(s => s.ReadAsync(League, 2026, default))
+                .Should().ThrowAsync<RetryLimitExceededException>();
+        }
+
+        [Fact]
+        public async Task A_non_transient_read_failure_throws_rather_than_falling_back()
+        {
+            var store = new SqlFinalizedWeekStore(
+                new BrokenContextFactory(new InvalidOperationException("Invalid column name")),
+                TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+
+            await store.Invoking(s => s.ReadAsync(League, 2026, default))
+                .Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        [Fact]
+        public async Task An_unreachable_database_still_throws_on_write()
+        {
+            // a swallowed write means a finalized week is absent forever
+            var store = new SqlFinalizedWeekStore(
+                new BrokenContextFactory(), TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+
+            await store.Invoking(s => s.WriteAsync(League, 2026, [Week()], default))
+                .Should().ThrowAsync<InvalidOperationException>();
+        }
+    }
+
+    public class NullFinalizedWeekStoreTests
+    {
+        [Fact]
+        public async Task It_reads_back_nothing() => (await new NullFinalizedWeekStore().ReadAsync("L1", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+
+        [Fact]
+        public async Task It_accepts_a_write_and_keeps_none_of_it()
+        {
+            var store = new NullFinalizedWeekStore();
+
+            await store.WriteAsync("L1", 2026, [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>())], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync("L1", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
+        }
+
+    }
+}

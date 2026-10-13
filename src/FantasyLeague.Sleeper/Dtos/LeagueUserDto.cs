@@ -9,12 +9,10 @@
     /// </remarks>
     /// <param name="UserId">The only identifier stable across seasons, and therefore what A1's exclusion list matches on.</param>
     /// <param name="DisplayName">The manager's Sleeper handle. The fallback when no team name is set.</param>
-    /// <param name="IsBot">Whether Sleeper considers this a bot account. Can be null.</param>
     /// <param name="Metadata">Per-league user settings, including the team name. Can be null.</param>
     internal sealed record LeagueUserDto(
         string UserId,
         string? DisplayName,
-        bool? IsBot,
         LeagueUserMetadataDto? Metadata);
 
     /// <summary>
@@ -24,10 +22,7 @@
     /// The manager's chosen team name, or null.
     /// </param>
     /// <remarks>
-    /// The design says a manager who never set a team name has an empty string
-    /// rather than a missing key. That is not what this league returns: for two of
-    /// six managers the <c>team_name</c> key is absent from <c>metadata</c>
-    /// altogether. Resolution has to handle absent, null and empty alike — see
+    /// Absent when the manager never set a name (A6); see
     /// <see cref="SleeperMapper.ResolveTeamName"/>.
     /// </remarks>
     internal sealed record LeagueUserMetadataDto(string? TeamName);

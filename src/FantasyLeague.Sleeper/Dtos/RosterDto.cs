@@ -13,9 +13,7 @@
     /// </remarks>
     /// <param name="RosterId">The roster's id within this league and season.</param>
     /// <param name="OwnerId">The owning user. Null for an orphaned roster with no manager.</param>
-    /// <param name="CoOwners">Additional managers, or null. Null on every roster in this league.</param>
     internal sealed record RosterDto(
         int RosterId,
-        string? OwnerId,
-        List<string>? CoOwners);
+        string? OwnerId);
 }

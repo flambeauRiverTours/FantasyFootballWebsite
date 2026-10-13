@@ -1,4 +1,6 @@
-﻿using FantasyLeague.Sleeper;
+﻿using FantasyLeague.Data;
+using FantasyLeague.Seasons;
+using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +19,7 @@ namespace FantasyLeague.Core.Tests
             var services = new ServiceCollection();
             services.AddSingleton<IConfiguration>(configuration);
             services.AddLogging();
-            services.AddSleeperClient();
+            services.AddSeasonService();
 
             return services.BuildServiceProvider();
         }
@@ -58,7 +60,7 @@ namespace FantasyLeague.Core.Tests
                 services.AddSingleton<IConfiguration>(
                     new ConfigurationBuilder().AddEnvironmentVariables().Build());
                 services.AddLogging();
-                services.AddSleeperClient();
+                services.AddSeasonService();
 
                 using var provider = services.BuildServiceProvider();
                 Resolve(provider).CurrentLeagueId.Should().Be("env-league");
@@ -112,34 +114,118 @@ namespace FantasyLeague.Core.Tests
 
     public class HostCompositionTests
     {
-        private static ServiceProvider Provider(bool validate = true)
+        private static readonly ServiceProviderOptions Validated = new() { ValidateOnBuild = true, ValidateScopes = true };
+
+        private const string DevStorage = "UseDevelopmentStorage=true";
+
+        private static ServiceProvider Provider()
         {
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["League:CurrentLeagueId"] = "1234567890123456789",
-                })
-                .Build();
-
-            var services = new ServiceCollection();
-            services.AddSingleton<IConfiguration>(configuration);
-            services.AddLogging();
+            var services = TestServices.Create(("League:CurrentLeagueId", "1234567890123456789"));
             services.AddSleeperClient();
+            services.AddSeasonServiceWithNullStores();
 
-            return services.BuildServiceProvider(new ServiceProviderOptions
+            return services.BuildServiceProvider(Validated);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void The_functions_composition_works_in_either_order(bool dataFirst)
+        {
+            // nothing overlaps, so nothing depends on who registers first
+            var services = TestServices.Create(("AzureWebJobsStorage", DevStorage));
+            if (dataFirst)
             {
-                ValidateOnBuild = validate,
-                ValidateScopes = validate,
-            });
+                services.AddFantasyData("Server=unused;Database=unused");
+            }
+
+            services.AddSleeperClient();
+            services.AddSeasonService();
+            if (!dataFirst)
+            {
+                services.AddFantasyData("Server=unused;Database=unused");
+            }
+
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IFinalizedWeekStore>().Should().NotBeOfType<NullFinalizedWeekStore>();
         }
 
         [Fact]
-        public void The_container_validates_on_build()
+        public void A_host_with_no_storage_account_refuses_to_start()
         {
+            // A12: running on without blobs would fetch the 14 MB dump on every cold instance
+            var services = TestServices.Create();
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            FluentActions.Invoking(() => provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value)
+                .Should().Throw<OptionsValidationException>();
+        }
+
+        [Fact]
+        public void The_storage_account_falls_back_to_the_functions_host_one()
+        {
+            var services = TestServices.Create(("AzureWebJobsStorage", DevStorage));
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.ConnectionString.Should().Be(DevStorage);
+        }
+
+        [Fact]
+        public void An_account_name_alone_means_connecting_by_identity()
+        {
+            // in Azure the account accepts no keys, so the host names the account instead
+            var services = TestServices.Create(("AzureWebJobsStorage:accountName", "stexample"));
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            var options = provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value;
+            options.ConnectionString.Should().BeNull();
+            options.ServiceUri.Should().Be(new Uri("https://stexample.blob.core.windows.net"));
+        }
+
+        [Fact]
+        public void The_identity_composition_resolves_its_stores()
+        {
+            var services = TestServices.Create(("AzureWebJobsStorage:accountName", "stexample"));
+            services.AddSleeperClient();
+            services.AddSeasonService();
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IFinalizedWeekStore>().Should().NotBeNull();
+            provider.GetRequiredService<IPlayerMapStore>().Should().NotBeNull();
+        }
+
+        [Fact]
+        public void A_configured_storage_account_wins_over_the_fallback()
+        {
+            var services = TestServices.Create(
+                ("AzureWebJobsStorage", DevStorage),
+                ("BlobStorage:ConnectionString", "UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://127.0.0.1"));
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+
+            provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.ConnectionString.Should().NotBe(DevStorage);
+        }
+
+        [Fact]
+        public void A_host_that_registers_no_stores_fails_at_build_rather_than_at_the_first_request()
+        {
+            var services = TestServices.Create();
+            services.AddSleeperClient();
+            services.AddSeasonService();
+
+            FluentActions.Invoking(() => services.BuildServiceProvider(Validated)).Should().Throw<AggregateException>();
+        }
+
+        [Fact]
+        public void The_container_validates_on_build() =>
             // catches a missing registration or a singleton capturing something
             // scoped, at test time rather than at the first request
             FluentActions.Invoking(() => Provider()).Should().NotThrow();
-        }
 
         [Theory]
         [InlineData(typeof(ISeasonService))]

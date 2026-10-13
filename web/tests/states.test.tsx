@@ -4,6 +4,9 @@ import { ApiError } from '../src/api/client';
 import Skeleton from '../src/components/Skeleton';
 import LoadFailed from '../src/components/LoadFailed';
 import StaleBanner from '../src/components/StaleBanner';
+import Masthead from '../src/components/Masthead';
+import StandingsPanel from '../src/components/StandingsPanel';
+import { teams } from './fixture';
 
 describe('Skeleton', () => {
   it('announces itself as busy rather than reading empty rows', () => {
@@ -16,6 +19,18 @@ describe('Skeleton', () => {
     expect(container.querySelectorAll('thead th')).toHaveLength(4);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(5);
     expect(container.querySelector('.table-wrap > table')).not.toBeNull();
+  });
+
+  it("has the real table's columns, so nothing moves when the data arrives", () => {
+    const header = (c: HTMLElement) =>
+      [...c.querySelectorAll('thead th')].map((th) => `${th.textContent}|${th.className}`);
+
+    const skeleton = render(<Skeleton />);
+    const loading = header(skeleton.container);
+    skeleton.unmount();
+
+    const real = render(<StandingsPanel teams={teams} />);
+    expect(loading).toEqual(header(real.container));
   });
 
   it('only mentions the database once the wait is long', () => {
@@ -61,9 +76,25 @@ describe('LoadFailed', () => {
     render(<LoadFailed error={new ApiError(503, 'unavailable')} onRetry={onRetry} />);
 
     const region = screen.getByRole('alert');
-    within(region).getByRole('button', { name: /try again/i }).click();
+    within(region)
+      .getByRole('button', { name: /try again/i })
+      .click();
     expect(onRetry).toHaveBeenCalledOnce();
     expect(screen.queryByText(/reload/i)).toBeNull();
+  });
+
+  it('lays a failure out as a panel, like every other state of the page', () => {
+    const { container } = render(<LoadFailed error={new ApiError(503, 'x')} onRetry={() => {}} />);
+    const panel = container.querySelector('main > section.panel');
+    expect(panel).not.toBeNull();
+    expect(within(panel as HTMLElement).getByRole('heading', { level: 2 })).toHaveTextContent(
+      'Could not load the season',
+    );
+  });
+
+  it('leaves the masthead quiet, so the failure is stated once', () => {
+    const { container } = render(<Masthead payload={null} updatedAgo="" />);
+    expect(container.querySelector('.masthead p')).toHaveTextContent('');
   });
 
   it('survives a null error', () => {

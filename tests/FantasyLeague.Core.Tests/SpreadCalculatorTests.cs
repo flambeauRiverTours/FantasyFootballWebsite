@@ -10,26 +10,20 @@ namespace FantasyLeague.Core.Tests
     public class SpreadCalculatorAbsenceTests
     {
         [Fact]
-        public void No_weeks_at_all_is_null()
-        {
+        public void No_weeks_at_all_is_null() =>
             // Week zero, before any games have been played.
             SpreadCalculator.Calculate([]).Should().BeNull();
-        }
 
         [Fact]
-        public void One_week_is_null_not_zero()
-        {
+        public void One_week_is_null_not_zero() =>
             // Sigma of a single point is undefined, not zero. Returning 0.0 here
             // would put the newest, least-known team top of a consistency table.
             SpreadCalculator.Calculate([118.2m]).Should().BeNull();
-        }
 
         [Fact]
-        public void Three_weeks_is_null()
-        {
+        public void Three_weeks_is_null() =>
             // The minimum-weeks boundary, approached from below.
             SpreadCalculator.Calculate([118.2m, 96.4m, 131.0m]).Should().BeNull();
-        }
 
         [Fact]
         public void Four_weeks_is_a_number()
@@ -54,15 +48,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void The_minimum_is_configurable_because_Q5_is_still_open()
-        {
-            // Four or five is undecided; the parameter is what keeps that a
-            // one-line change rather than a hunt.
-            IReadOnlyList<decimal> fourWeeks = [118.2m, 96.4m, 131.0m, 104.8m];
-
-            SpreadCalculator.Calculate(fourWeeks, minWeeks: 4).Should().NotBeNull();
-            SpreadCalculator.Calculate(fourWeeks, minWeeks: 5).Should().BeNull();
-        }
+        public void The_minimum_is_four_as_Q5_settled() => SpreadCalculator.MinWeeks.Should().Be(4);
     }
 
     /// <summary>
@@ -99,13 +85,22 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void All_zero_weeks_do_not_divide_by_zero()
         {
-            // Mean is zero, so the coefficient of variation has no denominator.
-            // Sigma is also zero here, so reporting a CV of zero is honest.
+            // Mean is zero, so the coefficient of variation has no denominator
             var spread = SpreadCalculator.Calculate([0m, 0m, 0m, 0m]);
 
             spread.Should().NotBeNull();
             spread!.Sigma.Should().Be(0.0);
-            spread.Cv.Should().Be(0.0);
+            spread.Cv.Should().BeNull();
+        }
+
+        [Fact]
+        public void Weeks_swinging_around_zero_are_not_called_perfectly_consistent()
+        {
+            // F1: a CV of 0.0 here would rank the least steady team as the steadiest
+            var spread = SpreadCalculator.Calculate([-10m, 10m, -10m, 10m]);
+
+            spread!.Sigma.Should().Be(10.0);
+            spread.Cv.Should().BeNull();
         }
     }
 
@@ -133,10 +128,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
-        public void Cv_is_sigma_over_the_mean()
-        {
-            SpreadCalculator.Calculate(Symmetric)!.Cv.Should().BeApproximately(0.2, 1e-12);
-        }
+        public void Cv_is_sigma_over_the_mean() => SpreadCalculator.Calculate(Symmetric)!.Cv.Should().BeApproximately(0.2, 1e-12);
 
         [Fact]
         public void Mean_min_max_and_weeks_describe_the_input()
@@ -182,7 +174,7 @@ namespace FantasyLeague.Core.Tests
     public class SpreadCalculatorFinalityTests
     {
         private static TeamWeek Week(int week, decimal actual, bool isFinal) =>
-            new(RosterId: 1, Week: week, Actual: actual, Ideal: actual,
+            new(RosterId: 1, Week: week, ActualPts: actual, IdealPts: actual,
                 Starters: [], IdealLineup: [], Players: [], IsFinal: isFinal,
                 SlotAverages: new Dictionary<string, decimal>());
 
@@ -204,7 +196,7 @@ namespace FantasyLeague.Core.Tests
             ];
 
             var spread = SpreadCalculator.Calculate(
-                [.. season.Where(w => w.IsFinal).Select(w => w.Actual)]);
+                [.. season.Where(w => w.IsFinal).Select(w => w.ActualPts)]);
 
             spread.Should().NotBeNull();
             spread!.Weeks.Should().Be(4, "the in-progress week must not be counted");
@@ -239,7 +231,7 @@ namespace FantasyLeague.Core.Tests
             ];
 
             SpreadCalculator.Calculate(
-                [.. season.Where(w => w.IsFinal).Select(w => w.Actual)])
+                [.. season.Where(w => w.IsFinal).Select(w => w.ActualPts)])
                 .Should().BeNull();
         }
     }

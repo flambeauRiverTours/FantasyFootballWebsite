@@ -6,12 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#fcfcfd" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#111317" media="(prefers-color-scheme: dark)" />
-    <title>Bosty Base Fantasy Football</title>
+    <title>Fantasy Standings</title>
     <style>
-      /* Overlay when loading to show the ball*/
+      /* overlay shown while loading: a football thrown side to side */
+      /*
+       * The arc is centred halfway between the masthead's bottom (4rem, --masthead-h)
+       * and the top of the Skeleton's title. The Skeleton is centred in the space
+       * below the masthead, so that midpoint is 4rem + (100svh - 4rem - C) / 4, where
+       * C is the Skeleton's height less twice the title's offset inside it: 331px
+       * above the 40rem breakpoint and 283px below it, where the table's cells are
+       * tighter. Measured, not guessed - re-measure if the standings panel changes.
+       */
       #boot {
-        /* THe arc is centered halfway between the masthead's bottom and the top of the Skeleton's title.*/
-        --boot-mid: calc(4rem + (100svh - 4rem - 283px) / 4);
+        --boot-mid: calc(4rem + (100svh - 4rem - 331px) / 4);
         position: fixed;
         inset: 0;
         pointer-events: none;
@@ -28,9 +35,19 @@
         white-space: nowrap;
       }
 
-      @keyframes boot-fadein { to { opacity: 1; } }
+      @media (max-width: 40rem) {
+        #boot {
+          --boot-mid: calc(4rem + (100svh - 4rem - 283px) / 4);
+        }
+      }
 
-      /* Ball arcs from side to side*/
+      @keyframes boot-fadein {
+        to {
+          opacity: 1;
+        }
+      }
+
+      /* the ball arcs from side to side */
       #boot .ball {
         position: absolute;
         top: max(calc(4rem + 26px), calc(var(--boot-mid) - 19.2px));
@@ -43,39 +60,75 @@
           boot-flip 2.2s steps(1) infinite;
       }
       @keyframes boot-arc-x {
-        0%   { left: 0; }
-        50%  { left: calc(100% - 64px); }
-        100% { left: 0; }
+        0% {
+          left: 0;
+        }
+        50% {
+          left: calc(100% - 64px);
+        }
+        100% {
+          left: 0;
+        }
       }
       @keyframes boot-arc-y {
-        0%, 50%, 100% { translate: 0 18px; }
-        25%, 75%      { translate: 0 -18px; }
+        0%,
+        50%,
+        100% {
+          translate: 0 18px;
+        }
+        25%,
+        75% {
+          translate: 0 -18px;
+        }
       }
       /* steps(1) holds each value until the next keyframe, so the flip lands
          exactly on 0%/50%/100% - the instants the ball reaches an edge and
          its horizontal speed is already ~0, same trick as the old apex flip */
       @keyframes boot-flip {
-        0%   { scale: 1 1; }
-        50%  { scale: -1 1; }
-        100% { scale: 1 1; }
+        0% {
+          scale: 1 1;
+        }
+        50% {
+          scale: -1 1;
+        }
+        100% {
+          scale: 1 1;
+        }
       }
 
-      /*  spiral turns the ball about its long axis*/
+      /* a spiral turns the ball about its long axis */
       #boot .laces {
         transform-box: fill-box;
         transform-origin: center;
         animation: boot-roll 0.6s linear infinite;
       }
       @keyframes boot-roll {
-        0%     { transform: translateY(6.5px)  scaleY(0.02); }
-        8.33%  { transform: translateY(5.63px) scaleY(0.5);  }
-        16.67% { transform: translateY(3.25px) scaleY(0.87); }
-        25%    { transform: translateY(0)      scaleY(1);    }
-        33.33% { transform: translateY(-3.25px) scaleY(0.87); }
-        41.67% { transform: translateY(-5.63px) scaleY(0.5);  }
-        50%    { transform: translateY(-6.5px) scaleY(0.02); }
+        0% {
+          transform: translateY(6.5px) scaleY(0.02);
+        }
+        8.33% {
+          transform: translateY(5.63px) scaleY(0.5);
+        }
+        16.67% {
+          transform: translateY(3.25px) scaleY(0.87);
+        }
+        25% {
+          transform: translateY(0) scaleY(1);
+        }
+        33.33% {
+          transform: translateY(-3.25px) scaleY(0.87);
+        }
+        41.67% {
+          transform: translateY(-5.63px) scaleY(0.5);
+        }
+        50% {
+          transform: translateY(-6.5px) scaleY(0.02);
+        }
         /* far side: jump back to the bottom while flattened to nothing */
-        50.01%, 100% { transform: translateY(6.5px) scaleY(0.02); }
+        50.01%,
+        100% {
+          transform: translateY(6.5px) scaleY(0.02);
+        }
       }
 
       #boot .speed {
@@ -88,12 +141,30 @@
         opacity: 0.25;
         color: #7a4a24;
       }
-      @keyframes boot-streak { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.5; } }
+      @keyframes boot-streak {
+        0%,
+        100% {
+          opacity: 0.15;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
 
       @media (prefers-reduced-motion: reduce) {
-        #boot .ball, #boot .laces, #boot .speed { animation: none; }
-        #boot .ball { left: calc(50% - 32px); translate: 0 0; scale: 1 1; }
-        #boot .speed { display: none; }
+        #boot .ball,
+        #boot .laces,
+        #boot .speed {
+          animation: none;
+        }
+        #boot .ball {
+          left: calc(50% - 32px);
+          translate: 0 0;
+          scale: 1 1;
+        }
+        #boot .speed {
+          display: none;
+        }
       }
     </style>
   </head>
@@ -101,7 +172,7 @@
     <div id="boot" role="status" aria-live="polite">
       <svg class="ball" viewBox="0 0 40 24" aria-hidden="true">
         <defs>
-          <!-- two cubics meeting at slightly pointed ends - makes a football-->
+          <!-- two cubics meeting at slightly pointed ends make a football -->
           <path id="boot-shape" d="M9 12 C11.5 2.93 28.5 2.93 31 12 C28.5 21.07 11.5 21.07 9 12Z" />
           <clipPath id="boot-skin">
             <use href="#boot-shape" />
@@ -116,8 +187,13 @@
         <use href="#boot-shape" fill="#7A4A24" />
 
         <g clip-path="url(#boot-skin)">
-          <path class="laces" d="M15.5 12h9M17 10.8v2.4M19 10.8v2.4M21 10.8v2.4M23 10.8v2.4"
-                stroke="#F6F1E8" stroke-width="0.9" stroke-linecap="round" />
+          <path
+            class="laces"
+            d="M15.5 12h9M17 10.8v2.4M19 10.8v2.4M21 10.8v2.4M23 10.8v2.4"
+            stroke="#F6F1E8"
+            stroke-width="0.9"
+            stroke-linecap="round"
+          />
         </g>
       </svg>
 

@@ -1,5 +1,6 @@
 import { scaleLinear } from 'd3-scale';
-import type { ScaleLinear } from 'd3-scale';
+import type { LinearScale } from './drawing';
+import { slotDeviations } from '../api/calculations';
 
 export interface SlotBarsProps {
   slots: string[];
@@ -15,10 +16,8 @@ interface Row {
   deviation: number | null;
 }
 
-type Scale = ScaleLinear<number, number>;
-
 const MinDomain = 0.1; // a flat week must not divide by a near-zero domain
-const m = { top: 8, right: 56, bottom: 8, left: 96 };
+const Margin = { top: 8, right: 56, bottom: 8, left: 96 };
 
 function computeRowHeight(slots: string[], height: number): number {
   return height / slots.length;
@@ -28,17 +27,27 @@ function computeRowHeight(slots: string[], height: number): number {
 function computeRows(slots: string[], rowHeight: number, deviations: (number | null)[]): Row[] {
   return slots.map((code, i) => ({
     code,
-    mid: m.top + i * rowHeight + rowHeight / 2,
-    deviation: deviations[i],
+    mid: Margin.top + i * rowHeight + rowHeight / 2,
+    deviation: deviations[i] ?? null,
   }));
 }
 
-function BarRow({ row, x, zero, rowHeight }: { row: Row; x: Scale; zero: number; rowHeight: number }) {
+function BarRow({
+  row,
+  x,
+  zero,
+  rowHeight,
+}: {
+  row: Row;
+  x: LinearScale;
+  zero: number;
+  rowHeight: number;
+}) {
   const { code, mid, deviation } = row;
 
   return (
     <g className="row">
-      <text className="axis-label" x={m.left - 40} y={mid} dy="0.32em" textAnchor="end">
+      <text className="axis-label" x={Margin.left - 40} y={mid} dy="0.32em" textAnchor="end">
         {code}
       </text>
 
@@ -72,15 +81,20 @@ function BarRow({ row, x, zero, rowHeight }: { row: Row; x: Scale; zero: number;
   );
 }
 
-/* SlotBars control. Same data as Radar, on a linear axis */
+/**
+ * The radar's data as diverging bars: how far each slot sits above or below
+ * the league average, on a linear axis that cannot exaggerate (D11).
+ */
 export default function SlotBars({ slots, ratios, width, label, height }: SlotBarsProps) {
-  if (slots.length === 0 || width <= m.left + m.right) return null;
+  if (slots.length === 0 || width <= Margin.left + Margin.right) return null;
 
-  const deviations = ratios.map((r) => (r === null ? null : r - 1));
+  const deviations = slotDeviations(ratios);
   const measured = deviations.filter((d): d is number => d !== null);
   const maxAbs = Math.max(MinDomain, ...measured.map(Math.abs));
 
-  const x = scaleLinear().domain([-maxAbs, maxAbs]).range([m.left, width - m.right]);
+  const x = scaleLinear()
+    .domain([-maxAbs, maxAbs])
+    .range([Margin.left, width - Margin.right]);
   const zero = x(0);
   const rowHeight = computeRowHeight(slots, height);
   const rows = computeRows(slots, rowHeight, deviations);
@@ -94,7 +108,7 @@ export default function SlotBars({ slots, ratios, width, label, height }: SlotBa
       role="img"
       aria-label={label}
     >
-      <line className="zero" x1={zero} x2={zero} y1={m.top} y2={height - m.bottom} />
+      <line className="zero" x1={zero} x2={zero} y1={Margin.top} y2={height - Margin.bottom} />
 
       {rows.map((row) => (
         <BarRow key={row.code} row={row} x={x} zero={zero} rowHeight={rowHeight} />
