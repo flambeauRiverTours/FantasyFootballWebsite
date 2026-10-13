@@ -29,7 +29,7 @@ Settled 2026-09-10 against the live league. Q1, Q2, Q3, Q7 and Q8 are closed.
 | **Q1** | League ID and `roster_positions` | Answered. 6 rosters. 11 startable slots, in order: `QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`, plus 8 `BN`. The league ID itself is a secret — see **A2**. |
 | **Q2** | SUPER_FLEX or IDP? | **SUPER_FLEX yes, IDP no.** Effectively a three-QB league: two `QB` slots *and* a `SUPER_FLEX`. But see **A3** — the eligibility map stays general. |
 | **Q3** | Should IR players count toward ideal? | **Moot.** The league has no `IR` or `TAXI` slots at all — `roster_positions` is 11 startable plus 8 `BN` and nothing else. The design's default (exclude) stands if a slot is ever added. |
-| **Q4** | Regular season only, or playoffs? | **Open.** `settings.playoff_week_start` reads `0`, which is unset rather than meaningful. Check the league settings directly. |
+| **Q4** | Regular season only, or playoffs? | **Regular season only** (A33). Fantasy playoffs and the NFL postseason are out of scope; T64 enforces it in code. |
 | **Q5** | Minimum weeks before σ — four or five? | **Four**, per D1. `SpreadCalculator.MinWeeks` is a constant (A27). |
 | **Q6** | Table shows σ or CV? | **Open.** Revisit once a few weeks of real scores exist and the spread between team means is visible. |
 | **Q7** | Is the season chain intact? | **2026 is the league's first season.** `previous_league_id` is null because there is no predecessor, not because a rollover was missed. See **A4**. |
@@ -1149,6 +1149,35 @@ nothing.
 after functions would stop a new page briefly calling an old API, at the cost of
 a slower deploy; with the page and the API changed together this rarely, it is
 not worth it.
+
+## A33 · A consistency panel, and the regular season only
+
+2026-10-13. Decisions for T59 and Q4.
+
+**σ gets its own panel, ranked steadiest first.** T59 restores the §04 range
+mark that A17 took out of the table: one row per team, the weekly range as a
+rule, mean ± σ as a band, the mean as a tick, on one scale shared by every row,
+with the σ figure beside it. The column is wide enough to read: about 120 px at
+375 px wide, against the 140 px that failed in the table cell, and the full
+spare width on a desktop. Rows rank by σ, lowest first, because the panel
+answers "who is steadiest"; the table already gives the points order. The
+panel shows σ only: CV stays on the chart's toggle (D3), and one figure per row
+keeps it readable on a phone. Below four finalized weeks the panel is absent,
+not empty (D1).
+
+**Each mark is centred on its team's mean.** σ measures spread, not level, so
+the marks align on their means and the eye compares widths straight down the
+column; the standings already show the level. The scale stays shared, in points
+either side of the mean, so a wider mark still means a wider spread. It reaches
+the widest team's range or ± σ, whichever is further, because a skewed team's
+band can pass its own lowest or highest week. The band has a solid outline in
+the team colour and the range line is at 60% opacity: measured against the row
+background, a soft fill alone reached 1.4:1 and the line 2.5:1 in light mode;
+the outline reaches at least 3.5:1 and the line 4.4:1 in both themes.
+
+**Q4: the regular season only.** Fantasy playoffs, where only some teams play,
+and the NFL postseason are out of scope. The code does not yet enforce this: it
+counts every week up to Sleeper's current week. T64 caps it.
 
 ## Corrections applied to the design
 

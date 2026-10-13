@@ -13,7 +13,7 @@ interface StandingsPanelProps {
  * changes the order.
  *
  * No sigma column: its range mark was illegible at table size (A17). Sigma
- * gets a panel of its own instead - see T59.
+ * has its own panel instead: ConsistencyPanel (T59).
  */
 export default function StandingsPanel({ teams }: StandingsPanelProps) {
   const rows = standings(teams);
