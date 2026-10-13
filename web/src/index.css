@@ -170,6 +170,16 @@ h1 {
   margin: 0;
 }
 
+/* the season picker reads as part of the status line it sits in */
+.masthead select {
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0 var(--space-1);
+}
+
 .panels {
   scroll-snap-type: y proximity;
 }
@@ -567,7 +577,8 @@ td.is-sorted {
   .col-gap {
     display: none;
   }
-  .masthead p {
+  /* the status text gives way on a phone; the season picker stays */
+  .masthead-text {
     display: none;
   }
   .segmented {

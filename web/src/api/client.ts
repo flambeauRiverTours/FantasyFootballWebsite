@@ -1,4 +1,4 @@
-import type { SeasonPayload } from './types';
+import type { SeasonPayload, SeasonsPayload } from './types';
 
 /**
  * Where the API lives, from the browser's point of view.
@@ -69,6 +69,21 @@ export async function fetchSeason(
     payload: (await response.json()) as SeasonPayload,
     etag: response.headers.get('ETag'),
   };
+}
+
+/**
+ * Fetches the seasons that can be served, for the season picker.
+ * @param signal Aborts the request when the page no longer needs it.
+ * @returns The current season and every season available, newest first.
+ */
+export async function fetchSeasons(signal?: AbortSignal): Promise<SeasonsPayload> {
+  const response = await fetch(`${base}/seasons`, { signal });
+  if (!response.ok) {
+    throw new ApiError(response.status, `GET /api/seasons returned ${response.status}`);
+  }
+
+  // trusted, like the season payload: our own API, its shape pinned by the server's tests
+  return (await response.json()) as SeasonsPayload;
 }
 
 /**

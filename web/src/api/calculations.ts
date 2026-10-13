@@ -131,8 +131,7 @@ export interface ConsistencyRow {
 }
 
 /**
- * Teams with a sigma, steadiest first, ties by name. Empty below four finalized
- * weeks, where sigma is null for everyone (D1).
+ * Gets tteams with a sigma. Steadiest first, ties by name.
  */
 export function consistencyRows(teams: TeamPayload[]): ConsistencyRow[] {
   return teams
@@ -141,9 +140,7 @@ export function consistencyRows(teams: TeamPayload[]): ConsistencyRow[] {
 }
 
 /**
- * Points either side of a team's mean, shared by every row (design §04). Each
- * mark is centred on its own mean, so widths compare spread; one scale keeps a
- * wide mark meaning a wide spread.
+ * Points either side of a team's mean, shared by every row (design §04).
  */
 export function consistencyDomain(rows: ConsistencyRow[]): [number, number] {
   // a skewed team's mean ± σ can pass its own lowest or highest week

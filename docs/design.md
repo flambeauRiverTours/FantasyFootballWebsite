@@ -3,7 +3,7 @@
 > Source: the published artifact
 > https://claude.ai/code/artifact/6191a761-1035-4684-947a-1f2fb063c645
 >
-> **Corrected in place on 2026-09-13 against the built system.** This file is edited directly; a re-sync would reinstate the errors marked **Corrected**. The reasoning for each change is in [`amendments.md`](amendments.md), keyed A1–A33.
+> **Corrected in place on 2026-09-13 against the built system.** This file is edited directly; a re-sync would reinstate the errors marked **Corrected**. The reasoning for each change is in [`amendments.md`](amendments.md), keyed A1–A34.
 >
 > 11 decisions · 2 risks · 8 open questions, 5 answered.
 
@@ -235,7 +235,7 @@ Steady state on a Sunday afternoon under load. With reads funnelled through the 
 | league/{id} | 24 h | 24 h | <0.01 |
 | players/nfl (14.65 MB) | 24 h | 24 h | <0.01 |
 | weeks 1…n−1 | SQL, permanent | **blob first, SQL behind it, 6 h in memory** (A16) | 0 once stored |
-| prior seasons | SQL, immutable | **not served until T29** | — |
+| prior seasons | SQL, immutable | **weeks from SQL; league, users, rosters 24 h; chain walk 24 h** (A34) | < 0.01 per season |
 | Peak steady state | ≈ 2.3 | | **≈ 4.4** |
 
 Matchups at 15 s cost twice the designed traffic for a fresher page: with the 30 s client poll (D6), a score is at most 45 s old instead of 60 s.
@@ -361,6 +361,8 @@ Chosen: store the current season's league ID in configuration; populate every pr
 **Sleeper league IDs are not stable across seasons.** A league rolled over in August is a new league with a new ID, linked to its predecessor by `previous_league_id` on the league object. `?season=2025` therefore cannot use the configured ID; it needs a map from year to ID.
 
 A config dictionary fails slowly: it works until the August someone forgets to update it, and the missing season goes unnoticed until December. Walking the chain derives the map from Sleeper. Start at the configured ID, follow `previous_league_id` until null, upsert one `League` row per hop. Cost: one call per season of league history, once a day. The only August change is the configured ID, which the rollover forces anyway.
+
+**Corrected (A34): no `League` table.** A19 dropped it unused. The chain is walked on demand and cached for 24 h in memory: one Sleeper call per season of history per day per instance, and past league IDs never reach the database. A completed season's names and slots come from Sleeper for that season's own league ID; its weeks come from SQL.
 
 Failure case: the chain exists only if the commissioner used Sleeper's roll-over flow. A league recreated from scratch has a null `previous_league_id`, and its history is unreachable. Support an optional `League:SeasonOverrides` map for that case, empty by default; the walk fills in the rest.
 

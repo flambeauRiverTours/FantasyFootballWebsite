@@ -56,6 +56,12 @@ export function hasConsistency(totals: TotalsPayload): totals is ConsistentTotal
   );
 }
 
+/** The §09 body of `/api/seasons`: every season that can be served, newest first. */
+export interface SeasonsPayload {
+  current: number;
+  available: number[];
+}
+
 export interface WeekPayload {
   week: number;
   actual: number;

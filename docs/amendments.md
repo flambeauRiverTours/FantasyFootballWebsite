@@ -1179,6 +1179,42 @@ the outline reaches at least 3.5:1 and the line 4.4:1 in both themes.
 and the NFL postseason are out of scope. The code does not yet enforce this: it
 counts every week up to Sleeper's current week. T64 caps it.
 
+## A34 · Past seasons, and the season picker
+
+2026-10-13. Decisions for T29 and T56.
+
+**The chain is walked on demand, not stored.** D8 planned a `League` table filled
+by the daily timer; A19 dropped it unused. `SeasonChain` follows
+`previous_league_id` from the configured league and caches the result for 24 h,
+with guards against a loop and a runaway depth. That costs one Sleeper call per
+season of history per day per instance, and past league IDs stay out of the
+database.
+
+**A completed season is its stored weeks plus its own league's metadata.** Weeks
+come from the store, all final; the league name, team names and slots come from
+Sleeper for that season's league ID, so names read as they stood that year. No
+matchup is fetched. A year the chain does not reach, or with nothing stored, is
+absent: a 404 listing the available seasons, never a synchronous backfill
+(design §09). A completed season is served with `max-age=31536000, immutable`;
+`/api/seasons` lists the current season plus each earlier one with stored weeks.
+
+**The rollover stays a hand edit, made to the GitHub secret.** August's
+checklist changes `LEAGUE_ID` and redeploys. It previously said to edit the
+Azure app setting, which the next deploy overwrites from the secret, reverting
+to last year's league. Discovering the new league automatically would need a
+manager's Sleeper user ID as a second secret.
+
+**`League:SeasonOverrides` is deferred.** D8 adds it for a league recreated
+from scratch, whose chain cannot reach older seasons. This league was created by
+rollover, so nothing needs it; it is a year → league ID map merged over the
+chain when it does.
+
+**The picker is hidden until there are two seasons.** Per the standard that
+controls without data are hidden. 2026 is the league's first season, so it
+appears on its own after the 2027 rollover; until then it is tested against an
+invented two-season chain. On a phone the masthead's status text is hidden, as
+before, but the picker stays.
+
 ## Corrections applied to the design
 
 **All of these are already applied** to `design.md`, each marked **Corrected**

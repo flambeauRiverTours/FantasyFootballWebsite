@@ -23,6 +23,11 @@ namespace FantasyLeague.Core.Tests
         public string DefaultMatchups { get; set; } = "[]";
         public string Players { get; set; } = Bodies.Players();
 
+        /// <summary>League bodies by league id, for a chain of seasons; any other id gets <see cref="League"/>.</summary>
+        public Dictionary<string, string> Leagues { get; } = [];
+
+        public int MatchupRequests { get; private set; }
+
         /// <summary>
         /// The real league as captured: every <c>wk*-matchups.json</c> verbatim,
         /// the latest served as the week in progress, the league's own slots and
@@ -105,11 +110,12 @@ namespace FantasyLeague.Core.Tests
             var marker = path.LastIndexOf("/matchups/", StringComparison.Ordinal);
             if (marker >= 0)
             {
+                MatchupRequests++;
                 var week = int.Parse(path[(marker + "/matchups/".Length)..]);
                 return Matchups.TryGetValue(week, out var scripted) ? scripted : DefaultMatchups;
             }
 
-            return League;
+            return Leagues.TryGetValue(path[(path.LastIndexOf('/') + 1)..], out var league) ? league : League;
         }
     }
 
@@ -123,6 +129,12 @@ namespace FantasyLeague.Core.Tests
             var slots = rosterPositions.Length > 0 ? rosterPositions : ["QB", "RB", "FLEX", "BN"];
             var json = JsonSerializer.Serialize(slots);
             return $$"""{"league_id":"L1","previous_league_id":null,"season":"2026","name":"Test","status":"in_season","total_rosters":2,"roster_positions":{{json}}}""";
+        }
+
+        public static string League(int season, string? previousLeagueId, string name = "Test")
+        {
+            var previous = previousLeagueId is null ? "null" : $"\"{previousLeagueId}\"";
+            return $$"""{"previous_league_id":{{previous}},"season":"{{season}}","name":"{{name}}","roster_positions":["QB","RB","FLEX","BN"]}""";
         }
 
         public static string Users() =>

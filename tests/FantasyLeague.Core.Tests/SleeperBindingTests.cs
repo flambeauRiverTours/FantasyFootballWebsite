@@ -90,6 +90,8 @@ namespace FantasyLeague.Core.Tests
                 """);
 
             league.Name.Should().Be("Test");
+            league.Season.Should().Be(2026, "the season arrives as a string");
+            SleeperMapper.ToSeasonLink(league).PreviousLeagueId.Should().BeNull("a first season has nothing to roll over from");
             Slot.Parse(league.RosterPositions!).Should().HaveCount(11);
         }
 
@@ -262,15 +264,27 @@ namespace FantasyLeague.Core.Tests
         [InlineData("   ")]
         public void An_unnamed_league_gets_the_default_name(string? name)
         {
-            var league = new LeagueDto(name, ["QB"]);
+            var league = new LeagueDto(name, ["QB"], 2026, null);
 
             SleeperMapper.ToLeagueName(league).Should().Be("Fantasy Football League");
+        }
+
+        [Theory]
+        [InlineData("prev-1", "prev-1")]
+        [InlineData(null, null)]
+        [InlineData("", null)]
+        [InlineData("0", null)]
+        public void A_league_links_to_the_season_before_it(string? previous, string? expected)
+        {
+            var link = SleeperMapper.ToSeasonLink(new LeagueDto("Bosty Base", ["QB"], 2027, previous));
+
+            link.Should().Be(new SeasonLink(2027, expected));
         }
 
         [Fact]
         public void A_named_league_keeps_its_name()
         {
-            var league = new LeagueDto("Bosty Base", ["QB"]);
+            var league = new LeagueDto("Bosty Base", ["QB"], 2026, null);
 
             SleeperMapper.ToLeagueName(league).Should().Be("Bosty Base");
         }
@@ -278,7 +292,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void A_league_with_no_roster_positions_is_rejected()
         {
-            var league = new LeagueDto("Bosty Base", null);
+            var league = new LeagueDto("Bosty Base", null, 2026, null);
 
             var act = () => SleeperMapper.ToSlots(league);
 
