@@ -2,15 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import App from '../src/App';
 import { payload } from './fixture';
+import { seasonRequests, serveApi } from './api';
 
-function stubFetch() {
-  return vi
-    .spyOn(globalThis, 'fetch')
-    .mockImplementation(
-      async () =>
-        new Response(JSON.stringify(payload), { status: 200, headers: { ETag: 'W/"1"' } }),
-    );
-}
+const stubFetch = () => serveApi(payload);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -24,8 +18,8 @@ describe('App', () => {
 
     render(<App />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-    expect(String(fetch.mock.calls[0]?.[0])).toMatch(/\/api\/season\?season=2025$/);
+    await waitFor(() => expect(seasonRequests(fetch)).not.toHaveLength(0));
+    expect(seasonRequests(fetch)[0]).toMatch(/\/api\/season\?season=2025$/);
   });
 
   it('asks for the current season when the URL names none, or names something that is not a year', async () => {
@@ -34,8 +28,8 @@ describe('App', () => {
 
     render(<App />);
 
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-    expect(String(fetch.mock.calls[0]?.[0])).toMatch(/\/api\/season$/);
+    await waitFor(() => expect(seasonRequests(fetch)).not.toHaveLength(0));
+    expect(seasonRequests(fetch)[0]).toMatch(/\/api\/season$/);
   });
 
   it('titles the tab with the league once it loads', async () => {

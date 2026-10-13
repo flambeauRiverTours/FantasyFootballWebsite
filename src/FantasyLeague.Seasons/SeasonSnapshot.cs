@@ -14,6 +14,7 @@ namespace FantasyLeague.Seasons
     /// <param name="Teams">Every roster that counts. A roster excluded by A1 is never here.</param>
     /// <param name="UnresolvedPlayerIds">Rostered ids the player map could not explain, excluded rosters included.</param>
     /// <param name="Violations">Invariant breaches found while assembling, excluded rosters included.</param>
+    /// <param name="IsCurrent">Whether this is the live season; false for a completed one (A34).</param>
     /// <remarks>
     /// An excluded roster is left out of every metric but still checked: a
     /// solver bug shows on the placeholder team's lineup as well as any other.
@@ -29,5 +30,6 @@ namespace FantasyLeague.Seasons
         IReadOnlyList<Slot> Slots,
         IReadOnlyList<TeamSeason> Teams,
         IReadOnlyList<string> UnresolvedPlayerIds,
-        IReadOnlyList<InvariantViolation> Violations);
+        IReadOnlyList<InvariantViolation> Violations,
+        bool IsCurrent);
 }

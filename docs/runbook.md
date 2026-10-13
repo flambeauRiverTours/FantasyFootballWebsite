@@ -290,12 +290,12 @@ When the league rolls over to a new season, point the site at it. This is the on
 
 1. In Sleeper, create the new season with **roll over**, not as a fresh league. Rollover keeps the link to the previous season, which is how past seasons stay visible.
 2. Get the new league number from the address bar, as in Step 2.
-3. Point the site at it:
+3. Point the site at it. Change the GitHub secret, not the Azure setting: every deploy rewrites the
+   Azure setting from the secret, so an edit made only in Azure is undone by the next deploy.
 
 ```bash
-FUNC=$(az functionapp list -g rg-myleague --query "[0].name" -o tsv | tr -d '\r')
-az functionapp config appsettings set -n "$FUNC" -g rg-myleague \
-  --settings "League__CurrentLeagueId=<new league number>"
+gh secret set LEAGUE_ID --body "<new league number>"
+gh workflow run deploy.yml
 ```
 
 4. Check the new year appears:
@@ -305,7 +305,7 @@ curl -s "https://$(az functionapp list -g rg-myleague \
   --query "[0].defaultHostName" -o tsv | tr -d '\r')/api/seasons"
 ```
 
-The site walks backwards from the configured league. It never discovers a new season itself; item 3 is the whole job.
+The site walks backwards from the configured league (A34). It never discovers a new season itself; item 3 is the whole job. Last season stays in the season picker, served from the database, once its weeks are stored.
 
 ### Whenever GitHub offers
 

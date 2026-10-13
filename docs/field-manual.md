@@ -372,6 +372,8 @@ Moved behind M4 on 2026-09-14. None is blocked on effort; each waits on somethin
 
 ## T29 · Season chain walk — 2.0 h
 
+**Corrected (A34): built differently.** No `League` table and no upsert: `SeasonChain` walks the chain on demand and caches it for 24 h. A completed season's weeks come from SQL and its names and slots from Sleeper for its own league ID. `League:SeasonOverrides` is deferred. The text below is the original plan.
+
 Sleeper links each season's league to the previous one. Start at the configured league ID, follow `previous_league_id` backwards, and upsert one `League` row per hop.
 
 ```csharp

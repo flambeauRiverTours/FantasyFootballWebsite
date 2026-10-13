@@ -15,6 +15,26 @@ namespace FantasyLeague.Seasons
     public static class SeasonETag
     {
         /// <summary>
+        /// Chooses how long a season response may be cached.
+        /// </summary>
+        /// <param name="payload">The response body.</param>
+        /// <returns>The <c>Cache-Control</c> value.</returns>
+        /// <remarks>
+        /// Live: 5 s, close to the games, and the 5 s season cache makes a request
+        /// inside it free. Completed: a year, because it cannot change (design §09).
+        /// </remarks>
+        public static string CacheControl(SeasonPayload payload) =>
+            payload.IsCurrent ? "public, max-age=5" : "public, max-age=31536000, immutable";
+
+        /// <summary>
+        /// Builds a validator for the seasons list.
+        /// </summary>
+        /// <param name="payload">The response body.</param>
+        /// <returns>A weak tag that changes when a season is added.</returns>
+        public static string Compute(SeasonsPayload payload) =>
+            $"W/\"seasons-{payload.Current}-{string.Join('-', payload.Available)}\"";
+
+        /// <summary>
         /// Builds a validator for one response.
         /// </summary>
         /// <param name="payload">The response body.</param>
@@ -37,7 +57,7 @@ namespace FantasyLeague.Seasons
         /// Decides whether a conditional request already holds this version.
         /// </summary>
         /// <param name="ifNoneMatch">The request's If-None-Match header.</param>
-        /// <param name="etag">The tag from <see cref="Compute"/>.</param>
+        /// <param name="etag">The tag from <see cref="Compute(SeasonPayload)"/> or <see cref="Compute(SeasonsPayload)"/>.</param>
         /// <returns><c>true</c> when a 304 is the right answer.</returns>
         /// <remarks>
         /// The header is a comma separated list and a client may send the tag

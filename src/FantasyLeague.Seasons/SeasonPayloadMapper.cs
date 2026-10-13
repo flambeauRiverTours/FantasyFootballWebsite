@@ -28,7 +28,7 @@ namespace FantasyLeague.Seasons
             return new SeasonPayload(
                 snapshot.LeagueName,
                 snapshot.Season,
-                true, // only the current season is served until T29 (A19)
+                snapshot.IsCurrent,
                 snapshot.CurrentWeek,
                 snapshot.FinalThroughWeek,
                 asOfUtc,
@@ -41,8 +41,10 @@ namespace FantasyLeague.Seasons
         /// Maps the seasons that can be served.
         /// </summary>
         /// <param name="current">The live season.</param>
-        /// <returns>The response body. Only the current season is served until T29.</returns>
-        public static SeasonsPayload ToSeasonsPayload(int current) => new(current, [current]);
+        /// <param name="available">Every season that can be served.</param>
+        /// <returns>The response body, newest season first.</returns>
+        public static SeasonsPayload ToSeasonsPayload(int current, IEnumerable<int> available) =>
+            new(current, [.. available.Append(current).Distinct().OrderDescending()]);
 
         /// <summary>
         /// Reduces the startable slots to the distinct codes, in roster_positions order.

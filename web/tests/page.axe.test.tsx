@@ -4,6 +4,7 @@ import axe from 'axe-core';
 import App from '../src/App';
 import type { SeasonPayload } from '../src/api/types';
 import { payload } from './fixture';
+import { serveApi } from './api';
 
 // the whole page in each of its states, so a panel added later is checked
 // without anyone remembering to add a test for it
@@ -35,9 +36,7 @@ afterEach(() => {
 
 describe('The page', () => {
   it('has no axe violations once the season loads, radar included', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify(withRadar), { status: 200 }),
-    );
+    serveApi(withRadar);
     const { container } = render(<App />);
 
     // standings and consistency

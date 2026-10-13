@@ -53,22 +53,23 @@ namespace FantasyLeague.Functions.Functions
 
             var response = req.HttpContext.Response;
             var current = await seasons.GetCurrentSeasonAsync(cancellationToken);
+            var snapshot = requested is null || requested == current
+                ? await seasons.BuildAsync(cancellationToken)
+                : await seasons.BuildPastAsync(requested.Value, cancellationToken);
 
             // a year with no data is a well-formed request for something absent
-            if (requested != null && requested != current)
+            if (snapshot is null)
             {
                 response.Headers.CacheControl = "no-store";
+                var available = await seasons.GetAvailableSeasonsAsync(cancellationToken);
 
-                return new NotFoundObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
+                return new NotFoundObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current, available));
             }
 
-            var snapshot = await seasons.BuildAsync(cancellationToken);
             var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, time.GetUtcNow());
             var etag = SeasonETag.Compute(payload);
 
-            // short on purpose, to stay close to live during games; the 5 s
-            // season cache behind it makes a request inside the window cost nothing
-            response.Headers.CacheControl = "public, max-age=5";
+            response.Headers.CacheControl = SeasonETag.CacheControl(payload);
             response.Headers.ETag = etag;
 
             return SeasonETag.Matches(req.Headers.IfNoneMatch, etag)
@@ -87,11 +88,17 @@ namespace FantasyLeague.Functions.Functions
             CancellationToken cancellationToken)
         {
             var current = await seasons.GetCurrentSeasonAsync(cancellationToken);
+            var payload = SeasonPayloadMapper.ToSeasonsPayload(
+                current, await seasons.GetAvailableSeasonsAsync(cancellationToken));
+            var etag = SeasonETag.Compute(payload);
 
             // a new season appears once a year, so a day's delay at the rollover costs nothing
             req.HttpContext.Response.Headers.CacheControl = "public, max-age=86400";
+            req.HttpContext.Response.Headers.ETag = etag;
 
-            return new OkObjectResult(SeasonPayloadMapper.ToSeasonsPayload(current));
+            return SeasonETag.Matches(req.Headers.IfNoneMatch, etag)
+                ? new StatusCodeResult(StatusCodes.Status304NotModified)
+                : new OkObjectResult(payload);
         }
     }
 }

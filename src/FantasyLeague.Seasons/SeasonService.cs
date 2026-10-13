@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Core;
+﻿using System.ComponentModel;
+using FantasyLeague.Core;
 using FantasyLeague.Sleeper;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -25,6 +26,19 @@ namespace FantasyLeague.Seasons
         /// </summary>
         /// <returns>The current season's year.</returns>
         Task<int> GetCurrentSeasonAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Builds a completed season from its stored weeks and its own league's names and slots.
+        /// </summary>
+        /// <param name="season">The year.</param>
+        /// <returns>The season, or null when the chain does not reach it or nothing is stored for it.</returns>
+        Task<SeasonSnapshot?> BuildPastAsync(int season, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Gets every season that can be served: the current one, and each earlier one with stored weeks.
+        /// </summary>
+        /// <returns>Years, newest first.</returns>
+        Task<IReadOnlyList<int>> GetAvailableSeasonsAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -53,6 +67,7 @@ namespace FantasyLeague.Seasons
     /// <param name="options">The configured league and its local rules.</param>
     /// <param name="time">Clock for the build's duration.</param>
     /// <param name="reported">What this instance has already logged.</param>
+    /// <param name="chain">League ids of earlier seasons (D8).</param>
     internal sealed class SeasonService(
         ISleeperReader sleeper,
         IPlayerMapRefresher players,
@@ -61,6 +76,7 @@ namespace FantasyLeague.Seasons
         IOptions<LeagueOptions> options,
         TimeProvider time,
         ReportedProblems reported,
+        ISeasonChain chain,
         ILogger<SeasonService> logger) : ISeasonService
     {
         /// <summary>Tolerance for both invariants: Sleeper reports points to the cent.</summary>
@@ -70,6 +86,9 @@ namespace FantasyLeague.Seasons
         /// As long as the live response's max-age, so every poll inside it shares one build.
         /// </summary>
         private static readonly HybridCacheEntryOptions Snapshot = new() { Expiration = TimeSpan.FromSeconds(5) };
+
+        /// <summary>A completed season changes only if its weeks are backfilled; a day bounds that delay.</summary>
+        private static readonly HybridCacheEntryOptions PastSeason = new() { Expiration = TimeSpan.FromHours(24) };
 
         /// <inheritdoc />
         public async Task<SeasonSnapshot> BuildAsync(CancellationToken cancellationToken) =>
@@ -87,6 +106,66 @@ namespace FantasyLeague.Seasons
         /// <inheritdoc />
         public async Task<int> GetCurrentSeasonAsync(CancellationToken cancellationToken) =>
             (await sleeper.GetNFLStateAsync(cancellationToken)).Season;
+
+        /// <inheritdoc />
+        public async Task<SeasonSnapshot?> BuildPastAsync(int season, CancellationToken cancellationToken) =>
+            await cache.GetOrCreateAsync(
+                $"past:{season}",
+                async token => new PastBuild(await BuildPastUncachedAsync(season, options.Value, token)),
+                PastSeason,
+                cancellationToken: cancellationToken) is { Snapshot: var snapshot } ? snapshot : null;
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<int>> GetAvailableSeasonsAsync(CancellationToken cancellationToken)
+        {
+            var current = await GetCurrentSeasonAsync(cancellationToken);
+            var available = new List<int> { current };
+
+            foreach (var (season, leagueId) in await chain.GetAsync(cancellationToken))
+            {
+                if (season != current && (await stored.ReadAsync(leagueId, season, cancellationToken)).Count > 0)
+                {
+                    available.Add(season);
+                }
+            }
+
+            return [.. available.OrderDescending()];
+        }
+
+        /// <summary>
+        /// Assembles a completed season: every week from the store, final, with no Sleeper matchups.
+        /// </summary>
+        /// <param name="season">The year.</param>
+        /// <param name="configured">The league's local rules.</param>
+        /// <returns>The season, or null when it cannot be served.</returns>
+        private async Task<SeasonSnapshot?> BuildPastUncachedAsync(int season, LeagueOptions configured, CancellationToken cancellationToken)
+        {
+            if (!(await chain.GetAsync(cancellationToken)).TryGetValue(season, out var leagueId))
+            {
+                return null;
+            }
+
+            var weeks = await stored.ReadAsync(leagueId, season, cancellationToken);
+            if (weeks.Count == 0)
+            {
+                return null;
+            }
+
+            var league = await sleeper.GetLeagueAsync(leagueId, cancellationToken);
+            var excluded = ResolveExclusions(league, configured, season);
+            var lastWeek = weeks.Max(w => w.Week);
+
+            return new SeasonSnapshot(
+                string.IsNullOrWhiteSpace(configured.OverrideLeagueName) ? league.Name : configured.OverrideLeagueName,
+                season,
+                lastWeek,
+                lastWeek,
+                league.Slots,
+                GroupTeams(weeks, league.Teams, excluded),
+                [],
+                [],
+                IsCurrent: false);
+        }
 
         /// <summary>
         /// Assembles the season from Sleeper and the store.
@@ -114,7 +193,8 @@ namespace FantasyLeague.Seasons
                 league.Slots,
                 GroupTeams(weeks.TeamWeeks, league.Teams, excluded),
                 [.. weeks.Unresolved.Distinct()],
-                weeks.Violations);
+                weeks.Violations,
+                IsCurrent: true);
         }
 
         /// <summary>
@@ -277,5 +357,13 @@ namespace FantasyLeague.Seasons
                 logger.LogWarning("Rostered player {PlayerId} is missing from the player map.", playerId);
             }
         }
+
+        /// <summary>
+        /// A past season's build, null when it cannot be served, wrapped so the
+        /// cache holds the answer either way and hands back one instance.
+        /// </summary>
+        /// <param name="Snapshot">The season, or null.</param>
+        [ImmutableObject(true)]
+        private sealed record PastBuild(SeasonSnapshot? Snapshot);
     }
 }

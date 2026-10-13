@@ -5,6 +5,7 @@ import type { SeasonPayload, TeamPayload, TotalsPayload } from '../src/api/types
 import ConsistencyPanel from '../src/components/ConsistencyPanel';
 import App from '../src/App';
 import { payload } from './fixture';
+import { serveApi } from './api';
 
 function team(rosterId: number, name: string, consistency: Partial<TotalsPayload>): TeamPayload {
   return {
@@ -133,11 +134,7 @@ describe('The page', () => {
     vi.restoreAllMocks();
   });
 
-  function serve(body: SeasonPayload) {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify(body), { status: 200 }),
-    );
-  }
+  const serve = (body: SeasonPayload) => serveApi(body);
 
   it('shows the consistency panel once sigma exists', async () => {
     serve(season);
