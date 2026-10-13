@@ -129,6 +129,7 @@ resource site 'Microsoft.Web/staticSites@2023-12-01' = {
     name: 'Free'
     tier: 'Free'
   }
+  properties: {} // required even when empty: preflight rejects a static site without it
 }
 
 resource functions 'Microsoft.Web/sites@2024-04-01' = {
