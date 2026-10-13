@@ -193,7 +193,7 @@ Started 2026-10-12. Goal: a prospective employer can land on the repo or its
 site and quickly see what was built, how, and to what standard. In order; each
 one feeds the next.
 
-- [ ] **T60** Engineering standards — `docs/standards.md`. A terse, bulleted
+- [x] **T60** Engineering standards — `docs/standards.md`. A terse, bulleted
       list of coding and design standards, one section per domain. Grounded in
       what the repo already enforces (`Directory.Build.props`, `.editorconfig`,
       `.oxlintrc.json`, CI) and the design's D-decisions; where they disagree with
@@ -391,7 +391,7 @@ one feeds the next.
               13. **Done (A28): 25/min per instance.** The token bucket is per instance, so the 50/min limit is too:
                   three instances could send 150/min. Found while recalculating
                   item 1; §07 now says so
-      - [ ] **3b · Data and integrations, high-level review** — 25 items,
+      - [x] **3b · Data and integrations, high-level review** — 25 items,
             2026-10-13.
             **1–4 done 2026-10-13.** No storage account is now a start-up
             failure (`BlobStorageOptions.ConnectionString` is required, with
@@ -506,7 +506,7 @@ one feeds the next.
                   runbook step 4. Without it the deploy turns shared keys off
                   and then fails to grant the roles that replace them, leaving
                   the app unable to reach storage.
-            - [ ] After the first green deploy, delete the
+            - [x] After the first green deploy, delete the
                   `AZURE_STATIC_WEB_APPS_API_TOKEN` GitHub secret.
             - [x] Deploy `infra/budget.bicep` once with the existing budget's
                   start date (runbook, step 6), so the existing budget's alert
@@ -642,7 +642,11 @@ one feeds the next.
 σ came out of the standings table on 2026-10-07 (**A17**): its range mark was
 illegible at table size, and it had shipped without the figure beside it.
 
-- [ ] **T59** Consistency panel — 3 h `±` · σ with room to read it
+- [x] **T59** Consistency panel — 3 h `±` · σ with room to read it.
+      **Done 2026-10-13 (A33):** `ConsistencyPanel`, steadiest first, σ only,
+      absent below four weeks, each mark centred on its team's mean on one
+      shared scale. Verified in the browser against live data at 375 and
+      1280 px; 201 web tests pass, axe clean, initial JS 113 KB gzipped.
       A panel of its own, one row per team, sharing a scale: the range mark
       from §04 (lowest to highest week, a tick at the mean, a ±σ band) drawn
       wide enough to read, with the σ figure beside it. The first draft of that
@@ -651,6 +655,13 @@ illegible at table size, and it had shipped without the figure beside it.
       or rebuild it. Hidden, not empty, below
       four finalized weeks (**D1**). Decide whether CV belongs here too or
       stays on the chart (**D3**). Rank by σ, or keep the standings order?
+
+- [ ] **T64** Count the regular season only (Q4, A33) — 1.5 h `±`.
+      Stop the season at the league's last regular-season week: the week before
+      `settings.playoff_week_start` when it is set, else the NFL's last regular
+      week. Ignore weeks Sleeper reports while `season_type` is `post`. Needed
+      before week 15, the usual first fantasy playoff week. Tests on the
+      captured league with an invented playoff week.
 
 ---
 
@@ -762,12 +773,12 @@ Nothing here blocks anything.
 - [ ] **F6 · The Trivy exception for `AZU-0012` expires 2027-03-01.**
       After that the storage-firewall finding returns and CI goes red with no
       code change behind it. The rationale is A11.
-- [ ] **F7 · `<UserSecretsId>` was never added.** A2 describes user-secrets for
+- [x] **F7 · `<UserSecretsId>` was never added.** Closed: the README now says `local.settings.json` (T61 7). A2 describes user-secrets for
       local development; the projects use `local.settings.json` and an
       environment variable instead. Both keep the id out of the repo, so this is
       a documentation mismatch rather than a leak.
 
-- [ ] **F8 · Spend is not quite $0.00.** $0.021 five days into October, so about
+- [x] **F8 · Spend is not quite $0.00.** Closed by A30: storage, ≈ $0.15/month; the claim is amended. $0.021 five days into October, so about
       $0.13 a month. Far under the $1 budget, but the design and README say
       $0.00 steady state. Find the meter in Cost Analysis (storage transactions or
       egress are the likely ones), then fix it or amend the claim.
@@ -816,8 +827,8 @@ returning `actual` and every test would still be green.
 Q1, Q2, Q3, Q7 and Q8 were settled on 2026-09-10 against the live league; full
 answers are in [`docs/amendments.md`](../docs/amendments.md).
 
-- [ ] **Q4** Regular season only, or through the playoffs? —
-      `settings.playoff_week_start` is `0`, i.e. unset. Check league settings.
+- [x] **Q4** Regular season only, or through the playoffs? — **Regular season
+      only** (A33), decided 2026-10-13. Enforced by T64.
 - [x] **Q5** Minimum weeks before sigma appears — **four**, per D1, and
       implemented that way in `populationSigma`. Below four every consistency
       figure is null rather than zero.
@@ -864,6 +875,7 @@ Listed here only so their implementation state is visible in one place.
 | **A30** | No stored keys; budget alert at fifty cents; an exception alert         | done — T61 4; two manual steps before merging                           |
 | **A31** | The budget leaves the pipeline; the cost script and firewall dance go | done — T61 4b, items 6, 7, 11, 15                                       |
 | **A32** | The supply chain covers the web app: npm licences, audit, Dependabot | done — T61 5                                                            |
+| **A33** | Consistency panel, steadiest first; regular season only           | T59 done; T64 open                                                      |
 
 ---
 

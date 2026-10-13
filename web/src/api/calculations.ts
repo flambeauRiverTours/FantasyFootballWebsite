@@ -1,5 +1,6 @@
 import { median } from 'd3-array';
-import type { SeasonPayload, TeamPayload, WeekPayload } from './types';
+import { hasConsistency } from './types';
+import type { ConsistentTotals, SeasonPayload, TeamPayload, WeekPayload } from './types';
 
 /** One plotted value at one week. */
 export interface Point {
@@ -122,6 +123,38 @@ const SigmaLineWeeks = 5;
 
 /** Final weeks before the league median gives a line two points long. */
 const MedianLineWeeks = 2;
+
+/** A team that has every consistency figure. */
+export interface ConsistencyRow {
+  team: TeamPayload;
+  totals: ConsistentTotals;
+}
+
+/**
+ * Teams with a sigma, steadiest first, ties by name. Empty below four finalized
+ * weeks, where sigma is null for everyone (D1).
+ */
+export function consistencyRows(teams: TeamPayload[]): ConsistencyRow[] {
+  return teams
+    .flatMap((team) => (hasConsistency(team.totals) ? [{ team, totals: team.totals }] : []))
+    .sort((a, b) => a.totals.sigma - b.totals.sigma || a.team.name.localeCompare(b.team.name));
+}
+
+/**
+ * Points either side of a team's mean, shared by every row (design §04). Each
+ * mark is centred on its own mean, so widths compare spread; one scale keeps a
+ * wide mark meaning a wide spread.
+ */
+export function consistencyDomain(rows: ConsistencyRow[]): [number, number] {
+  // a skewed team's mean ± σ can pass its own lowest or highest week
+  const reach = Math.max(
+    0,
+    ...rows.map(({ totals: t }) => Math.max(t.mean - t.min, t.max - t.mean, t.sigma)),
+  );
+  // every week equal: widen so the mark has somewhere to sit
+  const half = reach === 0 ? 1 : reach;
+  return [-half, half];
+}
 
 /** True once the sigma chart has a line to draw. */
 export function canPlotSigma(finalThroughWeek: number): boolean {
