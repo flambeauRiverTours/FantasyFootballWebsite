@@ -59,3 +59,4 @@ incident itself belongs in the commit or the amendment.
 
 - Never put a real ID in a test, even a harmless one; satisfy its shape with an obvious placeholder.
 - Read a settings file as keys only, or with every value replaced; never by listing keys to hide.
+- Branch off a remote ref with `--no-track`: `checkout -B x origin/main` makes origin/main the upstream, and a plain `git push` then lands on main.
