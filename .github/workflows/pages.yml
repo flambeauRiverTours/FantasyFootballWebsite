@@ -20,7 +20,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # a job-level block replaces the workflow's, so contents: read is restated for checkout
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
