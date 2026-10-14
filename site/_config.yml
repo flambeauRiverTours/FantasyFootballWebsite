@@ -1,3 +1,4 @@
 title: Ideal Points
 description: Live fantasy football standings on Azure for about $0.25 a month
-theme: jekyll-theme-cayman
+# Primer is GitHub's plain default; Cayman put a full-width banner over every page
+theme: jekyll-theme-primer

@@ -1,3 +1,5 @@
+# Ideal Points
+
 A live leaderboard for my fantasy football league, with some fun additional analytics. I built this over a month or so. 
 
 | ≈ $0.25 / month | ≈ 4.4 Sleeper req/min | ≤ 45 s score age | 600+ tests |
