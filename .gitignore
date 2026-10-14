@@ -438,3 +438,7 @@ secrets/
 *.bicepparam
 !*.example.bicepparam
 tests/fixtures/users*.json
+
+# local tooling: dev-server launch config and one-off maintenance scripts
+.claude/launch.json
+scripts/one-off/

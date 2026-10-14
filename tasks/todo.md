@@ -1,7 +1,7 @@
 # Ideal Points — Tasks
 
-Task IDs match [`docs/field-manual.md`](../docs/field-manual.md). Reasons live in
-[`docs/amendments.md`](../docs/amendments.md); finished work's detail is in git history.
+Reasons live in [`docs/amendments.md`](../docs/amendments.md); finished work's detail is in
+git history.
 `±` marks an estimate that could run double.
 
 **Status (2026-10-13).** M0–M7 built and deployed. T59–T61 done bar two checks below.
@@ -41,6 +41,8 @@ Task IDs match [`docs/field-manual.md`](../docs/field-manual.md). Reasons live i
 - [ ] **T62** Rewrite the design for an employer: problem, decisions, trade-offs, measurements;
       history one click away. Includes CLAUDE.md, which still lists A1–A12.
 - [ ] **T63** A GitHub Pages site for the project, including the runbook.
+      Stubbed: `site/index.md` (Jekyll, Mermaid) and `pages.yml`. Left: screenshots, code links,
+      making the repo public, and enabling Pages (Settings > Pages > GitHub Actions).
 - [ ] **T61 · two checks left**
   - [ ] Domain 3, item 10: confirm the Tuesday 12:00 UTC finalize runs after Sleeper's week rolls
         over. App Insights: "Finalized … through week X".
