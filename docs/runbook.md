@@ -378,4 +378,3 @@ az staticwebapp secrets reset-api-key -n "$SWA" -g rg-myleague
 
 - `README.md` explains what the three numbers on the page mean.
 - `docs/design.md` explains why the site is built this way.
-- `docs/field-manual.md` is the build itself, task by task.

@@ -32,7 +32,7 @@ and fixtures.
   failure of this check unactionable.
 - Docs should discover identifiers with `az ... list --query "[0].name"` rather
   than naming them. Flag any hardcoded name as a finding even in a comment.
-- `docs/field-manual.md` carried twelve of these for weeks. Do not assume a file
+- A since-deleted planning doc carried twelve of these for weeks. Do not assume a file
   is clean because it looks maintained.
 
 ## Output

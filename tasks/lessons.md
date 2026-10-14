@@ -38,11 +38,11 @@ incident itself belongs in the commit or the amendment.
 - For an overflow, list elements wider than the viewport before theorising; the first is the cause.
 - A sticky panel taller than its container hides its overflow; test by forcing tall content.
 - UI whose job is timing must be watched with the slow case forced; tests cannot see it.
-- Check a field-manual task's premise against the code before building it; unbuilt tasks keep stale premises longest.
+- Check a planned task's premise against the code before building it; unbuilt tasks keep stale premises longest.
 
 ## Shell and CI
 
-- Run the manual's shell blocks in Git Bash; a command that depends on its shell says so and checks it.
+- Run the runbook's shell blocks in Git Bash; a command that depends on its shell says so and checks it.
 - On Windows, `$( )` keeps a trailing `\r`; strip it with `tr -d '\r'` before storing a value.
 - `! cmd` under `set -e` is not a guard; write `if cmd; then …; exit 1; fi`, and prove a gate fails once.
 - Under `pipefail`, never pipe a large download into an early-exit reader (`grep -q`, `head`); write a file.

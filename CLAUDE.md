@@ -25,7 +25,6 @@ boilerplate, documentation and task updates, and implements features when asked.
 | [`docs/amendments.md`](docs/amendments.md) | A1–A34: the reasoning behind every later decision and correction |
 | [`docs/standards.md`](docs/standards.md) | The standards, by domain |
 | [`docs/runbook.md`](docs/runbook.md) | Operations, including the yearly season rollover |
-| [`docs/field-manual.md`](docs/field-manual.md) | Step-by-step instructions for remaining tasks |
 | [`tasks/todo.md`](tasks/todo.md) · [`tasks/lessons.md`](tasks/lessons.md) | Task list · rules learned from corrections |
 | [`site/`](site/) | The GitHub Pages write-up (Markdown, built by Jekyll) |
 
