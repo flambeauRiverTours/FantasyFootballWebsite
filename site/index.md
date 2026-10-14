@@ -1,3 +1,5 @@
+# Fantasy Football Leaderboard
+
 A live leaderboard for my fantasy football league, with some fun additional analytics. I built this over a month or so. 
 
 | ≈ $0.25 / month | ≈ 4.4 Sleeper req/min | ≤ 45 s score age | 600+ tests |
@@ -58,13 +60,11 @@ flowchart LR
 | Supply chain | CodeQL, NuGet and npm audits, licence allowlist, Trivy, SBOM, SHA-pinned actions | Overkill for this level of project, but good practice |
 | Telemetry | App Insights + an alert on exceptions | Ingest is capped to stay inside the free allowance |
 
-- **Layering:** Core ← Sleeper ← Seasons ← hosts (Functions, CLI), with Data beside them (A21, A22). [Browse the projects](https://github.com/flambeauRiverTours/FantasyFootballWebsite/tree/main/src).
+- **Layering:** Core ← Sleeper ← Seasons ← hosts (Functions, CLI), with Data beside them. [Browse the projects](https://github.com/flambeauRiverTours/FantasyFootballWebsite/tree/main/src).
   - *Why:* the solver and statistics have no Azure dependency, so they test offline in milliseconds. The CLI host checks the numbers against live data without deploying.
 - **The request budget** is enforced by two mechanisms, and the second is the one that guarantees it.
-  - *Single-flight cache:* concurrent misses on one key share one fetch, so a cache expiry under load cannot become a thundering herd ([SleeperReader.cs](https://github.com/flambeauRiverTours/FantasyFootballWebsite/blob/main/src/FantasyLeague.Sleeper/SleeperReader.cs)).
-  - *Token bucket* inside the `HttpClient` pipeline: a bug or a bad cache key still cannot exceed 25/min, and a 429 backs off with jitter ([ServiceCollectionExtensions.cs](https://github.com/flambeauRiverTours/FantasyFootballWebsite/blob/main/src/FantasyLeague.Sleeper/ServiceCollectionExtensions.cs)).
-- **Decision records:** design decisions are D1–D11; every later deviation is an amendment, A1–A34.
-  - *Why:* each corrected figure stays next to the original, so the record shows where estimates met measurement.
+  - *Single-flight cache* so concurrent misses on one key share one fetch, so a cache expiry under load cannot become a thundering herd ([SleeperReader.cs](https://github.com/flambeauRiverTours/FantasyFootballWebsite/blob/main/src/FantasyLeague.Sleeper/SleeperReader.cs)).
+  - *Token bucket* inside the `HttpClient` pipeline. A bug or a bad cache key still cannot exceed 25/min, and a 429 backs off with jitter ([ServiceCollectionExtensions.cs](https://github.com/flambeauRiverTours/FantasyFootballWebsite/blob/main/src/FantasyLeague.Sleeper/ServiceCollectionExtensions.cs)).
 
 ```mermaid
 flowchart LR
