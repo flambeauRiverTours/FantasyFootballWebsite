@@ -7,6 +7,7 @@ on:
       - 'tasks/**'
       - '**/*.md'
       - 'LICENSE'
+      - 'site/**'
   push:
     branches: [main]
     paths-ignore:
@@ -14,6 +15,7 @@ on:
       - 'tasks/**'
       - '**/*.md'
       - 'LICENSE'
+      - 'site/**'
 
 permissions:
   id-token: write
