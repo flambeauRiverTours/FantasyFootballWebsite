@@ -26,6 +26,10 @@ updates:
       xunit:
         patterns:
           - xunit*
+      # EF Core's packages share one assembly version; mixing them fails the build (CS1705)
+      ef-core:
+        patterns:
+          - Microsoft.EntityFrameworkCore*
     ignore:
       # 8.x moved to the Xceed Community Licence, which is non-commercial only.
       # Pinned deliberately; see the licence gate in security.yml.
