@@ -61,3 +61,8 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: ci
+    groups:
+      # init and analyze refuse to run at different versions, so they move together
+      codeql:
+        patterns:
+          - github/codeql-action*
