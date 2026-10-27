@@ -332,6 +332,31 @@ resource failureAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   }
 }
 
+// App Insights creates this rule on its own, sending to Monitoring Reader and Contributor
+// role holders, which here is nobody. failureAlert covers the same ground, so it is
+// declared to keep it off, including in a rebuilt environment (A35)
+resource failureAnomalies 'Microsoft.AlertsManagement/smartDetectorAlertRules@2021-04-01' = {
+  name: 'Failure Anomalies - ${insights.name}'
+  location: 'global'
+  properties: {
+    description: 'Failure Anomalies notifies you of an unusual rise in the rate of failed HTTP requests or dependency calls.'
+    state: 'Disabled'
+    severity: 'Sev3'
+    frequency: 'PT1M'
+    detector: {
+      id: 'FailureAnomaliesDetector'
+    }
+    scope: [
+      insights.id
+    ]
+    actionGroups: {
+      groupIds: [
+        alerts.id
+      ]
+    }
+  }
+}
+
 output functionAppName string = functions.name
 output functionAppUrl string = 'https://${functions.properties.defaultHostName}'
 output staticWebAppName string = site.name

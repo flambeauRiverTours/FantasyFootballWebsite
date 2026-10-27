@@ -249,6 +249,7 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 - **It now watches failed requests** (`requests/failed`), which covers HTTP calls and timer runs alike, so a run that really fails still emails. Same price: one metric, one time series.
 - **404 and 499 are left out.** In those 30 days every failed request was one or the other: bots asking for `robots.txt` and `favicon.ico`, and browsers closing the page before the API answered.
 - **Renamed** to `alert-idealpoints-failures`. The deploy doesn't remove the old exceptions alert, so it's deleted once by hand.
+- **App Insights' own Failure Anomalies rule is declared, and off.** App Insights creates it automatically and sends it to Monitoring Reader and Contributor role holders, which here is nobody. It covers the same ground as the new alert, so the Bicep keeps it disabled, including in a rebuilt environment.
 
 Found in the same logs:
 
