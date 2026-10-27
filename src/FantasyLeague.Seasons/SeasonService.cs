@@ -180,7 +180,7 @@ namespace FantasyLeague.Seasons
             var state = await sleeper.GetNFLStateAsync(cancellationToken);
             var league = await sleeper.GetLeagueAsync(configured.CurrentLeagueId, cancellationToken);
             var excluded = ResolveExclusions(league, configured, state.Season);
-            var weeks = await ReadWeeksAsync(configured.CurrentLeagueId, state, league.Slots, playerMap, cancellationToken);
+            var weeks = await ReadWeeksAsync(configured.CurrentLeagueId, state, league.Slots, playerMap, excluded, cancellationToken);
 
             // debug: under load this runs every 5 s, and App Insights already times each request
             logger.LogDebug("Built season snapshot in {ElapsedMilliseconds}ms.", (long)time.GetElapsedTime(started).TotalMilliseconds);
@@ -225,12 +225,14 @@ namespace FantasyLeague.Seasons
         /// <param name="state">The current season and week.</param>
         /// <param name="slots">Startable slots for this season.</param>
         /// <param name="playerMap">The player map Sleeper's weeks are joined to.</param>
+        /// <param name="excluded">Rosters left out of every metric (A1), solved and checked all the same.</param>
         /// <returns>Every roster's weeks, with what did not resolve or add up.</returns>
         private async Task<SeasonWeeks> ReadWeeksAsync(
             string leagueId,
             NFLState state,
             IReadOnlyList<Slot> slots,
             IReadOnlyDictionary<string, PlayerRef> playerMap,
+            IReadOnlySet<int> excluded,
             CancellationToken cancellationToken)
         {
             var weeks = new SeasonWeeks();
@@ -247,7 +249,7 @@ namespace FantasyLeague.Seasons
 
                 foreach (var mapped in await sleeper.GetWeekAsync(leagueId, week, playerMap, cancellationToken))
                 {
-                    var teamWeek = ToTeamWeek(mapped, week, slots, isFinal);
+                    var teamWeek = ToTeamWeek(mapped, week, slots, isFinal, excluded.Contains(mapped.RosterId));
                     weeks.TeamWeeks.Add(teamWeek);
                     weeks.Unresolved.AddRange(mapped.UnresolvedPlayerIds);
                     weeks.Violations.AddRange(Check(mapped, teamWeek.IdealPts, week));
@@ -263,14 +265,17 @@ namespace FantasyLeague.Seasons
         /// <param name="mapped">The roster's week from Sleeper.</param>
         /// <param name="slots">Startable slots for this season.</param>
         /// <param name="isFinal">Whether the week's scores are settled.</param>
+        /// <param name="isExcluded">Whether the roster is left out of every metric (A1).</param>
         /// <returns>The week as the domain holds it.</returns>
-        private TeamWeek ToTeamWeek(RosterWeek mapped, int week, IReadOnlyList<Slot> slots, bool isFinal)
+        private TeamWeek ToTeamWeek(RosterWeek mapped, int week, IReadOnlyList<Slot> slots, bool isFinal, bool isExcluded)
         {
             var (idealPts, idealLineup) = IdealLineupSolver.Solve(mapped.Players, slots);
 
             var positions = mapped.Players.ToDictionary(p => p.Id.Value, p => p.FantasyPositions);
             var slotAverages = SlotAverager.WeekAverages(mapped.SlotStarters, mapped.PlayersPoints, positions, slots);
-            if (slotAverages is null)
+            // the placeholder team's lineup is never set, so it fails this every live week;
+            // it never reaches the radar, so there is nothing to report
+            if (slotAverages is null && !isExcluded)
             {
                 // roster_positions changed after this week was played
                 logger.LogError(

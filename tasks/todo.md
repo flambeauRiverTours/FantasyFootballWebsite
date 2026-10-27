@@ -43,9 +43,9 @@ git history.
 - [ ] **T63** A GitHub Pages site for the project, including the runbook.
       Stubbed: `site/index.md` (Jekyll, Mermaid) and `pages.yml`. Left: screenshots, code links,
       making the repo public, and enabling Pages (Settings > Pages > GitHub Actions).
-- [ ] **T61 · two checks left**
-  - [ ] Domain 3, item 10: confirm the Tuesday 12:00 UTC finalize runs after Sleeper's week rolls
-        over. App Insights: "Finalized … through week X".
+- [ ] **T61 · one check left**
+  - [x] Domain 3, item 10: the Tuesday 12:00 UTC finalize runs after Sleeper's week rolls over.
+        Confirmed 2026-10-27: all seven runs (Sep 15 to Oct 27) stored the week just played.
   - [ ] Domain 4b, item 16: try dropping the queue and table storage roles now that identity
         storage is live.
 

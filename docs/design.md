@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A34. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A35. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
@@ -375,7 +375,7 @@ Core has no Azure dependency, and that's the point of the layout: the bugs that 
 | Storage account | Standard LRS | Functions needs it regardless; it also holds the player map and the current season. No free grant, so the host's own traffic is the bill | ≈ $0.15, measured |
 | Azure SQL | Serverless, free offer | Off the request path since A16 | $0.00 |
 | Log Analytics + App Insights | Pay-as-you-go | Ingest capped at 0.16 GB/day to stay inside the 5 GB free | $0.00 |
-| Exception alert | Metric alert | Emails on any exception | ≈ $0.10 |
+| Failure alert | Metric alert | Emails when a request or timer run fails; 404 and 499 don't count (A35) | ≈ $0.10 |
 | **Total** | | | **≈ $0.25** |
 
 - **The ingest cap is 0.16 GB a day**: 5 GB free ÷ 31 days. I originally planned 1 GB a day, which would have allowed 31 GB a month and billed 26 of them.

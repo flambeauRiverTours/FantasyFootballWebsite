@@ -283,12 +283,13 @@ resource alerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
   }
 }
 
-// About $0.10 a month. Sees what the app throws, not what it logs as an error (A30)
-resource exceptionAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
-  name: 'alert-${namePrefix}-exceptions'
+// About $0.10 a month. Fires when a request or timer run actually fails (A35), not on
+// every exception logged: a database waking from pause throws once, then the retry succeeds
+resource failureAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-${namePrefix}-failures'
   location: 'global'
   properties: {
-    description: 'The Function App threw an exception.'
+    description: 'A request or timer run of the Function App failed.'
     severity: 2
     enabled: true
     scopes: [
@@ -302,9 +303,21 @@ resource exceptionAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
       allOf: [
         {
           criterionType: 'StaticThresholdCriterion'
-          name: 'exceptions'
-          metricName: 'exceptions/count'
+          name: 'failures'
+          metricName: 'requests/failed'
           metricNamespace: 'microsoft.insights/components'
+          // 404 is a bot asking for robots.txt or an unknown season; 499 is a browser
+          // closing the page before the answer. Neither is the app failing
+          dimensions: [
+            {
+              name: 'request/resultCode'
+              operator: 'Exclude'
+              values: [
+                '404'
+                '499'
+              ]
+            }
+          ]
           operator: 'GreaterThan'
           threshold: 0
           timeAggregation: 'Count'
