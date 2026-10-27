@@ -40,5 +40,27 @@
 
             return run;
         }
+
+        /// <summary>
+        /// Gets the first scheduled run strictly after a moment.
+        /// </summary>
+        /// <param name="now">The moment to look forward from.</param>
+        /// <returns>The run's start, in UTC.</returns>
+        /// <remarks>
+        /// The timer's own <c>ScheduleStatus.Next</c> reports the run in progress,
+        /// not the one after it, so the job logs this instead.
+        /// </remarks>
+        public static DateTimeOffset NextRunAfter(DateTimeOffset now)
+        {
+            var utc = now.ToUniversalTime();
+            var run = new DateTimeOffset(utc.Year, utc.Month, utc.Day, Hour, 0, 0, TimeSpan.Zero);
+
+            while (run <= utc || run.DayOfWeek != DayOfWeek.Tuesday || !Months.Contains(run.Month))
+            {
+                run = run.AddDays(1);
+            }
+
+            return run;
+        }
     }
 }

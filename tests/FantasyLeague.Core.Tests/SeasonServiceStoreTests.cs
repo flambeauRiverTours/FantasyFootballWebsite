@@ -2,6 +2,7 @@
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FantasyLeague.Core.Tests
 {
@@ -152,6 +153,32 @@ namespace FantasyLeague.Core.Tests
             var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
             snapshot.Violations.Should().NotBeEmpty().And.OnlyContain(v => v.RosterId == 2);
+        }
+
+        [Fact]
+        public async Task An_unset_lineup_is_reported_only_for_a_real_team()
+        {
+            // the placeholder never sets a lineup, so its live week always fails slot
+            // alignment; it never reaches the radar, so only roster 1 is worth an error
+            var socket = new LeagueSocket { State = Bodies.State(week: 1) };
+            socket.Matchups[1] = Bodies.Week(
+                Bodies.Matchup(1, 0m, starters: [], startersPoints: []),
+                Bodies.Matchup(2, 0m, starters: [], startersPoints: []));
+            var logs = new CapturingLoggerProvider();
+
+            var services = TestServices.Create(("League:ExcludedOwnerIds:0", "u2"));
+            services.AddLogging(b => b.AddProvider(logs));
+            services.AddSingleton<IFinalizedWeekStore>(new RecordingWeekStore());
+            services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
+                    .ConfigurePrimaryHttpMessageHandler(() => socket);
+            services.AddSeasonServiceWithNullStores();
+            using var provider = services.BuildServiceProvider();
+            await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(TestContext.Current.CancellationToken);
+
+            await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
+
+            logs.Entries.Where(e => e.Contains("do not line up")).Should().ContainSingle()
+                .Which.Should().StartWith("Roster 1 ");
         }
     }
 }

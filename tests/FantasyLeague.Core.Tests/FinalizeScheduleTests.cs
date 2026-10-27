@@ -35,6 +35,22 @@ namespace FantasyLeague.Core.Tests
             FinalizeSchedule.LastRunAtOrBefore(Utc(2027, 7, 4, 12)).Should().Be(Utc(2027, 2, 23, 12));
 
         [Fact]
+        public void The_run_in_progress_is_not_the_next_one() =>
+            FinalizeSchedule.NextRunAfter(Utc(2026, 10, 27, 12, 1)).Should().Be(Utc(2026, 11, 3, 12));
+
+        [Fact]
+        public void The_moment_a_run_starts_points_to_the_following_week() =>
+            FinalizeSchedule.NextRunAfter(Utc(2026, 10, 27, 12)).Should().Be(Utc(2026, 11, 3, 12));
+
+        [Fact]
+        public void A_Tuesday_morning_points_to_that_day() =>
+            FinalizeSchedule.NextRunAfter(Utc(2026, 10, 27, 9)).Should().Be(Utc(2026, 10, 27, 12));
+
+        [Fact]
+        public void The_last_February_run_points_to_September() =>
+            FinalizeSchedule.NextRunAfter(Utc(2027, 2, 23, 12, 1)).Should().Be(Utc(2027, 9, 7, 12));
+
+        [Fact]
         public void A_local_time_is_read_as_the_same_instant() =>
             FinalizeSchedule.LastRunAtOrBefore(new DateTimeOffset(2026, 10, 13, 8, 30, 0, TimeSpan.FromHours(-4)))
                 .Should().Be(Utc(2026, 10, 13, 12));

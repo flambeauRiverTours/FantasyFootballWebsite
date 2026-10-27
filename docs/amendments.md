@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A34 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A35 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 ## Open questions, answered
 
@@ -241,6 +241,20 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 - **The rollover is a hand edit of the GitHub secret, then a redeploy.** The runbook used to say to edit the Azure setting, which the next deploy would silently overwrite.
 - **A year → league ID override map is deferred** (T65); this league's chain is intact.
 - **The picker is hidden until there are two seasons.** It stays visible on phones.
+
+## A35 · The alert fires on failures, not on exceptions
+
+2026-10-27. The exception alert emailed about a "crash" on a Tuesday when the finalize job had worked: the database was waking from pause, threw once, and EF's retry stored the week 13 s later. Over the previous 30 days it saw 34 exceptions across about two weeks' worth of days. Almost all were host shutdowns on scale-in, timeouts, cancellations and that wake-up, none of them a failure anyone could act on.
+
+- **It now watches failed requests** (`requests/failed`), which covers HTTP calls and timer runs alike, so a run that really fails still emails. Same price: one metric, one time series.
+- **404 and 499 are left out.** In those 30 days every failed request was one or the other: bots asking for `robots.txt` and `favicon.ico`, and browsers closing the page before the API answered.
+- **Renamed** to `alert-idealpoints-failures`. The deploy doesn't remove the old exceptions alert, so it's deleted once by hand.
+- **App Insights' own Failure Anomalies rule is declared, and off.** App Insights creates it automatically and sends it to Monitoring Reader and Contributor role holders, which here is nobody. It covers the same ground as the new alert, so the Bicep keeps it disabled, including in a rebuilt environment.
+
+Found in the same logs:
+
+- **The finalize log's "Next:" showed the run in progress.** The timer's `ScheduleStatus.Next` is that run's own start, so the log now asks `FinalizeSchedule.NextRunAfter`, which reads the same schedule as the timer.
+- **The placeholder team (A1) logged an alignment error every live week.** Its lineup is never set, so its starters never match the slots; it was logged 53 times on one Sunday. It's still solved and checked by both invariants, but no longer reported, since it never reaches the radar.
 
 ## What the original design got wrong
 
