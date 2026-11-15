@@ -12,6 +12,7 @@
     /// <param name="Players">Every player rostered that week, with the points they scored.</param>
     /// <param name="IsFinal">Whether the week's scores are settled.</param>
     /// <param name="SlotAverages">Average points per slot. Empty when the mid-season rules guard excluded the week.</param>
+    /// <param name="MatchupId">The game played, shared with the opponent (T68): 0 for a bye, and null for a week stored before matchups were read.</param>
     public sealed record TeamWeek(
         int RosterId,
         int Week,
@@ -21,5 +22,6 @@
         IReadOnlyList<PlayerId> IdealLineup,
         IReadOnlyList<RosteredPlayer> Players,
         bool IsFinal,
-        IReadOnlyDictionary<string, decimal> SlotAverages);
+        IReadOnlyDictionary<string, decimal> SlotAverages,
+        int? MatchupId);
 }

@@ -114,7 +114,7 @@ namespace FantasyLeague.Core.Tests
     public class SeasonAveragesTests
     {
         private static TeamWeek Week(bool isFinal, IReadOnlyDictionary<string, decimal> slots) =>
-            new(1, 1, 0m, 0m, [], [], [], isFinal, slots);
+            new(1, 1, 0m, 0m, [], [], [], isFinal, slots, null);
 
         [Fact]
         public void Finalized_weeks_with_an_attribution_are_averaged()

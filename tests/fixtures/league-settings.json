@@ -1,6 +1,7 @@
 {
   "season": "2026",
   "settings": {
+    "league_average_match": 1,
     "playoff_round_type": 0,
     "playoff_teams": 6,
     "playoff_type": 0,

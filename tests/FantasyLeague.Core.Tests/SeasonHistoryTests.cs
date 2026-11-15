@@ -22,8 +22,17 @@ namespace FantasyLeague.Core.Tests
         public Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken cancellationToken) =>
             Task.FromResult(weeks.GetValueOrDefault((leagueId, season), []));
 
-        public Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> stored, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public List<(string League, int Season)> Writes { get; } = [];
+
+        public IReadOnlyList<TeamWeek> Stored(string leagueId, int season) => weeks.GetValueOrDefault((leagueId, season), []);
+
+        public Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> stored, CancellationToken cancellationToken)
+        {
+            // a season at a time, as the real store keeps it
+            weeks[(leagueId, season)] = stored;
+            Writes.Add((leagueId, season));
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>
@@ -41,7 +50,7 @@ namespace FantasyLeague.Core.Tests
         }
 
         private static TeamWeek Week(int rosterId, int week, decimal actual) =>
-            new(rosterId, week, actual, actual + 10m, [], [], [], true, new Dictionary<string, decimal>());
+            new(rosterId, week, actual, actual + 10m, [], [], [], true, new Dictionary<string, decimal>(), null);
 
         private static Task<(ISeasonService Service, ISeasonChain Chain)> BuildAsync(
             LeagueSocket socket, IFinalizedWeekStore store, params (string Key, string? Value)[] settings) =>
@@ -184,7 +193,93 @@ namespace FantasyLeague.Core.Tests
             var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(2, 1, 0m));
             var (service, _) = await BuildAsync(TwoSeasons(), store, ("League:ExcludedOwnerIds:0", "u2"));
 
-            (await service.BuildPastAsync(2025, Token))!.Teams.Should().ContainSingle().Which.RosterId.Should().Be(1);
+            var snapshot = (await service.BuildPastAsync(2025, Token))!;
+
+            snapshot.Teams.Should().ContainSingle().Which.RosterId.Should().Be(1);
+            snapshot.ExcludedTeams.Should().ContainSingle().Which.RosterId.Should().Be(2, "kept apart for head-to-head (T68)");
+        }
+
+        private static TeamWeek Week(int rosterId, int week, decimal actual, int? matchupId) =>
+            Week(rosterId, week, actual) with { MatchupId = matchupId };
+
+        [Fact]
+        public async Task The_backfill_fills_each_game_and_stores_the_placeholder_s_weeks()
+        {
+            // T68: a week stored before matchups were read, and without the placeholder's side of it
+            var store = new SeasonStore().With("L1", 2026, Week(1, 1, 35m) with { IdealPts = 999m });
+            var socket = TwoSeasons();
+            socket.Matchups[1] = Bodies.Week(Bodies.Matchup(1, 35m, matchupId: 3), Bodies.Matchup(2, 30m, matchupId: 3));
+            var (service, _) = await BuildAsync(socket, store, ("League:ExcludedOwnerIds:0", "u2"));
+
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(1);
+
+            var weeks = store.Stored("L1", 2026).ToDictionary(w => w.RosterId);
+            weeks[1].MatchupId.Should().Be(3);
+            weeks[1].IdealPts.Should().Be(999m, "a stored week is never re-solved against today's player map (D2)");
+            weeks[2].MatchupId.Should().Be(3, "the placeholder's week is stored, so the game pairs");
+        }
+
+        [Fact]
+        public async Task A_complete_backfill_reads_nothing()
+        {
+            var store = new SeasonStore().With("L1", 2026, Week(1, 1, 35m, matchupId: 1), Week(2, 1, 30m, matchupId: 1));
+            var socket = TwoSeasons();
+            var (service, _) = await BuildAsync(socket, store);
+
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(0);
+            socket.Requests.Should().NotContain(
+                path => path.Contains("/matchups/", StringComparison.Ordinal) || path.EndsWith("/rosters", StringComparison.Ordinal),
+                "a complete season is decided from the store alone; only the cached chain walk reaches Sleeper");
+            store.Writes.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task The_backfill_reads_at_most_twelve_weeks_a_run_and_finishes_on_the_next()
+        {
+            // the live site shares the token bucket
+            var store = new SeasonStore().With("L1", 2026, [.. Enumerable.Range(1, 15).SelectMany(w => new[] { Week(1, w, 35m), Week(2, w, 30m) })]);
+            var socket = TwoSeasons();
+            socket.DefaultMatchups = Bodies.Week(Bodies.Matchup(1, 35m, matchupId: 1), Bodies.Matchup(2, 30m, matchupId: 1));
+            var (service, _) = await BuildAsync(socket, store);
+
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(12);
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(3);
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(0);
+            store.Stored("L1", 2026).Should().OnlyContain(w => w.MatchupId == 1);
+        }
+
+        [Fact]
+        public async Task A_week_Sleeper_no_longer_serves_is_left_unfilled()
+        {
+            var store = new SeasonStore().With("L1", 2026, Week(1, 1, 35m));
+            var (service, _) = await BuildAsync(TwoSeasons(), store);
+
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(1);
+            store.Stored("L1", 2026).Should().ContainSingle().Which.MatchupId.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task A_season_that_fails_does_not_stop_the_others()
+        {
+            var store = new FailingSeason(new SeasonStore().With("L0", 2025, Week(1, 1, 35m), Week(2, 1, 30m)), failing: 2026);
+            var socket = TwoSeasons();
+            socket.Matchups[1] = Bodies.Week(Bodies.Matchup(1, 35m, matchupId: 2), Bodies.Matchup(2, 30m, matchupId: 2));
+            var (service, _) = await BuildAsync(socket, store);
+
+            (await service.BackfillMatchupsAsync(Token)).Should().Be(1);
+            store.Inner.Stored("L0", 2025).Should().OnlyContain(w => w.MatchupId == 2);
+        }
+
+        /// <summary>A store that cannot read one season.</summary>
+        private sealed class FailingSeason(SeasonStore inner, int failing) : IFinalizedWeekStore
+        {
+            public SeasonStore Inner => inner;
+
+            public Task<IReadOnlyList<TeamWeek>> ReadAsync(string leagueId, int season, CancellationToken cancellationToken) =>
+                season == failing ? throw new InvalidOperationException("unreadable") : inner.ReadAsync(leagueId, season, cancellationToken);
+
+            public Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken) =>
+                inner.WriteAsync(leagueId, season, weeks, cancellationToken);
         }
 
         [Fact]

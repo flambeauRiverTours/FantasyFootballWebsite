@@ -118,6 +118,13 @@
     "name": "Jalen Coker",
     "team": "CAR"
   },
+  "1166": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "Kirk Cousins",
+    "team": "MIN"
+  },
   "1169": {
     "fantasyPositions": [
       "QB"
@@ -181,18 +188,32 @@
     "name": "Bhayshul Tuten",
     "team": "JAX"
   },
+  "12491": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Corey Kiner",
+    "team": "NE"
+  },
   "12495": {
     "fantasyPositions": [
       "RB"
     ],
-    "name": "Ollie Gordon",
+    "name": "Ollie Gordon II",
     "team": "MIA"
+  },
+  "12501": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Matthew Golden",
+    "team": "GB"
   },
   "12506": {
     "fantasyPositions": [
       "TE"
     ],
-    "name": "Harold Fannin",
+    "name": "Harold Fannin Jr.",
     "team": "CLE"
   },
   "12507": {
@@ -241,7 +262,7 @@
     "fantasyPositions": [
       "WR"
     ],
-    "name": "Luther Burden",
+    "name": "Luther Burden III",
     "team": "CHI"
   },
   "12526": {
@@ -258,6 +279,13 @@
     "name": "Ashton Jeanty",
     "team": "LV"
   },
+  "12534": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Kyle Monangai",
+    "team": "CHI"
+  },
   "12545": {
     "fantasyPositions": [
       "QB"
@@ -270,7 +298,7 @@
       "K"
     ],
     "name": "Justin Tucker",
-    "team": null
+    "team": "KC"
   },
   "12711": {
     "fantasyPositions": [
@@ -278,6 +306,27 @@
     ],
     "name": "Tyler Loop",
     "team": "BAL"
+  },
+  "12718": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Konata Mumpfield",
+    "team": "LAR"
+  },
+  "13264": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Dohnte Meyers",
+    "team": "CIN"
+  },
+  "13281": {
+    "fantasyPositions": [
+      "WR"
+    ],
+    "name": "Jordyn Tyson",
+    "team": "NO"
   },
   "13286": {
     "fantasyPositions": [
@@ -292,6 +341,13 @@
     ],
     "name": "Jeremiyah Love",
     "team": "ARI"
+  },
+  "13337": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Emmett Johnson",
+    "team": "KC"
   },
   "13417": {
     "fantasyPositions": [
@@ -430,7 +486,7 @@
     "fantasyPositions": [
       "RB"
     ],
-    "name": "Aaron Jones",
+    "name": "Aaron Jones Sr.",
     "team": "MIN"
   },
   "421": {
@@ -535,7 +591,7 @@
     "fantasyPositions": [
       "WR"
     ],
-    "name": "Deebo Samuel",
+    "name": "Deebo Samuel Sr.",
     "team": "SF"
   },
   "5892": {
@@ -551,6 +607,13 @@
     ],
     "name": "Terry McLaurin",
     "team": "WAS"
+  },
+  "6650": {
+    "fantasyPositions": [
+      "K"
+    ],
+    "name": "Chase McLaughlin",
+    "team": "TB"
   },
   "6770": {
     "fantasyPositions": [
@@ -640,7 +703,7 @@
     "fantasyPositions": [
       "RB"
     ],
-    "name": "Travis Etienne",
+    "name": "Travis Etienne Jr.",
     "team": "NO"
   },
   "7547": {
@@ -654,7 +717,7 @@
     "fantasyPositions": [
       "TE"
     ],
-    "name": "Kyle Pitts",
+    "name": "Kyle Pitts Sr.",
     "team": "ATL"
   },
   "7564": {
@@ -713,6 +776,13 @@
     "name": "Trey McBride",
     "team": "ARI"
   },
+  "8131": {
+    "fantasyPositions": [
+      "TE"
+    ],
+    "name": "Isaiah Likely",
+    "team": "NYG"
+  },
   "8137": {
     "fantasyPositions": [
       "WR"
@@ -724,7 +794,7 @@
     "fantasyPositions": [
       "RB"
     ],
-    "name": "James Cook",
+    "name": "James Cook III",
     "team": "BUF"
   },
   "8144": {
@@ -759,7 +829,7 @@
     "fantasyPositions": [
       "RB"
     ],
-    "name": "Kenneth Walker",
+    "name": "Kenneth Walker III",
     "team": "KC"
   },
   "8155": {
@@ -768,6 +838,13 @@
     ],
     "name": "Breece Hall",
     "team": "NYJ"
+  },
+  "8161": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "Malik Willis",
+    "team": "MIA"
   },
   "8167": {
     "fantasyPositions": [
@@ -789,6 +866,13 @@
     ],
     "name": "Charleston Rambo",
     "team": null
+  },
+  "8228": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Jaylen Warren",
+    "team": "PIT"
   },
   "8259": {
     "fantasyPositions": [
@@ -872,7 +956,7 @@
       "WR"
     ],
     "name": "Josh Downs",
-    "team": "IND"
+    "team": "KC"
   },
   "9509": {
     "fantasyPositions": [
@@ -880,6 +964,20 @@
     ],
     "name": "Bijan Robinson",
     "team": "ATL"
+  },
+  "96": {
+    "fantasyPositions": [
+      "QB"
+    ],
+    "name": "Aaron Rodgers",
+    "team": "PIT"
+  },
+  "9753": {
+    "fantasyPositions": [
+      "RB"
+    ],
+    "name": "Zach Charbonnet",
+    "team": "SEA"
   },
   "9758": {
     "fantasyPositions": [
@@ -923,6 +1021,20 @@
     "name": "HOU",
     "team": "HOU"
   },
+  "JAX": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "JAX",
+    "team": "JAX"
+  },
+  "KC": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "KC",
+    "team": "KC"
+  },
   "LAR": {
     "fantasyPositions": [
       "DEF"
@@ -936,6 +1048,20 @@
     ],
     "name": "MIN",
     "team": "MIN"
+  },
+  "NE": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "NE",
+    "team": "NE"
+  },
+  "NYJ": {
+    "fantasyPositions": [
+      "DEF"
+    ],
+    "name": "NYJ",
+    "team": "NYJ"
   },
   "PHI": {
     "fantasyPositions": [

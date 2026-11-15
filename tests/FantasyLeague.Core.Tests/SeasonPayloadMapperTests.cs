@@ -12,14 +12,14 @@ namespace FantasyLeague.Core.Tests
 
         private static TeamSeason Team(int rosterId, string name, params (decimal Actual, decimal Ideal, bool IsFinal)[] weeks) =>
             new(rosterId, name,
-                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal, NoAttribution))]);
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal, NoAttribution, null))]);
 
         /// <summary>A team whose weeks carry real slot attribution, for T47/T48.</summary>
         private static TeamSeason TeamWithSlots(
             int rosterId, string name,
             params (bool IsFinal, IReadOnlyDictionary<string, decimal> Slots)[] weeks) =>
             new(rosterId, name,
-                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, 0m, 0m, [], [], [], w.IsFinal, w.Slots))]);
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, 0m, 0m, [], [], [], w.IsFinal, w.Slots, null))]);
 
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,
@@ -30,11 +30,28 @@ namespace FantasyLeague.Core.Tests
             LeagueFormat format = LeagueFormat.TotalPoints) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], [], IsCurrent: true, cutoff, format);
+                teams ?? [], [], [], IsCurrent: true, cutoff, format, [], false, []);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,
                 (8m, 10m, true), (12m, 14m, true), (8m, 9m, true), (12m, 13m, true));
+
+        [Fact]
+        public void The_excluded_rosters_change_nothing_in_the_payload()
+        {
+            // T68: they are stored now, so prove they reach no metric, not even the
+            // trimming of unplayed weeks: in week 3 only the placeholder scored
+            var teams = new List<TeamSeason>
+            {
+                Team(1, "One", (10m, 11m, true), (20m, 21m, true), (0m, 0m, true)),
+                Team(2, "Two", (12m, 13m, true), (22m, 23m, true), (0m, 0m, true)),
+            };
+            var placeholder = Team(9, "Placeholder", (1m, 50m, true), (2m, 50m, true), (5m, 50m, true));
+            var without = Snapshot(teams, currentWeek: 4, finalThroughWeek: 3);
+
+            JsonSerializer.Serialize(SeasonPayloadMapper.ToSeasonPayload(without with { ExcludedTeams = [placeholder] }, AsOf), JsonSerializerOptions.Web)
+                .Should().Be(JsonSerializer.Serialize(SeasonPayloadMapper.ToSeasonPayload(without, AsOf), JsonSerializerOptions.Web));
+        }
 
         [Fact]
         public void The_format_is_sent_by_name()

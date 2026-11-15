@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A38. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A39. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
@@ -167,6 +167,7 @@ Steady state on a Sunday afternoon. Because every read goes through the server, 
 | players/nfl | 24 h | <0.01 |
 | finished weeks | memory 6 h, then blob, then SQL | 0 once stored |
 | past seasons | weeks from SQL; league, users, rosters and the chain walk 24 h (A34) | <0.01 per season |
+| matchup backfill | daily, at most 12 weeks a run; once complete, the cached chain only (A39) | 12 once a day, until complete |
 | **Total** | | **≈ 4.4** |
 
 A 15 s matchup cache plus the 30 s poll means a score is at most 45 s old.
@@ -191,7 +192,7 @@ One table:
 WeekScore(LeagueId, Season, Week, RosterId,
           ActualPts, IdealPts,
           StartersJson, PlayersJson, IdealLineupJson, SlotAveragesJson,
-          IsFinal, ComputedUtc,
+          IsFinal, ComputedUtc, MatchupId,
           PK (Season, LeagueId, RosterId, Week))
 ```
 
@@ -200,6 +201,7 @@ WeekScore(LeagueId, Season, Week, RosterId,
 - **The key leads on `Season`**, because every read is for one season. `LeagueId` is almost constant here.
 - **σ is never stored.** It changes for every team whenever a week is finalized, so a stored copy would go stale silently. It's computed on read.
 - **`SlotAveragesJson`** holds that week's points per slot for the radar (§11).
+- **`MatchupId`** is the week's game, shared with the opponent: 0 for a bye, null for a row stored before matchups were read (A39). The placeholder's rows are stored too: nothing reads them but head-to-head, which pairs games and takes the median over every roster, as Sleeper does (A1).
 
 A season is about 6 × 18 = 108 rows, a few hundred KB.
 

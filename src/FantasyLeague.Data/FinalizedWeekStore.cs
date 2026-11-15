@@ -57,7 +57,10 @@ namespace FantasyLeague.Data
         public async Task WriteAsync(string leagueId, int season, IReadOnlyList<TeamWeek> weeks, CancellationToken cancellationToken)
         {
             await sql.WriteAsync(leagueId, season, weeks, cancellationToken);
-            await blob.WriteAsync(leagueId, season, weeks, cancellationToken);
+
+            // the blob takes what SQL now holds, not the caller's weeks: SQL's upsert keeps a
+            // stored matchup over a null one, and reads come from the blob (A39)
+            await blob.WriteAsync(leagueId, season, await sql.ReadAsync(leagueId, season, cancellationToken), cancellationToken);
             await cache.RemoveByTagAsync(Tag(leagueId), cancellationToken);
 
             logger.LogInformation("Stored season {Season} and dropped its cached weeks.", season);

@@ -27,7 +27,7 @@ namespace FantasyLeague.Core.Tests
             RegularSeason.LastWeek(21).Should().Be(RegularSeason.NFLWeeks);
 
         private static TeamWeek Week(int week, decimal actual) =>
-            new(1, week, actual, actual, [], [], [], true, new Dictionary<string, decimal>());
+            new(1, week, actual, actual, [], [], [], true, new Dictionary<string, decimal>(), null);
 
         [Fact]
         public void A_settled_week_nobody_scored_in_is_taken_off_the_end() =>
