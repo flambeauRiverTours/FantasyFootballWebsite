@@ -1,0 +1,77 @@
+{
+  "rosters": [
+    {
+      "roster_id": 1,
+      "settings": {
+        "fpts": 1380,
+        "fpts_against": 1138,
+        "fpts_against_decimal": 94,
+        "fpts_decimal": 66,
+        "losses": 5,
+        "ties": 0,
+        "wins": 13
+      }
+    },
+    {
+      "roster_id": 2,
+      "settings": {
+        "fpts": 1403,
+        "fpts_against": 1069,
+        "fpts_against_decimal": 96,
+        "fpts_decimal": 24,
+        "losses": 7,
+        "ties": 0,
+        "wins": 11
+      }
+    },
+    {
+      "roster_id": 3,
+      "settings": {
+        "fpts": 1339,
+        "fpts_against": 1105,
+        "fpts_against_decimal": 50,
+        "fpts_decimal": 6,
+        "losses": 9,
+        "ties": 0,
+        "wins": 9
+      }
+    },
+    {
+      "roster_id": 4,
+      "settings": {
+        "fpts": 1364,
+        "fpts_against": 1126,
+        "fpts_against_decimal": 66,
+        "fpts_decimal": 96,
+        "losses": 5,
+        "ties": 0,
+        "wins": 13
+      }
+    },
+    {
+      "roster_id": 5,
+      "settings": {
+        "fpts": 60,
+        "fpts_against": 1428,
+        "fpts_against_decimal": 18,
+        "fpts_decimal": 0,
+        "losses": 18,
+        "ties": 0,
+        "wins": 0
+      }
+    },
+    {
+      "roster_id": 6,
+      "settings": {
+        "fpts": 1328,
+        "fpts_against": 1006,
+        "fpts_against_decimal": 74,
+        "fpts_decimal": 6,
+        "losses": 10,
+        "ties": 0,
+        "wins": 8
+      }
+    }
+  ],
+  "season": "2026"
+}

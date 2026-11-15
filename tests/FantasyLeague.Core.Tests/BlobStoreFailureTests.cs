@@ -70,7 +70,7 @@ namespace FantasyLeague.Core.Tests
             new(new FailingContainer(status), "players.json", NullLogger<BlobPlayerMapStore>.Instance);
 
         private static TeamWeek Week() =>
-            new(1, 1, 100m, 120m, [], [], [], true, new Dictionary<string, decimal>());
+            new(1, 1, 100m, 120m, [], [], [], true, new Dictionary<string, decimal>(), null);
 
         [Theory]
         [InlineData(0)]

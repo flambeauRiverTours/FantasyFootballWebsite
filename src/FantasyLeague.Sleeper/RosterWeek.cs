@@ -20,6 +20,7 @@ namespace FantasyLeague.Sleeper
     /// <param name="UnresolvedPlayerIds">
     /// Ids present on the roster that the player map could not explain.
     /// </param>
+    /// <param name="MatchupId">The game played this week, shared with the opponent, or null for a bye (T68).</param>
     /// <remarks>
     /// <see cref="UnresolvedPlayerIds"/> exists so an unknown player is a fact the
     /// caller has to deal with rather than a silent subtraction. The player map is
@@ -37,7 +38,8 @@ namespace FantasyLeague.Sleeper
         IReadOnlyList<decimal> StartersPoints,
         IReadOnlyList<string?> SlotStarters,
         IReadOnlyDictionary<string, decimal> PlayersPoints,
-        IReadOnlyList<string> UnresolvedPlayerIds)
+        IReadOnlyList<string> UnresolvedPlayerIds,
+        int? MatchupId)
     {
         /// <summary>
         /// Gets the lineup that was started, in slot order, with empty slots removed.

@@ -19,7 +19,8 @@ T68–T72 planned. One T61 check left.
   - [ ] **T67** `League:Format` = `TotalPoints` (default) | `HeadToHead`, sent as `format`; past
        seasons cached a day; head-to-head refused at start until T72. Built 2026-11-15 on its branch,
        not merged (A38).
-  - [ ] **T68** Head-to-head record — 12–14 h `±`. On T67's branch, as two
+  - [ ] **T68** Head-to-head record — 12–14 h `±`. **T68a built 2026-11-15 on its branch (A39)**;
+       our records match Sleeper's on the nine captured weeks. On T67's branch, as two
        commits: **T68a** has real effects in production (storage, backfill, a logged check) and
        is verified in the logs; **T68b** is gated off until T72 and proven by tests. Designed and
        reviewed 2026-11-15.
@@ -92,7 +93,9 @@ T68–T72 planned. One T61 check left.
        **It runs in `TotalPoints` too, logging only**, so T68 is proven against the real league
        while the gate is on. A stat correction after Tuesday can make it fire; that is real.
     **T68b · the record, gated**
-    9. **Payload:** `record: { wins, losses, ties, pointsFor, pointsAgainst }` on each team, only
+    9. **Payload:** compute `SeasonSnapshot.Records` once per build rather than per read, now that the
+       payload reads it per request, and drop the placeholder's own record (A1).
+       `record: { wins, losses, ties, pointsFor, pointsAgainst }` on each team, only
        in `HeadToHead` and only when complete, and **left out of the JSON when null**
        (`JsonIgnore(WhenWritingNull)`), so the `TotalPoints` body and its ETag are byte for byte
        what they are today. The server keeps ordering teams by points; the page ranks.

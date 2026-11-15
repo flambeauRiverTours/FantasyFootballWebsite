@@ -114,7 +114,8 @@ namespace FantasyLeague.Sleeper
                 SleeperMapper.ToLeagueName(league),
                 SleeperMapper.ToSlots(league),
                 SleeperMapper.ToTeams(users, rosters),
-                league.Settings?.PlayoffWeekStart);
+                league.Settings?.PlayoffWeekStart,
+                SleeperMapper.HasMedianGame(league));
         }
 
         /// <inheritdoc />

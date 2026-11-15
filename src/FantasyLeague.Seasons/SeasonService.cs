@@ -39,6 +39,19 @@ namespace FantasyLeague.Seasons
         /// </summary>
         /// <returns>Years, newest first.</returns>
         Task<IReadOnlyList<int>> GetAvailableSeasonsAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Fills in the game of every stored week read before matchups were, and stores the
+        /// excluded rosters' missing weeks, for every season the chain reaches (T68).
+        /// </summary>
+        /// <returns>How many weeks were read from Sleeper.</returns>
+        /// <remarks>
+        /// Reads at most <see cref="SeasonService.BackfillWeeksPerRun"/> weeks a run, so the
+        /// live site keeps the token bucket; it finishes over a few runs, after which a run
+        /// reads the store and the cached chain and calls Sleeper for nothing else. A
+        /// season that fails is logged and the others carry on.
+        /// </remarks>
+        Task<int> BackfillMatchupsAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -82,6 +95,12 @@ namespace FantasyLeague.Seasons
         ISeasonChain chain,
         ILogger<SeasonService> logger) : ISeasonService
     {
+        /// <summary>
+        /// The most weeks one backfill run reads: about half a minute of the token
+        /// bucket, so the live site is never kept waiting (T68).
+        /// </summary>
+        internal const int BackfillWeeksPerRun = 12;
+
         /// <summary>Tolerance for both invariants: Sleeper reports points to the cent.</summary>
         private const decimal Cent = 0.01m;
 
@@ -164,12 +183,15 @@ namespace FantasyLeague.Seasons
                 lastWeek,
                 lastWeek,
                 league.Slots,
-                GroupTeams(weeks, league.Teams, excluded),
+                GroupTeams(weeks, league.Teams, id => !excluded.Contains(id)),
                 [],
                 [],
                 IsCurrent: false,
                 RegularSeason.LastWeek(league.PlayoffWeekStart),
-                configured.Format);
+                configured.Format,
+                GroupTeams(weeks, league.Teams, excluded.Contains),
+                league.HasMedianGame,
+                []);
         }
 
         /// <summary>
@@ -197,18 +219,23 @@ namespace FantasyLeague.Seasons
             // debug: under load this runs every 5 s, and App Insights already times each request
             logger.LogDebug("Built season snapshot in {ElapsedMilliseconds}ms.", (long)time.GetElapsedTime(started).TotalMilliseconds);
 
-            return new SeasonSnapshot(
+            var snapshot = new SeasonSnapshot(
                 string.IsNullOrWhiteSpace(configured.OverrideLeagueName) ? league.Name : configured.OverrideLeagueName,
                 state.Season,
                 weeks.CurrentWeek,
                 WeekFinality.FinalThroughWeek(weeks.CurrentWeek),
                 league.Slots,
-                GroupTeams(weeks.TeamWeeks, league.Teams, excluded),
+                GroupTeams(weeks.TeamWeeks, league.Teams, id => !excluded.Contains(id)),
                 [.. weeks.Unresolved.Distinct()],
                 weeks.Violations,
                 IsCurrent: true,
                 RegularSeason.LastWeek(league.PlayoffWeekStart),
-                configured.Format);
+                configured.Format,
+                GroupTeams(weeks.TeamWeeks, league.Teams, excluded.Contains),
+                league.HasMedianGame,
+                []);
+
+            return snapshot with { RecordMismatches = RecordMismatch.Find(snapshot.Records, league.Teams) };
         }
 
         /// <summary>
@@ -324,26 +351,28 @@ namespace FantasyLeague.Seasons
                 idealLineup,
                 mapped.Players,
                 isFinal,
-                slotAverages ?? new Dictionary<string, decimal>());
+                slotAverages ?? new Dictionary<string, decimal>(),
+                mapped.MatchupId ?? 0);
         }
 
         /// <summary>
-        /// Groups the weeks into one season per roster, leaving out excluded rosters.
+        /// Groups the weeks into one season per roster, keeping only the rosters asked for.
         /// </summary>
         /// <param name="weeks">Every roster's weeks.</param>
         /// <param name="teams">The league's teams, for their names.</param>
-        /// <param name="excluded">Rosters left out of every metric (A1).</param>
-        /// <returns>One season per counted roster, in roster order.</returns>
+        /// <param name="include">Which rosters to keep: the counted ones, or the excluded ones (A1).</param>
+        /// <returns>One season per kept roster, in roster order.</returns>
         /// <remarks>
-        /// A1 is applied here, so nothing downstream of the snapshot can count
-        /// an excluded roster. Both invariants have already checked it.
+        /// A1 is applied here: the snapshot keeps excluded rosters in a list of
+        /// their own, so nothing downstream that counts can reach them (T68). Both
+        /// invariants have already checked them.
         /// </remarks>
         private static IReadOnlyList<TeamSeason> GroupTeams(
             IEnumerable<TeamWeek> weeks,
             IReadOnlyDictionary<int, SleeperTeam> teams,
-            IReadOnlySet<int> excluded) =>
+            Func<int, bool> include) =>
             [.. weeks
-                .Where(w => !excluded.Contains(w.RosterId))
+                .Where(w => include(w.RosterId))
                 .GroupBy(w => w.RosterId)
                 .OrderBy(g => g.Key)
                 .Select(g => new TeamSeason(
@@ -376,8 +405,8 @@ namespace FantasyLeague.Seasons
         }
 
         /// <summary>
-        /// Logs each invariant breach and unresolved player the first time this
-        /// instance sees it, rather than on every build.
+        /// Logs each invariant breach, record mismatch and unresolved player the
+        /// first time this instance sees it, rather than on every build.
         /// </summary>
         /// <param name="snapshot">The assembled season.</param>
         private void Report(SeasonSnapshot snapshot)
@@ -389,11 +418,128 @@ namespace FantasyLeague.Seasons
                     violation.Invariant, violation.RosterId, violation.Week, violation.SleeperPts, violation.ComparedPts);
             }
 
+            foreach (var mismatch in snapshot.RecordMismatches.Where(m => reported.IsNew($"record:{m.RosterId}:{m.OurRecord.Games}")))
+            {
+                // T68: the third check; logged in either format, so the record is proven before it is shown
+                logger.LogError(
+                    "Roster {RosterId}'s head-to-head record after {Games} results is {Ours}, but Sleeper's is {Sleepers}.",
+                    mismatch.RosterId, mismatch.OurRecord.Games, WinLoss(mismatch.OurRecord), WinLoss(mismatch.SleeperRecord));
+            }
+
             foreach (var playerId in snapshot.UnresolvedPlayerIds.Where(id => reported.IsNew($"player:{id}")))
             {
                 logger.LogWarning("Rostered player {PlayerId} is missing from the player map.", playerId);
             }
         }
+
+        /// <inheritdoc />
+        public async Task<int> BackfillMatchupsAsync(CancellationToken cancellationToken)
+        {
+            var read = 0;
+
+            // newest first, so a season Sleeper no longer serves cannot starve the current one
+            foreach (var (season, leagueId) in (await chain.GetAsync(cancellationToken)).OrderByDescending(s => s.Key))
+            {
+                if (read >= BackfillWeeksPerRun)
+                {
+                    break;
+                }
+
+                try
+                {
+                    read += await BackfillSeasonAsync(season, leagueId, BackfillWeeksPerRun - read, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Could not backfill matchups for season {Season}; the other seasons carry on.", season);
+                }
+            }
+
+            return read;
+        }
+
+        /// <summary>
+        /// Backfills one season, reading no more weeks than the run has left.
+        /// </summary>
+        /// <param name="season">The season whose stored weeks are filled in.</param>
+        /// <param name="leagueId">That season's league.</param>
+        /// <param name="budget">Weeks the run may still read, at least one.</param>
+        /// <returns>How many weeks were read.</returns>
+        /// <remarks>
+        /// Only stored weeks are touched, and only their game is set: ideal points are
+        /// never recomputed against today's player map (D2). The excluded rosters' weeks
+        /// that were never stored are built from the read; their ideal points use
+        /// today's map, which is harmless because they count in nothing but the pairing.
+        /// The whole season is written back, as the store keeps a season, not a subset.
+        /// </remarks>
+        private async Task<int> BackfillSeasonAsync(int season, string leagueId, int budget, CancellationToken cancellationToken)
+        {
+            // decided from the store alone, so a complete season costs no Sleeper call. A week stored
+            // before T68 has no game on any row, and its placeholder rows are added in the same pass
+            var weeks = (await stored.ReadAsync(leagueId, season, cancellationToken))
+                .GroupBy(w => w.Week)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            var missing = weeks.Where(w => w.Value.Any(row => row.MatchupId is null)).Select(w => w.Key).Order().ToList();
+            if (missing.Count == 0)
+            {
+                if (weeks.Count > 0 && reported.IsNew($"matchups-complete:{season}"))
+                {
+                    logger.LogInformation("Matchups complete for season {Season}.", season);
+                }
+
+                return 0;
+            }
+
+            var toRead = missing.Take(budget).ToList();
+            var league = await sleeper.GetLeagueAsync(leagueId, cancellationToken);
+            var excluded = ResolveExclusions(league, options.Value, season);
+            var playerMap = await players.EnsureCurrentAsync(cancellationToken);
+            var (filled, added) = (0, 0);
+            foreach (var week in toRead)
+            {
+                var read = (await sleeper.GetWeekAsync(leagueId, week, playerMap, cancellationToken)).ToDictionary(r => r.RosterId);
+                var rows = weeks[week];
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    if (rows[i].MatchupId is null && read.TryGetValue(rows[i].RosterId, out var roster))
+                    {
+                        rows[i] = rows[i] with { MatchupId = roster.MatchupId ?? 0 };
+                        filled++;
+                    }
+                }
+
+                foreach (var id in excluded.Where(id => read.ContainsKey(id) && rows.All(row => row.RosterId != id)))
+                {
+                    rows.Add(ToTeamWeek(read[id], week, league.Slots, isFinal: true, isExcluded: true));
+                    added++;
+                }
+
+                if (rows.Any(row => row.MatchupId is null) && reported.IsNew($"matchups-unread:{season}:{week}"))
+                {
+                    // an old league Sleeper no longer serves: read again each run, inside the budget,
+                    // and that season's records stay unknown
+                    logger.LogWarning("Sleeper returned no game for some rosters in week {Week} of {Season}; left unfilled.", week, season);
+                }
+            }
+
+            if (filled + added > 0)
+            {
+                await stored.WriteAsync(leagueId, season, [.. weeks.Values.SelectMany(w => w)], cancellationToken);
+            }
+
+            logger.LogInformation(
+                "Backfilled season {Season}: {Read} weeks read, {Filled} games filled, {Added} excluded weeks added, {Left} weeks left.",
+                season, toRead.Count, filled, added, missing.Count - toRead.Count);
+
+            return toRead.Count;
+        }
+
+        /// <summary>
+        /// Writes a record as wins, losses and ties.
+        /// </summary>
+        /// <param name="record">A roster's results.</param>
+        /// <returns>For example, <c>13-5-0</c>.</returns>
+        private static string WinLoss(TeamRecord record) => $"{record.Wins}-{record.Losses}-{record.Ties}";
 
         /// <summary>
         /// A past season's build, null when it cannot be served, wrapped so the

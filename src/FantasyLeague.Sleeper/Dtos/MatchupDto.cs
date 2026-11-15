@@ -10,6 +10,7 @@
     /// <param name="Starters">The lineup that was actually started, positionally aligned with the league's startable slots. An empty slot is the string <c>"0"</c>.</param>
     /// <param name="StartersPoints">Parallel to <paramref name="Starters"/>. Summing it should equal <paramref name="Points"/> within a cent.</param>
     /// <param name="PlayersPoints">Points per player id, bench included. A player present in <paramref name="Players"/> but missing here scored zero.</param>
+    /// <param name="MatchupId">The game this roster plays this week, shared with its opponent. Null for a bye (assumed: this league has none).</param>
     internal sealed record MatchupDto(
         int RosterId,
         decimal? Points,
@@ -17,5 +18,6 @@
         IReadOnlyList<string>? Players,
         IReadOnlyList<string>? Starters,
         IReadOnlyList<decimal>? StartersPoints,
-        IReadOnlyDictionary<string, decimal>? PlayersPoints);
+        IReadOnlyDictionary<string, decimal>? PlayersPoints,
+        int? MatchupId);
 }

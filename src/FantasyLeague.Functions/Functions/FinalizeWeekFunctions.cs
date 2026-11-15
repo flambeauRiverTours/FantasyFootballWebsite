@@ -32,7 +32,7 @@ namespace FantasyLeague.Functions.Functions
             CancellationToken cancellationToken)
         {
             var snapshot = await seasons.BuildAsync(cancellationToken);
-            var finalized = snapshot.Teams.SelectMany(t => t.Weeks).Where(w => w.IsFinal).ToList();
+            var finalized = snapshot.FinalWeeks.ToList();
 
             await storedWeeks.WriteAsync(league.Value.CurrentLeagueId, snapshot.Season, finalized, cancellationToken);
 

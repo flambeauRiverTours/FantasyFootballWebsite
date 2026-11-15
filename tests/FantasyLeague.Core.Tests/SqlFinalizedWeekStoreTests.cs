@@ -38,12 +38,13 @@ namespace FantasyLeague.Core.Tests
             decimal ideal = 120m,
             bool isFinal = true,
             IReadOnlyList<RosteredPlayer>? players = null,
-            IReadOnlyDictionary<string, decimal>? slotAverages = null) =>
+            IReadOnlyDictionary<string, decimal>? slotAverages = null,
+            int? matchupId = null) =>
             new(rosterId, week, actual, ideal,
                 [new PlayerId("s1"), new PlayerId("s2")],
                 [new PlayerId("s1"), new PlayerId("i9")],
                 players ?? [new RosteredPlayer(new PlayerId("s1"), "Patrick Mahomes", ["QB"], 27.5m)],
-                isFinal, slotAverages ?? new Dictionary<string, decimal>());
+                isFinal, slotAverages ?? new Dictionary<string, decimal>(), matchupId);
 
         [Fact]
         public async Task An_empty_store_reads_back_nothing() => (await Store().ReadAsync(League, 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
@@ -71,6 +72,32 @@ namespace FantasyLeague.Core.Tests
 
             read[0].ActualPts.Should().Be(123.45m);
             read[0].IdealPts.Should().Be(167.89m);
+        }
+
+        [Theory]
+        [InlineData(3)]
+        [InlineData(0)]
+        [InlineData(null)]
+        public async Task The_matchup_survives_the_round_trip(int? matchupId)
+        {
+            // T68: 0 is a bye and null is a week stored before matchups were read
+            var store = Store();
+
+            await store.WriteAsync(League, 2026, [Week(matchupId: matchupId)], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].MatchupId.Should().Be(matchupId);
+        }
+
+        [Fact]
+        public async Task A_rewrite_without_a_matchup_keeps_the_stored_one()
+        {
+            // T68: Finalize rewrites every final week, possibly from a snapshot read before the backfill
+            var store = Store();
+            await store.WriteAsync(League, 2026, [Week(matchupId: 2)], TestContext.Current.CancellationToken);
+
+            await store.WriteAsync(League, 2026, [Week(matchupId: null)], TestContext.Current.CancellationToken);
+
+            (await store.ReadAsync(League, 2026, TestContext.Current.CancellationToken))[0].MatchupId.Should().Be(2);
         }
 
         [Fact]
@@ -296,7 +323,7 @@ namespace FantasyLeague.Core.Tests
         {
             var store = new NullFinalizedWeekStore();
 
-            await store.WriteAsync("L1", 2026, [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>())], TestContext.Current.CancellationToken);
+            await store.WriteAsync("L1", 2026, [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, new Dictionary<string, decimal>(), null)], TestContext.Current.CancellationToken);
 
             (await store.ReadAsync("L1", 2026, TestContext.Current.CancellationToken)).Should().BeEmpty();
         }

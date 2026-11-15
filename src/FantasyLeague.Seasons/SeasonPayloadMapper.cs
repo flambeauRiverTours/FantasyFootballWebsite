@@ -24,11 +24,7 @@ namespace FantasyLeague.Seasons
         /// </remarks>
         public static SeasonPayload ToSeasonPayload(SeasonSnapshot snapshot, DateTimeOffset asOfUtc)
         {
-            // a past season is settled to its end, even where its stored weeks stop short of the cut-off
-            var lastWeek = RegularSeason.LastCountedWeek(
-                snapshot.RegularSeasonCutoff,
-                snapshot.IsCurrent ? snapshot.FinalThroughWeek : int.MaxValue,
-                snapshot.Teams.SelectMany(t => t.Weeks));
+            var lastWeek = snapshot.LastCountedWeek;
             var teams = snapshot.Teams
                 .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }))
                 .OrderByDescending(t => t.Totals.Actual)

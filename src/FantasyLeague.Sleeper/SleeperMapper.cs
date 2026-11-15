@@ -76,8 +76,36 @@ namespace FantasyLeague.Sleeper
                     roster.OwnerId is not null && byUserId.TryGetValue(roster.OwnerId, out var user)
                         ? ResolveTeamName(user, roster.RosterId)
                         : SleeperTeam.FallbackName(roster.RosterId),
-                    roster.OwnerId));
+                    roster.OwnerId,
+                    ToRecord(roster)));
         }
+
+        /// <summary>
+        /// Sleeper's own record for a roster, kept to check ours against (T68).
+        /// </summary>
+        /// <param name="roster">The roster as Sleeper returned it.</param>
+        /// <returns>The record, or null when Sleeper sent none.</returns>
+        /// <remarks>
+        /// Whole points and hundredths arrive in separate fields: <c>fpts</c> and
+        /// <c>fpts_decimal</c>.
+        /// </remarks>
+        internal static TeamRecord? ToRecord(RosterDto roster) =>
+            roster.Settings is { Wins: { } wins, Losses: { } losses } s
+                ? new TeamRecord(
+                    wins,
+                    losses,
+                    s.Ties ?? 0,
+                    (s.Fpts ?? 0) + ((s.FptsDecimal ?? 0) / 100m),
+                    (s.FptsAgainst ?? 0) + ((s.FptsAgainstDecimal ?? 0) / 100m))
+                : null;
+
+        /// <summary>
+        /// Whether the league plays a median game: each week, a second result against the league's median score (Q12).
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns><c>true</c> when <c>league_average_match</c> is set.</returns>
+        internal static bool HasMedianGame(LeagueDto league) =>
+            league.Settings?.LeagueAverageMatch > 0;
 
         /// <summary>
         /// The league's display name, or a default when the commissioner set none.
@@ -198,7 +226,8 @@ namespace FantasyLeague.Sleeper
                 matchup.StartersPoints ?? [],
                 ToSlotStarters(matchup),
                 matchup.PlayersPoints ?? new Dictionary<string, decimal>(),
-                unresolved);
+                unresolved,
+                matchup.MatchupId);
         }
     }
 }

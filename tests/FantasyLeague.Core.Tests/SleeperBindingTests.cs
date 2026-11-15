@@ -10,11 +10,9 @@ namespace FantasyLeague.Core.Tests
     /// </summary>
     public class SleeperBindingTests
     {
-        private static string FixtureText(string name) =>
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", name));
+        private static string FixtureText(string name) => Fixtures.Text(name);
 
-        private static T Read<T>(string json) =>
-            JsonSerializer.Deserialize<T>(json, SleeperJson.Options)!;
+        private static T Read<T>(string json) => Fixtures.Read<T>(json);
 
         [Fact]
         public void The_captured_week_binds_to_matchup_dtos()
@@ -31,6 +29,16 @@ namespace FantasyLeague.Core.Tests
             matchups.Should().OnlyContain(m => m.StartersPoints!.Count == 11);
             matchups.Should().OnlyContain(m => m.PlayersPoints!.Count > 0);
             matchups.Should().OnlyContain(m => m.CustomPoints == null);
+        }
+
+        [Fact]
+        public void Every_captured_roster_binds_its_matchup()
+        {
+            // T68: three games a week, each id shared by exactly two rosters, the placeholder's included
+            var matchups = Read<List<MatchupDto>>(FixtureText("wk1-matchups.json"));
+
+            matchups.Should().OnlyContain(m => m.MatchupId != null);
+            matchups.GroupBy(m => m.MatchupId).Should().HaveCount(3).And.OnlyContain(g => g.Count() == 2);
         }
 
         [Fact]
@@ -119,6 +127,35 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void The_captured_league_plays_a_median_game() =>
+            // T68 (Q12): each week adds a result against the median, so a week is two results
+            Read<LeagueDto>(FixtureText("league-settings.json")).Settings!.LeagueAverageMatch.Should().Be(1);
+
+        [Theory]
+        [InlineData("""{"season":"2026","roster_positions":["QB"],"settings":{"league_average_match":1}}""", true)]
+        [InlineData("""{"season":"2026","roster_positions":["QB"],"settings":{"league_average_match":0}}""", false)]
+        [InlineData("""{"season":"2026","roster_positions":["QB"]}""", false)]
+        public void A_median_game_is_read_from_the_league_settings(string body, bool expected) =>
+            SleeperMapper.HasMedianGame(Read<LeagueDto>(body)).Should().Be(expected);
+
+        [Fact]
+        public void The_captured_records_bind_with_their_cents()
+        {
+            // T68: Sleeper keeps whole points and hundredths in separate fields
+            using var document = JsonDocument.Parse(FixtureText("rosters-record.json"));
+            var rosters = Read<List<RosterDto>>(document.RootElement.GetProperty("rosters").GetRawText());
+
+            var record = SleeperMapper.ToRecord(rosters.Single(r => r.RosterId == 1));
+
+            record.Should().Be(new TeamRecord(13, 5, 0, 1380.66m, 1138.94m));
+            record!.Games.Should().Be(18, "nine weeks, each a game and a median result");
+        }
+
+        [Fact]
+        public void A_roster_with_no_settings_has_no_record() =>
+            SleeperMapper.ToRecord(new RosterDto(1, "u1", null)).Should().BeNull();
+
+        [Fact]
         public void Fields_this_app_does_not_read_are_ignored_when_binding()
         {
             // is_bot came back null on a real user, and co_owners null on every
@@ -178,7 +215,7 @@ namespace FantasyLeague.Core.Tests
             // corrected a score. Ignoring it desyncs the standings from the app.
             var matchup = new MatchupDto(
                 RosterId: 2, Points: 88.4m, CustomPoints: 91m,
-                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
+                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>(), MatchupId: 1);
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
                 .ActualPts.Should().Be(91m);
@@ -191,7 +228,7 @@ namespace FantasyLeague.Core.Tests
             var matchup = new MatchupDto(
                 RosterId: 2, Points: 10m, CustomPoints: null,
                 Players: ["qb1"], Starters: ["qb1", "0", "wr1"], StartersPoints: [10m, 0m, 0m],
-                PlayersPoints: new Dictionary<string, decimal>());
+                PlayersPoints: new Dictionary<string, decimal>(), MatchupId: 1);
 
             SleeperMapper.ToSlotStarters(matchup).Should().Equal("qb1", null, "wr1");
         }
@@ -201,7 +238,7 @@ namespace FantasyLeague.Core.Tests
         {
             var matchup = new MatchupDto(
                 RosterId: 2, Points: 88.4m, CustomPoints: null,
-                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>());
+                Players: [], Starters: [], StartersPoints: [], PlayersPoints: new Dictionary<string, decimal>(), MatchupId: 1);
 
             SleeperMapper.ToRosterWeek(matchup, new Dictionary<string, PlayerRef>())
                 .ActualPts.Should().Be(88.4m);
@@ -218,7 +255,7 @@ namespace FantasyLeague.Core.Tests
             var matchup = new MatchupDto(
                 RosterId: 1, Points: 20m, CustomPoints: null,
                 Players: ["1", "2"], Starters: ["1"], StartersPoints: [20m],
-                PlayersPoints: new Dictionary<string, decimal> { ["1"] = 20m });
+                PlayersPoints: new Dictionary<string, decimal> { ["1"] = 20m }, MatchupId: 1);
 
             var week = SleeperMapper.ToRosterWeek(matchup, map);
 
@@ -237,7 +274,7 @@ namespace FantasyLeague.Core.Tests
             var matchup = new MatchupDto(
                 RosterId: 1, Points: 10m, CustomPoints: null,
                 Players: ["1", "99999"], Starters: ["1"], StartersPoints: [10m],
-                PlayersPoints: new Dictionary<string, decimal> { ["1"] = 10m });
+                PlayersPoints: new Dictionary<string, decimal> { ["1"] = 10m }, MatchupId: 1);
 
             var week = SleeperMapper.ToRosterWeek(matchup, map);
 
@@ -252,7 +289,7 @@ namespace FantasyLeague.Core.Tests
             var matchup = new MatchupDto(
                 RosterId: 1, Points: 10m, CustomPoints: null,
                 Players: ["1", "0"], Starters: ["1", "0"], StartersPoints: [10m, 0m],
-                PlayersPoints: new Dictionary<string, decimal> { ["1"] = 10m });
+                PlayersPoints: new Dictionary<string, decimal> { ["1"] = 10m }, MatchupId: 1);
 
             var week = SleeperMapper.ToRosterWeek(matchup, map);
 
@@ -332,16 +369,16 @@ namespace FantasyLeague.Core.Tests
             };
             var rosters = new List<RosterDto>
             {
-                new(RosterId: 1, OwnerId: "u1"),
-                new(RosterId: 2, OwnerId: "u2"),
-                new(RosterId: 3, OwnerId: null),   // orphaned roster
+                new(RosterId: 1, OwnerId: "u1", Settings: null),
+                new(RosterId: 2, OwnerId: "u2", Settings: null),
+                new(RosterId: 3, OwnerId: null, Settings: null),   // orphaned roster
             };
 
             var teams = SleeperMapper.ToTeams(users, rosters);
 
-            teams[1].Should().Be(new SleeperTeam("Aaron Donald Relief Fund", "u1"));
-            teams[2].Should().Be(new SleeperTeam("kuzma4prez", "u2"));
-            teams[3].Should().Be(new SleeperTeam("Roster 3", null), "an orphaned roster has no owner to match");
+            teams[1].Should().Be(new SleeperTeam("Aaron Donald Relief Fund", "u1", null));
+            teams[2].Should().Be(new SleeperTeam("kuzma4prez", "u2", null));
+            teams[3].Should().Be(new SleeperTeam("Roster 3", null, null), "an orphaned roster has no owner to match");
         }
     }
 }

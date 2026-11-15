@@ -22,7 +22,7 @@ namespace FantasyLeague.Core.Tests
         private const string League = "L1";
 
         private static TeamWeek Week(decimal ideal) =>
-            new(1, 1, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>());
+            new(1, 1, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>(), null);
 
         private static BlobFinalizedWeekStore Store(MemoryContainer container, TimeProvider? time = null) =>
             new(container, time ?? TimeProvider.System, NullLogger<BlobFinalizedWeekStore>.Instance);

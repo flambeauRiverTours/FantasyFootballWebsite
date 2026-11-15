@@ -28,6 +28,8 @@ namespace FantasyLeague.Core.Tests
 
         public int MatchupRequests { get; private set; }
 
+        public List<string> Requests { get; } = [];
+
         /// <summary>
         /// The real league as captured: every <c>wk*-matchups.json</c> verbatim,
         /// the latest served as the week in progress, the league's own slots and
@@ -77,6 +79,11 @@ namespace FantasyLeague.Core.Tests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            lock (Requests)
+            {
+                Requests.Add(path);
+            }
+
             var body = BodyFor(path);
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -162,7 +169,8 @@ namespace FantasyLeague.Core.Tests
             string[]? players = null,
             string[]? starters = null,
             decimal[]? startersPoints = null,
-            Dictionary<string, decimal>? playersPoints = null)
+            Dictionary<string, decimal>? playersPoints = null,
+            int? matchupId = 1)
         {
             players ??= ["qb1", "rb1", "wr1"];
             starters ??= ["qb1", "rb1", "wr1"];
@@ -172,7 +180,7 @@ namespace FantasyLeague.Core.Tests
             var custom = customPoints is null ? "null" : customPoints.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
             return $$"""
-                {"roster_id":{{rosterId}},"matchup_id":1,
+                {"roster_id":{{rosterId}},"matchup_id":{{matchupId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null"}},
                  "points":{{points.ToString(System.Globalization.CultureInfo.InvariantCulture)}},
                  "custom_points":{{custom}},
                  "players":{{JsonSerializer.Serialize(players)}},
@@ -265,6 +273,34 @@ namespace FantasyLeague.Core.Tests
                 snapshot.Violations.Should().BeEmpty();
                 weeks.Should().OnlyContain(w => w.IdealPts >= w.ActualPts);
                 weeks.Should().OnlyContain(w => w.SlotAverages.Count > 0, "every captured lineup lines up with its slots");
+            }
+        }
+
+        [Fact]
+        public async Task Every_captured_week_carries_its_matchup()
+        {
+            // T68: three games a week in the captured league, the placeholder's included
+            var (service, provider) = await BuildAsync(LeagueSocket.Captured());
+            using (provider)
+            {
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+
+                snapshot.Teams.SelectMany(t => t.Weeks).Should().OnlyContain(w => w.MatchupId > 0);
+            }
+        }
+
+        [Fact]
+        public async Task A_bye_is_stored_as_matchup_zero_not_as_unknown()
+        {
+            var socket = new LeagueSocket { State = Bodies.State(week: 2) };
+            socket.Matchups[1] = Bodies.Week(Bodies.Matchup(1, 35m, matchupId: null), Bodies.Matchup(2, 35m, matchupId: 4));
+            var (service, provider) = await BuildAsync(socket);
+            using (provider)
+            {
+                var weeks = (await service.BuildAsync(TestContext.Current.CancellationToken)).Teams.ToDictionary(t => t.RosterId, t => t.Weeks[0]);
+
+                weeks[1].MatchupId.Should().Be(0);
+                weeks[2].MatchupId.Should().Be(4);
             }
         }
 
@@ -446,6 +482,41 @@ namespace FantasyLeague.Core.Tests
 
     public class SeasonServiceReportingTests
     {
+        [Fact]
+        public async Task A_record_that_disagrees_with_Sleepers_is_logged_once()
+        {
+            // T68: roster 1 won both settled weeks; Sleeper says it split them
+            var socket = new LeagueSocket
+            {
+                State = Bodies.State(week: 3),
+                Rosters = """
+                    [{"roster_id":1,"owner_id":"u1","settings":{"wins":1,"losses":1,"ties":0}},
+                     {"roster_id":2,"owner_id":"u2","settings":{"wins":0,"losses":2,"ties":0}}]
+                    """,
+            };
+            foreach (var week in new[] { 1, 2, 3 })
+            {
+                socket.Matchups[week] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 30m, startersPoints: [20m, 5m, 5m]));
+            }
+
+            var logs = new CapturingLoggerProvider();
+            var services = TestServices.Create();
+            services.AddLogging(b => b.AddProvider(logs));
+            services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero).ConfigurePrimaryHttpMessageHandler(() => socket);
+            services.AddSeasonServiceWithNullStores();
+            using var provider = services.BuildServiceProvider();
+
+            for (var build = 0; build < 3; build++)
+            {
+                await provider.GetRequiredService<HybridCache>().RemoveAsync("season:L1", TestContext.Current.CancellationToken);
+                var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
+                snapshot.RecordMismatches.Should().ContainSingle().Which.RosterId.Should().Be(1);
+            }
+
+            logs.Entries.Where(e => e.StartsWith("Roster 1's head-to-head record", StringComparison.Ordinal))
+                .Should().ContainSingle().Which.Should().Contain("2-0-0").And.Contain("1-1-0");
+        }
+
         [Fact]
         public async Task A_problem_is_logged_once_however_often_the_season_is_rebuilt()
         {

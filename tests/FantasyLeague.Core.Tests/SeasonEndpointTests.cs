@@ -62,7 +62,7 @@ namespace FantasyLeague.Core.Tests
     public class ExcludedRosterResolutionTests
     {
         private static IReadOnlyDictionary<int, SleeperTeam> Owners(params (int RosterId, string Name, string OwnerId)[] rosters) =>
-            rosters.ToDictionary(r => r.RosterId, r => new SleeperTeam(r.Name, r.OwnerId));
+            rosters.ToDictionary(r => r.RosterId, r => new SleeperTeam(r.Name, r.OwnerId, null));
 
         private static IReadOnlySet<int> Resolve(IReadOnlyDictionary<int, SleeperTeam> owners, params string[] excludedOwnerIds) =>
             ExcludedRosters.Resolve(owners, excludedOwnerIds).RosterIds;
@@ -130,7 +130,7 @@ namespace FantasyLeague.Core.Tests
 
         [Fact]
         public void A_roster_with_no_owner_cannot_be_excluded_and_does_not_throw() =>
-            Resolve(new Dictionary<int, SleeperTeam> { [3] = new("Roster 3", null) }, "u9").Should().BeEmpty();
+            Resolve(new Dictionary<int, SleeperTeam> { [3] = new("Roster 3", null, null) }, "u9").Should().BeEmpty();
 
         [Fact]
         public void An_owner_id_that_matches_no_roster_is_reported()

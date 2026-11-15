@@ -100,7 +100,8 @@ namespace FantasyLeague.Data
                 // the one column with an empty past: rows written before AddSlotAveragesJson
                 row.SlotAveragesJson.Length == 0
                     ? new Dictionary<string, decimal>()
-                    : FromJson<IReadOnlyDictionary<string, decimal>>(row.SlotAveragesJson));
+                    : FromJson<IReadOnlyDictionary<string, decimal>>(row.SlotAveragesJson),
+                row.MatchupId);
 
         /// <summary>
         /// Creates the row for a week not yet stored.
@@ -139,6 +140,10 @@ namespace FantasyLeague.Data
             row.SlotAveragesJson = ToJson(week.SlotAverages);
             row.IsFinal = week.IsFinal;
             row.ComputedUtc = now;
+
+            // T68: Finalize rewrites every final week from a snapshot that may predate the
+            // backfill, so a week read before matchups were stored must not erase its id
+            row.MatchupId = week.MatchupId ?? row.MatchupId;
         }
 
         /// <summary>

@@ -11,7 +11,7 @@ namespace FantasyLeague.Core.Tests
 
         private static TeamSeason Team(string name, int rosterId, params (decimal Actual, decimal Ideal, bool IsFinal)[] weeks) =>
             new(rosterId, name,
-                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal, new Dictionary<string, decimal>()))]);
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal, new Dictionary<string, decimal>(), null))]);
 
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,
@@ -21,7 +21,7 @@ namespace FantasyLeague.Core.Tests
             IReadOnlyList<InvariantViolation>? violations = null,
             int cutoff = RegularSeason.NFLWeeks) =>
             new("Name", 2026, currentWeek, finalThroughWeek, Slot.Parse(["QB", "RB", "FLEX"]),
-                teams ?? [], unresolved ?? [], violations ?? [], IsCurrent: true, cutoff, LeagueFormat.TotalPoints);
+                teams ?? [], unresolved ?? [], violations ?? [], IsCurrent: true, cutoff, LeagueFormat.TotalPoints, [], false, []);
 
         private static string Render(SeasonSnapshot snapshot)
         {

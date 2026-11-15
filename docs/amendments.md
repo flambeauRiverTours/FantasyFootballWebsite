@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A38 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A39 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -10,7 +10,7 @@ The open questions, Q1–Q15, and their answers are in [design §14](design.md#1
 
 - It's matched by owner `user_id` from configuration, never by team name or `roster_id`, which both change.
 - It's excluded as a row **and** from every league-wide number (the median line, the radar's league averages). Leaving it in a denominator would quietly flatter every real team. Those are two separate filters, and it's easy to write only the first.
-- Six rosters minus one leaves five scoring teams. Since A27 the season service drops it, so nothing downstream can count it by accident.
+- Six rosters minus one leaves five scoring teams. Since A27 the season service keeps it out of the counted teams, so nothing downstream can count it by accident. Since A39 its weeks are stored too, in a list of their own, because a game against it counts in head-to-head, and its score sets the median game's median, as Sleeper's does.
 
 ## A2 · League IDs and user IDs are secrets
 
@@ -282,6 +282,18 @@ Found in the same logs:
 - **It rides on the snapshot,** set by `SeasonService` for the current season and past ones alike (Q10), as `OverrideLeagueName` is, so the mapper stays a function of the snapshot and the CLI gets it too (its header names the format). Snapshots are cached in memory only and a setting change restarts the app, so none outlives a switch. The payload sends it by name, `"format": "TotalPoints"`, and the ETag, a hash of the body, changes with it.
 - **A completed season is now cached for a day, not a year as `immutable`.** Its scores still cannot change, but its body now depends on configuration. The cost: bodies browsers already hold as `immutable` cannot be reached and may live up to a year with no `format`, so the page reads a missing one as `TotalPoints`. Nothing else holds them: no CDN, Front Door or service worker.
 - **Not plumbed into `infra/` yet.** `main.bicep` declares the whole app-settings list, so a value set by hand in the portal would be wiped by the next deploy. `League__Format` goes in as a bicep parameter once T72 lifts the gate, after T68's backfill, since switching before it would show records as missing.
+
+## A39 · Head-to-head records, from the data up
+
+2026-11-15. T68a: everything a head-to-head record needs, live in production and checked against Sleeper while the page still shows total points (A38). T68b puts the record on the page.
+
+- **The captured league confirmed the rules before any code.** Nine weeks of real matchups reproduce Sleeper's own record for every roster exactly: wins, losses, ties, points for and against. So: pair on `matchup_id`; the higher score wins; this league plays a median game (`league_average_match: 1`), each week adding a second result against the median of every roster, the placeholder included; and a game against the placeholder counts. A test now pins that agreement on the captured weeks. What a bye sends is still unobserved (this league has none); a null `matchup_id` is assumed.
+- **A week knows its game.** `TeamWeek.MatchupId` is 0 for a bye and null for a week stored before matchups were read, so the two cannot be confused. It is a new nullable SQL column, and the blob schema went to 5.
+- **A1 moved to the read side.** The placeholder's weeks were never stored, so a stored week could not score a game against it. The snapshot now keeps excluded rosters in `ExcludedTeams`, apart from `Teams`, and the finalize job stores both. A test proves a total-points payload is byte for byte the same with them present, even in a week only the placeholder scored in.
+- **A stored id is never overwritten with null.** The finalize job rewrites every final week from a snapshot that may predate the backfill; without this it would erase the backfill every Tuesday. The design review caught it in SQL, and the standards pass in the blob, which reads come from: a write now refreshes the blob from SQL rather than from the caller's weeks.
+- **The backfill is its own daily timer,** all year, because finalizing only runs from September to February, and it can be run by hand from the portal. It reads only stored weeks, newest season first, at most 12 a run, so the live site keeps the token bucket; it finishes in a few days, after which a run reads the store and the cached chain and calls Sleeper for nothing else. It sets only the game on a stored week, never re-solving it (D2). The placeholder's missing weeks are built from the read, with today's player map, which is harmless because they count in nothing but the pairing. A season that fails is logged and the others carry on; a week Sleeper no longer serves stays unfilled and is read again each run, inside the budget, and that season's records stay unknown. Each season logs "Matchups complete" once done, which T72 waits for.
+- **Records are null rather than partial.** Any counted week without its games, or a game that does not pair two rosters, leaves every record unknown, since a partial record would rank teams wrongly. Only settled weeks up to the trimmed last week count (R1, A37); a trimmed week is a 0-0 game and would otherwise be a tie.
+- **A third check, beside the two invariants:** our record against the one Sleeper keeps on each roster. It runs in either format, logging only, so the record is proven on the real league before anyone sees it. It compares wins, losses and ties only when both sides have counted the same number of results, because Sleeper updates rosters on its own schedule. Points are not compared: a stat correction after a week is stored moves Sleeper's and not ours. It runs on the current season; a past season's records are checked only by the captured-season test.
 
 ## What the original design got wrong
 

@@ -106,7 +106,7 @@ namespace FantasyLeague.Data
         /// The stored shape's version. Bump it whenever <see cref="TeamWeek"/>
         /// changes, so an old blob is a cache miss rather than a misread.
         /// </summary>
-        private const int Schema = 4;
+        private const int Schema = 5;
 
         /// <summary>
         /// Names the league's one blob.

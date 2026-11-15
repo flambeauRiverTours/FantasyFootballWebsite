@@ -40,8 +40,8 @@ namespace FantasyLeague.Core.Tests
                 sql, blob, container, factory);
         }
 
-        private static TeamWeek Week(int week = 1, decimal ideal = 120m) =>
-            new(1, week, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>());
+        private static TeamWeek Week(int week = 1, decimal ideal = 120m, int? matchupId = null) =>
+            new(1, week, 100m, ideal, [], [], [], true, new Dictionary<string, decimal>(), matchupId);
 
         private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -71,6 +71,18 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task Nothing_anywhere_reads_back_empty_rather_than_null() =>
             (await Build().Store.ReadAsync(League, 2026, Token)).Should().BeEmpty();
+
+        [Fact]
+        public async Task A_rewrite_without_a_matchup_keeps_the_stored_one_in_the_blob_too()
+        {
+            // T68: Finalize may write from a snapshot read before the backfill, and reads come from the blob
+            var parts = Build();
+            await parts.Store.WriteAsync(League, 2026, [Week(matchupId: 2)], Token);
+
+            await parts.Store.WriteAsync(League, 2026, [Week(matchupId: null)], Token);
+
+            (await parts.Blob.ReadAsync(League, 2026, Token))!.Should().ContainSingle().Which.MatchupId.Should().Be(2);
+        }
 
         [Fact]
         public async Task A_write_reaches_sql_and_the_blob()

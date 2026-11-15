@@ -42,6 +42,11 @@
         /// <summary>Gets or sets whether the week's scores are settled.</summary>
         public bool IsFinal { get; set; }
 
+        /// <summary>
+        /// Gets or sets the week's game, shared with the opponent: 0 for a bye, null when stored before matchups were read (A39).
+        /// </summary>
+        public int? MatchupId { get; set; }
+
         /// <summary>Gets or sets when the row was written.</summary>
         public DateTimeOffset ComputedUtc { get; set; }
     }

@@ -58,7 +58,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task A_stored_week_is_served_instead_of_rebuilt()
         {
-            var stored = new TeamWeek(1, 1, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
+            var stored = new TeamWeek(1, 1, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>(), null);
             var store = new RecordingWeekStore([stored]);
 
             var snapshot = await (await BuildAsync(LeagueSocket.Captured(), store)).BuildAsync(TestContext.Current.CancellationToken);
@@ -73,7 +73,7 @@ namespace FantasyLeague.Core.Tests
             // the latest captured week is current, so it must come from Sleeper however the store answers
             var socket = LeagueSocket.Captured();
             var current = socket.Matchups.Keys.Max();
-            var stored = new TeamWeek(1, current, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>());
+            var stored = new TeamWeek(1, current, 999m, 999m, [], [], [], true, new Dictionary<string, decimal>(), null);
             var store = new RecordingWeekStore([stored]);
 
             var snapshot = await (await BuildAsync(socket, store)).BuildAsync(TestContext.Current.CancellationToken);
@@ -111,8 +111,8 @@ namespace FantasyLeague.Core.Tests
             var socket = new LeagueSocket { State = Bodies.State(week: 2) };
             socket.Matchups[2] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 35m));
             var store = new RecordingWeekStore([
-                new TeamWeek(1, 1, 35m, 35m, [], [], [], true, new Dictionary<string, decimal>()),
-                new TeamWeek(2, 1, 35m, 35m, [], [], [], true, new Dictionary<string, decimal>()),
+                new TeamWeek(1, 1, 35m, 35m, [], [], [], true, new Dictionary<string, decimal>(), null),
+                new TeamWeek(2, 1, 35m, 35m, [], [], [], true, new Dictionary<string, decimal>(), null),
             ]);
 
             var service = await BuildAsync(socket, store, ("League:ExcludedOwnerIds:0", "u2"));
@@ -120,6 +120,23 @@ namespace FantasyLeague.Core.Tests
 
             snapshot.Teams.Should().ContainSingle().Which.RosterId.Should().Be(1);
             snapshot.Teams[0].Weeks.Select(w => w.Week).Should().Equal(1, 2);
+        }
+
+        [Fact]
+        public async Task An_excluded_roster_is_kept_apart_and_its_final_weeks_are_stored()
+        {
+            // T68: a stored week must hold both sides of a game against the placeholder
+            var socket = new LeagueSocket { State = Bodies.State(week: 3) };
+            socket.Matchups[1] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 3m));
+            socket.Matchups[2] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 3m));
+            socket.Matchups[3] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 3m));
+
+            var service = await BuildAsync(socket, new RecordingWeekStore(), ("League:ExcludedOwnerIds:0", "u2"));
+            var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+
+            snapshot.ExcludedTeams.Should().ContainSingle().Which.RosterId.Should().Be(2);
+            snapshot.FinalWeeks.Select(w => (w.RosterId, w.Week)).Should().BeEquivalentTo(
+                [(1, 1), (1, 2), (2, 1), (2, 2)], "week 3 is live, so neither side of it is stored");
         }
 
         [Fact]
