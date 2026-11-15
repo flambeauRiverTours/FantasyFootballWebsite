@@ -45,7 +45,8 @@ namespace FantasyLeague.Seasons
                 SlotOrder(snapshot.Slots),
                 leagueSlotAverages,
                 teams,
-                lastWeek);
+                lastWeek,
+                snapshot.Format);
         }
 
         /// <summary>

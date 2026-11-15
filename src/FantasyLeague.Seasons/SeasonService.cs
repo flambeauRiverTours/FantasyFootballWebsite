@@ -168,7 +168,8 @@ namespace FantasyLeague.Seasons
                 [],
                 [],
                 IsCurrent: false,
-                RegularSeason.LastWeek(league.PlayoffWeekStart));
+                RegularSeason.LastWeek(league.PlayoffWeekStart),
+                configured.Format);
         }
 
         /// <summary>
@@ -206,7 +207,8 @@ namespace FantasyLeague.Seasons
                 [.. weeks.Unresolved.Distinct()],
                 weeks.Violations,
                 IsCurrent: true,
-                RegularSeason.LastWeek(league.PlayoffWeekStart));
+                RegularSeason.LastWeek(league.PlayoffWeekStart),
+                configured.Format);
         }
 
         /// <summary>

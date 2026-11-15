@@ -45,7 +45,7 @@ namespace FantasyLeague.Cli
                 : string.Empty;
 
             output.WriteLine(
-                $"season {payload.Season}   weeks 1-{counted}   " +
+                $"season {payload.Season}   {payload.Format}   weeks 1-{counted}   " +
                 $"final through wk {payload.FinalThroughWeek}   {payload.AsOfUtc:yyyy-MM-dd HH:mm}Z{after}");
             output.WriteLine();
             output.WriteLine($"{"TEAM",-Name}{"POINTS",9}{"SPREAD",8}{"IDEAL",9}{"EFF",6}{"GAP",8}");

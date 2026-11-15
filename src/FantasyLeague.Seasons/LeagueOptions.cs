@@ -38,5 +38,16 @@ namespace FantasyLeague.Seasons
         /// Gets or sets a name to show instead of the one set in Sleeper. Empty uses Sleeper's.
         /// </summary>
         public string OverrideLeagueName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets how the league decides its winner (A38).
+        /// </summary>
+        /// <remarks>
+        /// Bound from <c>League:Format</c>, by name and ignoring case. Only
+        /// <c>TotalPoints</c> until T72 (A38), which swaps in
+        /// <c>[EnumDataType(typeof(LeagueFormat))]</c>.
+        /// </remarks>
+        [AllowedValues(LeagueFormat.TotalPoints, ErrorMessage = "League:Format can only be TotalPoints until head-to-head is complete (T72).")]
+        public LeagueFormat Format { get; set; } = LeagueFormat.TotalPoints;
     }
 }

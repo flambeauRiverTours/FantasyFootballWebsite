@@ -26,14 +26,28 @@ namespace FantasyLeague.Core.Tests
             string[]? rosterPositions = null,
             int currentWeek = 5,
             int finalThroughWeek = 4,
-            int cutoff = RegularSeason.NFLWeeks) =>
+            int cutoff = RegularSeason.NFLWeeks,
+            LeagueFormat format = LeagueFormat.TotalPoints) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], [], IsCurrent: true, cutoff);
+                teams ?? [], [], [], IsCurrent: true, cutoff, format);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,
                 (8m, 10m, true), (12m, 14m, true), (8m, 9m, true), (12m, 13m, true));
+
+        [Fact]
+        public void The_format_is_sent_by_name()
+        {
+            // A38: as the host serialises it, camelCase field and the setting's spelling
+            var json = JsonSerializer.Serialize(
+                SeasonPayloadMapper.ToSeasonPayload(Snapshot(format: LeagueFormat.HeadToHead), AsOf),
+                JsonSerializerOptions.Web);
+
+            json.Should().Contain("""
+                "format":"HeadToHead"
+                """);
+        }
 
         [Fact]
         public void The_header_fields_come_straight_from_the_snapshot()

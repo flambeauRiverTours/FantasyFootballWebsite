@@ -16,6 +16,7 @@ namespace FantasyLeague.Seasons
     /// <param name="Violations">Invariant breaches found while assembling, excluded rosters included.</param>
     /// <param name="IsCurrent">Whether this is the live season; false for a completed one (A34).</param>
     /// <param name="RegularSeasonCutoff">The last week the league's settings allow to count (A37): the week before the playoffs, else 18. The payload's last counted week can be earlier, once unplayed weeks are trimmed. <see cref="Teams"/> holds playoff weeks too, so they are stored; the payload leaves them out.</param>
+    /// <param name="Format">The deployment's format, applied to every season, past ones included (Q10, A38).</param>
     /// <remarks>
     /// An excluded roster is left out of every metric but still checked: a
     /// solver bug shows on the placeholder team's lineup as well as any other.
@@ -33,5 +34,6 @@ namespace FantasyLeague.Seasons
         IReadOnlyList<string> UnresolvedPlayerIds,
         IReadOnlyList<InvariantViolation> Violations,
         bool IsCurrent,
-        int RegularSeasonCutoff);
+        int RegularSeasonCutoff,
+        LeagueFormat Format);
 }

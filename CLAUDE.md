@@ -21,8 +21,8 @@ boilerplate, documentation and task updates, and implements features when asked.
 
 | Path | What |
 |---|---|
-| [`docs/design.md`](docs/design.md) | Design, decisions D1–D11. Corrected in place; **Corrected** marks the differences |
-| [`docs/amendments.md`](docs/amendments.md) | A1–A37: the reasoning behind every later decision and correction |
+| [`docs/design.md`](docs/design.md) | Design, decisions D1–D11, corrected in place |
+| [`docs/amendments.md`](docs/amendments.md) | A1–A38: the reasoning behind every later decision and correction |
 | [`docs/standards.md`](docs/standards.md) | The standards, by domain |
 | [`docs/runbook.md`](docs/runbook.md) | Operations, including the yearly season rollover |
 | [`tasks/todo.md`](tasks/todo.md) · [`tasks/lessons.md`](tasks/lessons.md) | Task list · rules learned from corrections |
@@ -49,7 +49,8 @@ D1 σ is population, finalized weeks only, null below four · D2 ideal uses that
 D4 exact bitmask DP, never greedy · D5 Static Web Apps + Functions · D6 polling at 30 s ·
 D8 one configured league, older seasons by walking `previous_league_id` (A34) · D9 React owns
 the DOM, D3 is maths only · D10 radar axes are ratios to the league average · D11 one team at
-a time · R2 radar axis order is fixed to `roster_positions` · A33 regular season only.
+a time · R2 radar axis order is fixed to `roster_positions` · A33/A37 regular season only ·
+A38 `League:Format`, TotalPoints only until T72.
 
 ## Sleeper traps
 

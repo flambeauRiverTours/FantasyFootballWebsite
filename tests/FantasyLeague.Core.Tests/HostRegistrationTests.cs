@@ -36,6 +36,36 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void The_format_is_total_points_when_unset()
+        {
+            using var provider = Provider(("League:CurrentLeagueId", "L1"));
+
+            Resolve(provider).Format.Should().Be(LeagueFormat.TotalPoints);
+        }
+
+        [Theory]
+        [InlineData("HeadToHead")]
+        [InlineData("1")]
+        [InlineData("TotalPoints,HeadToHead")]
+        [InlineData("7")]
+        public void Anything_but_total_points_is_refused_until_T72_is_built(string value)
+        {
+            // A38: every head-to-head feature keys off the format, so this one gate holds them all back
+            using var provider = Provider(("League:CurrentLeagueId", "L1"), ("League:Format", value));
+
+            FluentActions.Invoking(() => Resolve(provider)).Should().Throw<OptionsValidationException>()
+                .WithMessage("*T72*");
+        }
+
+        [Fact]
+        public void An_unknown_format_name_fails_to_bind()
+        {
+            using var provider = Provider(("League:CurrentLeagueId", "L1"), ("League:Format", "Bogus"));
+
+            FluentActions.Invoking(() => Resolve(provider)).Should().Throw<InvalidOperationException>();
+        }
+
+        [Fact]
         public void A_nineteen_digit_id_survives_as_a_string()
         {
             // parsing it would overflow an int by six orders of magnitude

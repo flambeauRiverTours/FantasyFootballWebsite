@@ -51,5 +51,5 @@ Close with the smallest set of changes that clears the gate, and nothing else.
 
 ## Step 4 — do not fix
 
-Report only. Jack writes the code (see CLAUDE.md). Offer to apply a fix only if
+Report only. Jack reviews every change (CLAUDE.md). Offer to apply a fix only if
 it is mechanical, and ask first.

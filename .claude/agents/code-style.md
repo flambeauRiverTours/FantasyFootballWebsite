@@ -31,7 +31,7 @@ which responsibility to split out, or say the length is earned and why.
 **3 · Comments are short.**
 Section labels in `.css` and `.tsx`: one to three words. Doc comments on an
 exported symbol: eight words or fewer. No commas, no em dashes, no restating the
-code. `pointCalculation.ts` and `index.css` are the reference; match them.
+code. `web/src/api/calculations.ts` and `index.css` are the reference; match them.
 Flag any comment explaining *what* rather than *why*.
 
 **4 · Pure core, effectful shell.**
@@ -39,7 +39,7 @@ Maths, mapping and derivation are pure functions of their arguments — no fetch
 no clock, no DOM, no `Date.now()`, no module-level mutable state. Effects live
 in hooks and handlers at the edge and hand values down. In C# this is the
 `FantasyLeague.Core` rule already in CLAUDE.md; in `web/` it means
-`api/pointCalculation.ts` stays pure and `hooks/` owns the impurity.
+`web/src/api/calculations.ts` stays pure and `hooks/` owns the impurity.
 Flag any import of a side-effecting module from a pure one — that is the
 violation that actually costs you, because it makes the unit untestable.
 

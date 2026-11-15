@@ -2,6 +2,7 @@
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Core.Tests
 {
@@ -42,14 +43,23 @@ namespace FantasyLeague.Core.Tests
         private static TeamWeek Week(int rosterId, int week, decimal actual) =>
             new(rosterId, week, actual, actual + 10m, [], [], [], true, new Dictionary<string, decimal>());
 
+        private static Task<(ISeasonService Service, ISeasonChain Chain)> BuildAsync(
+            LeagueSocket socket, IFinalizedWeekStore store, params (string Key, string? Value)[] settings) =>
+            BuildAsync(socket, store, null, settings);
+
+        /// <param name="options">Supplied directly, past the binding and its validation, when not null.</param>
         private static async Task<(ISeasonService Service, ISeasonChain Chain)> BuildAsync(
-            LeagueSocket socket, IFinalizedWeekStore store, params (string Key, string? Value)[] settings)
+            LeagueSocket socket, IFinalizedWeekStore store, LeagueOptions? options, params (string Key, string? Value)[] settings)
         {
             var services = TestServices.Create(settings);
             services.AddSingleton(store);
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);
             services.AddSeasonServiceWithNullStores();
+            if (options is not null)
+            {
+                services.AddSingleton(Options.Create(options));
+            }
 
             var provider = services.BuildServiceProvider();
             await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(default);
@@ -152,6 +162,20 @@ namespace FantasyLeague.Core.Tests
 
             payload.LastRegularWeek.Should().Be(2);
             payload.FinalThroughWeek.Should().Be(2);
+        }
+
+        [Fact]
+        public async Task Every_season_is_shown_in_the_configured_format()
+        {
+            // Q10: a past season too, whatever format the league played it in. The setting
+            // refuses HeadToHead until T72 (A38), so the options are supplied directly.
+            var (service, _) = await BuildAsync(
+                TwoSeasons(),
+                new SeasonStore().With("L0", 2025, Week(1, 1, 90m)),
+                new LeagueOptions { CurrentLeagueId = "L1", Format = LeagueFormat.HeadToHead });
+
+            (await service.BuildAsync(Token)).Format.Should().Be(LeagueFormat.HeadToHead);
+            (await service.BuildPastAsync(2025, Token))!.Format.Should().Be(LeagueFormat.HeadToHead);
         }
 
         [Fact]

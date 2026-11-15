@@ -15,7 +15,15 @@ export interface SeasonPayload {
   teams: TeamPayload[];
   /** The last week that counts (A37): the week before the playoffs, else 18, less any settled weeks at the end nobody scored in. */
   lastRegularWeek: number;
+  /**
+   * How the league decides its winner (A38). Optional: a past season a
+   * browser cached before A38 has none, so read a missing one as `TotalPoints`.
+   */
+  format?: LeagueFormat;
 }
+
+/** The deployment's `League:Format`, spelled as the setting is (A38). */
+export type LeagueFormat = 'TotalPoints' | 'HeadToHead';
 
 /**
  * True once the fantasy season's last counted week is final: nothing on the

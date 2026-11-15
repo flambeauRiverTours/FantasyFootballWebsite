@@ -188,7 +188,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public async Task Writing_the_same_week_twice_updates_rather_than_duplicating()
         {
-            // T30 re-runs the backfill after a solver fix; that is designed, not accidental
+            // a backfill re-run after a solver fix writes the same weeks again; that is designed, not accidental
             var store = Store();
 
             await store.WriteAsync(League, 2026, [Week(ideal: 120m)], TestContext.Current.CancellationToken);

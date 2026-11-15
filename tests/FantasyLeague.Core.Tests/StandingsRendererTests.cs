@@ -21,7 +21,7 @@ namespace FantasyLeague.Core.Tests
             IReadOnlyList<InvariantViolation>? violations = null,
             int cutoff = RegularSeason.NFLWeeks) =>
             new("Name", 2026, currentWeek, finalThroughWeek, Slot.Parse(["QB", "RB", "FLEX"]),
-                teams ?? [], unresolved ?? [], violations ?? [], IsCurrent: true, cutoff);
+                teams ?? [], unresolved ?? [], violations ?? [], IsCurrent: true, cutoff, LeagueFormat.TotalPoints);
 
         private static string Render(SeasonSnapshot snapshot)
         {
@@ -39,7 +39,7 @@ namespace FantasyLeague.Core.Tests
             var output = Render(Snapshot(currentWeek: 7, finalThroughWeek: 6));
 
             Lines(output)[0].Should().Be(
-                "season 2026   weeks 1-7   final through wk 6   2026-10-18 18:42Z");
+                "season 2026   TotalPoints   weeks 1-7   final through wk 6   2026-10-18 18:42Z");
         }
 
         [Fact]
@@ -50,7 +50,7 @@ namespace FantasyLeague.Core.Tests
                 currentWeek: 3, finalThroughWeek: 2, cutoff: 2));
 
             Lines(output)[0].Should().Be(
-                "season 2026   weeks 1-2   final through wk 2   2026-10-18 18:42Z   playoffs from wk 3 not counted");
+                "season 2026   TotalPoints   weeks 1-2   final through wk 2   2026-10-18 18:42Z   playoffs from wk 3 not counted");
             output.Should().Contain("(3 team-weeks, playoffs included)");
         }
 
