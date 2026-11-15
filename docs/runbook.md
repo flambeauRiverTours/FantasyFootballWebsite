@@ -20,7 +20,7 @@ Four accounts, all free.
    - Azure CLI, to control Azure from the terminal. Search "install Azure CLI".
    - GitHub CLI, to control GitHub from the terminal. cli.github.com.
 
-On Windows, run every command in **Git Bash** (installed with Git). Not PowerShell, not Command Prompt: these commands silently misbehave in other shells. This has already cost the project a day.
+On Windows, run every command in **Git Bash** (installed with Git). Not PowerShell, not Command Prompt: these commands silently misbehave in other shells.
 
 ---
 
@@ -272,7 +272,7 @@ Three built-in safeguards make a mistake cost an outage, not a bill:
 2. **Error recording stops** at a fixed daily cap. That day's error log is lost; no invoice is issued.
 3. **An email warns** if the bill exceeds $0.50.
 
-A fourth email, separate from billing, reports errors thrown by the site.
+A fourth email, separate from billing, reports failed requests and timer runs (A35).
 
 The code sets all of these, so a change made in the Azure portal is reverted on the next deploy. Exception: the budget, set once in Step 6.
 
@@ -363,7 +363,7 @@ Check that the dummy team from Step 5 is excluded. Included, it skews every leag
 
 The league number and the league members' Sleeper user IDs. Both belong in the Step 5 secrets and never in a committed file.
 
-A check runs on every change and scans the code for them. It reports file and line, never the value. It has already caught one real leak in this project.
+A check runs on every change and scans the code for them. It reports file and line, never the value.
 
 No other keys are stored. The database and storage authenticate the site by its identity, and each deploy fetches the page's upload key fresh. If that key may have leaked, reset it; the next deploy picks up the new one automatically:
 
@@ -376,5 +376,5 @@ az staticwebapp secrets reset-api-key -n "$SWA" -g rg-myleague
 
 ## Where to read more
 
-- `README.md` explains what the three numbers on the page mean.
+- The write-up, `site/index.md`, explains what the three numbers on the page mean.
 - `docs/design.md` explains why the site is built this way.

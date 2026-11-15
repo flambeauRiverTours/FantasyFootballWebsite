@@ -21,10 +21,12 @@ namespace FantasyLeague.Seasons
         /// <returns>The <c>Cache-Control</c> value.</returns>
         /// <remarks>
         /// Live: 5 s, close to the games, and the 5 s season cache makes a request
-        /// inside it free. Completed: a year, because it cannot change (design §09).
+        /// inside it free. Completed: a day. Its scores cannot change, but the
+        /// format it is shown in is configuration and can (A38); the ETag makes
+        /// the daily check a 304.
         /// </remarks>
         public static string CacheControl(SeasonPayload payload) =>
-            payload.IsCurrent ? "public, max-age=5" : "public, max-age=31536000, immutable";
+            payload.IsCurrent ? "public, max-age=5" : "public, max-age=86400";
 
         /// <summary>
         /// Builds a validator for the seasons list.

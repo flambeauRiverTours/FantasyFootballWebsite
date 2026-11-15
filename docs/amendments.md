@@ -1,19 +1,8 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A37 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A38 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
-## Open questions, answered
-
-| | Question | Answer |
-|---|---|---|
-| **Q1** | League shape | 6 rosters; 11 startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus 8 bench. 2¹¹ = 2,048 DP states, exactly what §05 assumed. |
-| **Q2** | SUPER_FLEX or IDP? | SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3). |
-| **Q3** | Do IR players count? | Moot: the league has no IR or TAXI slots. |
-| **Q4** | Playoffs? | Regular season only (A33), enforced since A37. |
-| **Q5** | Weeks before σ shows | Four (D1), in `Spread.MinWeeks`. |
-| **Q6** | σ or CV by default? | Open. |
-| **Q7** | Is the season chain intact? | 2026 is the first season, so there's nothing to walk yet (A4). |
-| **Q8** | Distinct slots | 8, which reads fine as a radar. |
+The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
 ## A1 · One placeholder team is excluded from everything
 
@@ -123,7 +112,7 @@ Also confirmed: empty slots are the string `"0"`, defences are team abbreviation
 2026-10-12. Should SQL go entirely? No.
 
 - The blob holds one season, with the season stamped inside it. It only answers for that season and only accepts the same or a newer one, so a backfill can't evict the live season.
-- A past season is read rarely and cached for a year, so it can afford SQL's resume. The current season is polled every 30 s and can't.
+- A past season is read rarely and cached for a year (a day since A38), so it can afford SQL's resume. The current season is polled every 30 s and can't.
 - Cost doesn't decide it, since both are free. SQL also makes cross-season questions a query.
 - Known weakness: `WeekScore` stores most of a week as JSON columns. That's right for a store read whole by key, but it's the first thing a reviewer would question.
 
@@ -153,7 +142,7 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 2026-10-12.
 
 - `noUncheckedIndexedAccess` is on, which exposed nine unguarded indexes.
-- Calculations moved out of components into `pointCalculation.ts`.
+- Calculations moved out of components into `pointCalculation.ts` (now `calculations.ts`).
 - Reduced motion is respected everywhere.
 - Prettier formats the web code, with the style most files already used.
 - The 125 KB gzipped budget for initial JavaScript is enforced in CI. It stood at 112 KB.
@@ -237,7 +226,7 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 2026-10-13.
 
 - **The chain is walked on demand and cached for 24 h,** with loop and depth guards. No table, and past league IDs stay out of the database.
-- **A past season is its stored weeks plus that year's league metadata,** so names read as they were. It's cached for a year. An unknown year returns 404 with the available list, never a backfill inside a request.
+- **A past season is its stored weeks plus that year's league metadata,** so names read as they were. It's cached for a year (a day since A38). An unknown year returns 404 with the available list, never a backfill inside a request.
 - **The rollover is a hand edit of the GitHub secret, then a redeploy.** The runbook used to say to edit the Azure setting, which the next deploy would silently overwrite.
 - **A year → league ID override map is deferred** (T65); this league's chain is intact.
 - **The picker is hidden until there are two seasons.** It stays visible on phones.
@@ -258,7 +247,7 @@ Found in the same logs:
 
 ## A36 · Zooming the chart, and the flash on phones
 
-2026-11-15. Over a full season the weekly lines crossed so often they were hard to follow, and on a phone the lines flashed whenever a chart option changed. Head-to-head, playoffs and a champion are planned under the same number (T67–T70) and get their entries when built.
+2026-11-15. Over a full season the weekly lines crossed so often they were hard to follow, and on a phone the lines flashed whenever a chart option changed. Head-to-head, this week's matchups, division standings, playoffs and a champion are planned as T67–T72, with their own entries (A38 onward).
 
 - **A brush strip under the chart sets the weeks shown,** and the values rescale to them. It is drawn in React with pointer events (D9). Its handles are sliders with arrow, Home and End keys, and a **Reset zoom** button stands in for a double-tap, which has no keyboard equivalent and clashes with zooming on iOS.
 - **The range goes into the URL only when a drag or key press ends.** Safari throws after about 100 history calls in ten seconds, and a drag writes on every frame. The commit reads the latest move from a ref, because a quick flick can lift the finger before the last move has rendered.
@@ -282,16 +271,22 @@ Found in the same logs:
 - **The real league's settings are captured,** by `capture_fixtures.py` into `league-settings.json` (`start_week` and the playoff fields only), and a test pins the captured value. Every other test uses invented starts.
 - **Found in the same review:** the slot-alignment error logged every 5 s for a live week whose lineup never lines up (an eliminated team's playoff week could), so it is now reported once per roster-week like every other problem. The CLI header now names the weeks counted. A mid-season change to `playoff_week_start` reaches the page within a day (the league cache) and applies to every week, which is consistent because nothing about it is stored.
 
+## A38 · The league's format is a setting
+
+2026-11-15. T67, the first step towards head-to-head, playoffs and a champion (A36, T67–T72).
+
+- **`League:Format` is `TotalPoints` (the default) or `HeadToHead`.** A setting, not something read from Sleeper: Sleeper scores matchups for every league, whether or not the league cares about them, so only the owner knows which one decides the winner. The default keeps every deployment as it was with no new setting.
+- **"Format", not "mode".** The chart already has `?mode=` and `PointMode`, and the head-to-head table would read both side by side.
+- **Bound by name, ignoring case.** An unknown name stops the app at start.
+- **Head-to-head stays off until T72 is complete,** at Jack's request. `[AllowedValues(TotalPoints)]` makes the app refuse to start with anything else. T68, T71 and T72 all key off the format, so this one gate keeps them from running or reaching the page while they are merged piece by piece, and none needs its own flag. The playoffs (T69) and the champion (T70) are built after it lifts, and appear once built. T72 replaces it with `[EnumDataType]`. Tests that need `HeadToHead` supply the options directly.
+- **It rides on the snapshot,** set by `SeasonService` for the current season and past ones alike (Q10), as `OverrideLeagueName` is, so the mapper stays a function of the snapshot and the CLI gets it too (its header names the format). Snapshots are cached in memory only and a setting change restarts the app, so none outlives a switch. The payload sends it by name, `"format": "TotalPoints"`, and the ETag, a hash of the body, changes with it.
+- **A completed season is now cached for a day, not a year as `immutable`.** Its scores still cannot change, but its body now depends on configuration. The cost: bodies browsers already hold as `immutable` cannot be reached and may live up to a year with no `format`, so the page reads a missing one as `TotalPoints`. Nothing else holds them: no CDN, Front Door or service worker.
+- **Not plumbed into `infra/` yet.** `main.bicep` declares the whole app-settings list, so a value set by hand in the portal would be wiped by the next deploy. `League__Format` goes in as a bicep parameter once T72 lifts the gate, after T68's backfill, since switching before it would show records as missing.
+
 ## What the original design got wrong
 
-The design now states what's true. These are the mistakes worth remembering.
+The design now states what's true. Most of its mistakes are recorded where they were fixed (D5, A6, A7, A9, A12, A16, A17, A19, §13); these three are worth keeping here.
 
-- **The player dump is 14.65 MB, not about 5.** That matters for memory and timeouts, not cost.
-- **"Cache it" wasn't enough.** Instance memory doesn't survive scale-out, and it was the one design gap that reached production (A12).
-- **Team names and overrides** were described wrongly (A6, A7, A9).
-- **The Consumption plan couldn't be provisioned**, so the app runs on Flex Consumption.
-- **The request budget was ≈ 2.3/min as designed.** It's ≈ 4.4 as built, and every figure is per instance.
-- **The cost table missed the storage account entirely,** and its 1 GB/day ingest cap was six times the free allowance.
+- **The request budget was ≈ 2.3 Sleeper requests a minute as designed.** It's ≈ 4.4 as built, and every figure is per instance (§07).
+- **The cost table missed the storage account entirely.** It is now the main charge (§13).
 - **Twelve teams were assumed;** there are five scoring.
-- **Four tables were planned and one was used** (A19). **The blob layer cut from v1 came back** (A16), for latency.
-- **σ in a table cell didn't work** (A17).

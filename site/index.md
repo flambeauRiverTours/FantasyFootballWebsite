@@ -58,7 +58,7 @@ flowchart LR
 | CI/CD | GitHub Actions + OIDC to Azure | No stored deploy keys, and I personally prefer GitHub's pipeline syntax |
 | Quality | xUnit, vitest, axe-core, oxlint, Prettier, dotnet format | About 400 .NET and 200 web tests |
 | Supply chain | CodeQL, NuGet and npm audits, licence allowlist, Trivy, SBOM, SHA-pinned actions | Overkill for this level of project, but good practice |
-| Telemetry | App Insights + an alert on exceptions | Ingest is capped to stay inside the free allowance |
+| Telemetry | App Insights + an alert on failed requests | Ingest is capped to stay inside the free allowance |
 
 - **Layering:** Core ← Sleeper ← Seasons ← hosts (Functions, CLI), with Data beside them. [Browse the projects](https://github.com/flambeauRiverTours/FantasyFootballWebsite/tree/main/src).
   - *Why:* the solver and statistics have no Azure dependency, so they test offline in milliseconds. The CLI host checks the numbers against live data without deploying.
@@ -85,7 +85,8 @@ flowchart TB
   end
   subgraph DEP["Merge to main · deploy.yml · OIDC"]
     direction LR
-    d1["infra (Bicep)"] --> d2["migrate (EF)"] --> d3["functions + SBOM"] --> d4["web (SWA)"]
+    d1["infra (Bicep)"] --> d2["migrate (EF)"] --> d3["functions + SBOM"]
+    d1 --> d4["web (SWA)"]
   end
   subgraph SEC["Weekly · security.yml"]
     s1["CodeQL · audits · licences · secrets · Trivy"]
@@ -106,6 +107,7 @@ The page has four sections. Most update live on Sundays, and the URL encodes eac
 - The leaderboard has one row per team, ranked on total points.
 - **Gap** shows how far each team trails the leader. **Ideal** shows the points the team could have scored with the best legal lineup every week (see [ideal points](#ideal-points-calculations---handling-flex-slots)).
 - The live week counts toward the total, so the table moves during games.
+- Only the regular season counts: playoff weeks are left out of every number.
 - Code: [StandingsPanel.tsx](https://github.com/flambeauRiverTours/FantasyFootballWebsite/blob/main/web/src/components/StandingsPanel.tsx)
 
 ### Consistency
@@ -124,6 +126,7 @@ The page has four sections. Most update live on Sundays, and the URL encodes eac
 - A week-by-week line chart for any teams you pick, showing **Points**, **Ideal** or **σ**.
 - For points and ideal, there are three views: running **Total**, **Per week**, and **vs median** (points above or below the league median, summed over the weeks). The median view shows who is pulling away, which a running total hides.
 - For σ, there are two choices: **Expanding** (all weeks so far) or **Rolling 4** (the last four weeks)
+- A brush strip under the chart zooms in on a range of weeks: drag across it to choose them, or drag the window to pan.
 - Code: [ChartPanel.tsx](https://github.com/flambeauRiverTours/FantasyFootballWebsite/blob/main/web/src/components/ChartPanel.tsx)
 
 ### Positional radar
@@ -202,7 +205,7 @@ flowchart LR
 
 ### Limitations
 
-- **No support for matchups:** should we one day decide to return to a typical matchup and playoff league structure, a significant rework will be needed to support this.
+- **Head-to-head is in progress:** records, matchups and divisions are being built behind a setting, which stays off until they are complete; playoffs and a champion follow.
 - **Season rollover** has not been tested on a live league.
 - **Single tenant:** this is currently just for my league. Expanding to other leagues would bring a whole host of problems to solve. Much of the data (e.g, player scores for a week) could be shared between leagues, and a Redis cache could be used to share this between leagues to reduce load on the Sleeper API. We'd also likely need to move away from polling to server-sent events (not websockets, as this only needs to be a one-way communication), as polling would scale requests with the number of tenants.
 

@@ -27,14 +27,14 @@ actually returns.
 - A type mismatch, including **null where a number is declared**. The five
   consistency figures are null together below four finalized weeks (D1); that is
   correct, not a finding.
-- `leagueSlotAverages` and `slotAverages` are empty objects until T48 fills them.
-  Empty is expected. Missing is a finding.
+- `lastRegularWeek` (A37) is required; missing is a finding.
+- `format` (A38) is optional. A past season cached before A38 has none, and the
+  page reads it as `TotalPoints`; absent there is expected, not a finding.
 
 ## Why this matters
 
 The interfaces were written by hand from one live response and nothing verifies
-them since. T48 adds three fields to this payload, and the front end binds to all
-of them already.
+them since.
 
 ## Output
 

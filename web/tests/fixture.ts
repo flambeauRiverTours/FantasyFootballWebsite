@@ -32,4 +32,5 @@ export const payload: SeasonPayload = {
   leagueSlotAverages: {},
   teams,
   lastRegularWeek: 14,
+  format: 'TotalPoints',
 };

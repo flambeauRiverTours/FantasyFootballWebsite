@@ -20,6 +20,7 @@ incident itself belongs in the commit or the amendment.
 - When a fixture test fails, check the fixture first: real data states facts nobody wrote down.
 - Unresolved reference data in a fixture test is a failure, not something to filter out.
 - Rebuild a derived fixture from every capture on disk, not only this run's.
+- Check a planned task's premise against the code before building it; unbuilt tasks keep stale premises longest.
 - A rule phrased as "the week" or "the season" is league-wide; compute it once across all teams.
 
 ## HTTP and services
@@ -38,7 +39,6 @@ incident itself belongs in the commit or the amendment.
 - For an overflow, list elements wider than the viewport before theorising; the first is the cause.
 - A sticky panel taller than its container hides its overflow; test by forcing tall content.
 - UI whose job is timing must be watched with the slow case forced; tests cannot see it.
-- Check a planned task's premise against the code before building it; unbuilt tasks keep stale premises longest.
 - Chrome anchors scrolling to SVG text, so a redrawn chart can drag the page; test changes with the viewport's top edge cutting through the chart.
 - Leave more than the focus ring's 4px between adjacent controls, and check new controls by tabbing to them.
 
@@ -48,18 +48,14 @@ incident itself belongs in the commit or the amendment.
 - On Windows, `$( )` keeps a trailing `\r`; strip it with `tr -d '\r'` before storing a value.
 - A script given to paste runs in a subshell `( … )`: `set -e` left on in an interactive shell closes it at the next failing command.
 - `! cmd` under `set -e` is not a guard; write `if cmd; then …; exit 1; fi`, and prove a gate fails once.
-- Under `pipefail`, never pipe a large download into an early-exit reader (`grep -q`, `head`); write a file.
-- A post-deploy check waits for this run's artefact, identified by build, not whatever is live.
 - Adding `environment:` or changing a trigger changes the OIDC subject; read the subject from the log first.
+- Branch off a remote ref with `--no-track`: `checkout -B x origin/main` makes origin/main the upstream, and a plain `git push` then lands on main.
 
 ## Azure
 
 - Verify a setting on the resource that enforces it: workspace-based App Insights caps on the workspace.
-- A deploy-time value (`utcNow()`) must not set a property Azure cannot change after creation.
 - A template that builds is not one Azure accepts; `infra/` changes are verified by a what-if.
 
 ## Secrets (A2)
 
-- Never put a real ID in a test, even a harmless one; satisfy its shape with an obvious placeholder.
 - Read a settings file as keys only, or with every value replaced; never by listing keys to hide.
-- Branch off a remote ref with `--no-track`: `checkout -B x origin/main` makes origin/main the upstream, and a plain `git push` then lands on main.

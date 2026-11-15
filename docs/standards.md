@@ -20,7 +20,8 @@ This document states the standards for each programming domain for this project.
   - No clock or randomness
   - No logging
 - Project references point inward only
-  - Hosts reference `Seasons` `Sleeper` and `Data`
+  - Hosts reference `Seasons` and `Sleeper`
+  - The Functions host also references `Data`; the CLI does not
   - `FantasyLeague.Seasons` references `FantasyLeague.Sleeper`
   - Every library references `FantasyLeague.Core`
   - Core references nothing in the solution
@@ -83,7 +84,7 @@ This document states the standards for each programming domain for this project.
 - EF migrations stay generated public classes
   - why: they are tool output not handwritten code
 - Timer triggers use UTC cron schedules
-  - why: the Linux consumption plan cannot set a time zone
+  - why: Flex Consumption (Linux) cannot set a time zone
 - Tests may use `!` without a comment
   - why: a wrong null fails the test that relies on it
 
@@ -201,7 +202,7 @@ This document states the standards for each programming domain for this project.
 **Cost**
 - Steady state stays under fifty cents a month
   - why: a hobby site should never produce a real bill
-  - Storage transactions are the only charge, about fifteen cents
+  - Storage and the failure alert are the only charges, about fifteen and ten cents
 - A budget alert fires at fifty cents
 - New resources state their monthly cost up front
 - A daily telemetry cap stays inside the free grant
@@ -209,7 +210,8 @@ This document states the standards for each programming domain for this project.
 **Observability**
 - SQL dependency calls are traced
   - why: a failing query once hid behind a silent fallback
-- An exception in the Function App raises an alert
+- A failed request or timer run raises an alert
+  - 404 and 499 are excluded per A35
   - why: a failed timer job otherwise waits for someone to look
 
 **Accepted exceptions**
@@ -282,16 +284,15 @@ This document states the standards for each programming domain for this project.
 **Documents**
 - The README fits on one screen
   - What this is
-  - A link to the live site
-  - The architecture
-  - How to run it locally
+  - Links to the live site and to the write-up in `site/`, which holds the architecture
+  - A link to the runbook, which says how to run it
   - why: a reviewer decides in seconds whether to read on
 - Decisions are recorded with a date and reasoning
   - D numbers live in the design
   - A numbers live in the amendments
   - why: the reasoning outlives the code that implemented it
-- Corrections happen in place marked **Corrected**
-  - why: readers see current truth and how it changed
+- Corrections happen in place, with no marker; the amendment says what changed
+  - why: readers see current truth, and the amendments keep how it changed
 - Every incident adds a rule to the lessons log
   - why: a rule prevents the repeat a fix alone does not
 

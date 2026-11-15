@@ -2,14 +2,14 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A37. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A38. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
 - **Cost:** about $0.25 a month, with an alert at $0.50 (§13)
 - **Sleeper load:** about 4.4 requests a minute per instance, capped at 25 (§07)
 - **League:** six rosters, five of them scoring. One is a placeholder team and is excluded from everything (A1)
-- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Next up: head-to-head, playoffs and a champion (T67–T70)
+- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Next up: head-to-head, matchups, divisions, playoffs and a champion (T68–T72)
 
 ## 01 · Scope
 
@@ -17,7 +17,7 @@ One public, read-only page for one league: a standings table and some charts, up
 
 The league is decided on **total season points**, the sum of every week's actual score. Consistency and ideal points are just commentary; neither decides anything.
 
-Out of scope: logins, writes of any kind, head-to-head matchups, playoffs (fantasy or NFL, A33), trades, and anything needing a Sleeper account. The site reads one league ID from configuration and nothing else.
+Out of scope: logins, writes of any kind, trades, and anything needing a Sleeper account. Head-to-head, a `League:Format` setting, is off until T72, and playoffs and a champion follow it (A38); playoff weeks never count toward the standings (A33, A37). The site reads one league ID from configuration and nothing else.
 
 Sleeper's API has no projections, so there's no projected-points column and no scoring engine. Sleeper's own scored points are used as-is.
 
@@ -221,7 +221,7 @@ GET /api/season?season=2025 → a completed season
 
 200 OK
 Cache-Control: public, max-age=5                     # current season
-Cache-Control: public, max-age=31536000, immutable   # completed season
+Cache-Control: public, max-age=86400                 # completed season (A38)
 ETag: W/"2026-wk7-…"
 
 {
@@ -229,6 +229,8 @@ ETag: W/"2026-wk7-…"
   "isCurrent": true,
   "currentWeek": 7,
   "finalThroughWeek": 6,          // σ covers 1..6; points covers 1..7
+  "lastRegularWeek": 18,          // the last week that counts (A37)
+  "format": "TotalPoints",        // or "HeadToHead": League:Format (A38)
   "asOfUtc": "2026-10-18T18:42:03Z",
   "slotOrder": ["QB","RB","WR","TE","FLEX","K","DEF"],
   "leagueSlotAverages": {         // the radar's reference circle
@@ -276,7 +278,7 @@ There's no `next_league_id`, so the August rollover is manual: update the GitHub
 
 #### Serving a completed season
 
-- A finished season can't change, so it's cached for a year with `immutable`. The live season gets 5 s, to stay close to the games.
+- A finished season's scores can't change, but the format it's shown in is configuration and can, so it's cached for a day; the ETag makes the daily check a 304 (A38). The live season gets 5 s, to stay close to the games.
 - An unknown year, or one with nothing stored, returns **404 with the list of available seasons**. Never an empty payload, and never a backfill inside a request: a backfill is about 21 Sleeper calls and would leave a visitor waiting around 20 s.
 - On a completed season, `finalThroughWeek` is the last week.
 
@@ -364,7 +366,7 @@ Core has no Azure dependency, and that's the point of the layout: the bugs that 
 
 - **OIDC** between GitHub and Azure, so there are no stored deploy keys or secrets to rotate.
 - **Bicep what-if runs on every PR**, so infrastructure changes get reviewed like code.
-- **Deploys run in order:** Bicep, then EF migrations, then Functions, then the web app.
+- **Deploys run in order:** Bicep, then EF migrations, then Functions; the web app deploys in parallel after Bicep (A32).
 - **Squash merges only**, with Conventional Commit titles checked in CI, so main reads like a changelog.
 
 ## 13 · Cost
@@ -385,7 +387,7 @@ Core has no Azure dependency, and that's the point of the layout: the bugs that 
 
 ## 14 · Open questions
 
-All but one are answered; the reasoning is in [`amendments.md`](amendments.md).
+All but one are answered; the reasoning is in [`amendments.md`](amendments.md). Q9–Q15 were answered on 2026-11-15 for head-to-head; their reasoning arrives with T68–T72's amendments.
 
 - **Q1 answered:** six rosters, eleven startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus eight bench. The league ID is a secret (A2).
 - **Q2 answered:** SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3).
@@ -395,17 +397,16 @@ All but one are answered; the reasoning is in [`amendments.md`](amendments.md).
 - **Q6 open:** should the default be σ or CV? D3 picks σ for readability. If the gap between the highest- and lowest-scoring teams' averages passes about 30 points, CV is the fairer default.
 - **Q7 answered:** 2026 is the league's first season, so a null `previous_league_id` is expected (A4).
 - **Q8 answered:** eight distinct slots, which is readable as a radar.
+- **Q9 answered:** an excluded roster in the bracket is shown, and crowned if it wins.
+- **Q10 answered:** every season renders in the deployment's format.
+- **Q11 answered:** no seeds.
+- **Q12 answered:** a median game counts in W-L, as in Sleeper.
+- **Q13 answered:** the matchups view shows the current week only.
+- **Q14 answered:** division standings are head-to-head only.
+- **Q15 answered:** build order T68 → T71 → T72 → T69 → T70.
 
 ## 15 · Build order
 
-I ordered the work by risk, cheapest first. The solver was the most likely place for a real bug, and proving it needed no Azure account. That held up: the build's one real bug was in the solver, and fuzzing against exhaustive search caught it before anything was deployed.
+I ordered the work by risk, cheapest first. The solver was the most likely place for a real bug, and proving it needed no Azure account.
 
-- **M0 · Core, offline:** an hour of curl against the real league to capture fixtures, then the solver and σ.
-- **M1 · Sleeper client:** typed client, rate limiter and single-flight cache, proven by a console app printing the real standings and checking both §03 invariants across a season.
-- **M2 · API on Azure:** Functions over OIDC with an in-memory season; no database yet.
-- **M3 · Persistence:** SQL, migrations, the finalize timer and the daily player refresh.
-- **M4 · The page:** the table, then the chart. The first thing the league could see.
-- **M5 · Chart modes:** per week, vs median and CV. Saved for later because they're the most a matter of taste.
-- **M6 · Positional radar:** last, because it depends on the unverified `starters` alignment and benefits most from a full season of data.
-- **M7 · Motion:** optional, and listed separately so cutting it would be a decision rather than something forgotten.
-- **Since then:** σ's own panel (T59), past seasons and the season picker (T29, T56), chart zoom (T66), regular season only (T64). Next: head-to-head, playoffs and a champion (T67–T70).
+Chart modes came late because they're the most a matter of taste. The radar came last because it depends on the unverified `starters` alignment and benefits most from a full season of data. Motion was listed separately, so cutting it would be a decision rather than something forgotten. What was built when is in the todo's Done table.

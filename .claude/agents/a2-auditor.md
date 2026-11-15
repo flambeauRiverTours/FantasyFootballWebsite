@@ -1,6 +1,6 @@
 ---
 name: a2-auditor
-description: Scans tracked files for league IDs, Sleeper user IDs and Azure resource names. Reports file and line, never the value. Run before pushing or going public.
+description: Scans tracked files for league IDs, Sleeper user IDs and Azure resource names. Reports file and line, never the value. Run before pushing.
 tools: Read, Grep, Glob, Bash
 model: haiku
 ---
@@ -15,13 +15,15 @@ Search **tracked files only** (`git ls-files`), including docs, workflows, tests
 and fixtures.
 
 1. **Sleeper league IDs** — runs of 15 to 20 digits. The placeholder
-   `1234567890123456789` in `docs/runbook.md` is expected; anything else is a
+   `1234567890123456789` in `tests/FantasyLeague.Core.Tests/HostRegistrationTests.cs`
+   is expected, as is `<league-id>` in `docs/runbook.md`; anything else is a
    finding.
 2. **Sleeper user IDs** — the same digit shape inside `EXCLUDED_OWNER_IDS`-like
    context, and any captured `/league/{id}/users` response.
 3. **Azure resource names** — anything matching `rg-`, `func-`, `stapp-`, `sql-`,
    `log-`, `appi-` followed by a word, and any `*.azurestaticapps.net` or
-   `*.azurewebsites.net` hostname.
+   `*.azurewebsites.net` hostname. The placeholder `rg-myleague` in the runbook
+   is expected.
 4. **Custom domain** — the site's own public address is allowed. It is the
    address people type.
 
@@ -32,8 +34,7 @@ and fixtures.
   failure of this check unactionable.
 - Docs should discover identifiers with `az ... list --query "[0].name"` rather
   than naming them. Flag any hardcoded name as a finding even in a comment.
-- A since-deleted planning doc carried twelve of these for weeks. Do not assume a file
-  is clean because it looks maintained.
+- Do not assume a file is clean because it looks maintained.
 
 ## Output
 
