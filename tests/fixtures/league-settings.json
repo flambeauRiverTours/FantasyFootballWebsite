@@ -1,0 +1,10 @@
+{
+  "season": "2026",
+  "settings": {
+    "playoff_round_type": 0,
+    "playoff_teams": 6,
+    "playoff_type": 0,
+    "playoff_week_start": 0,
+    "start_week": 1
+  }
+}

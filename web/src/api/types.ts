@@ -13,6 +13,16 @@ export interface SeasonPayload {
   slotOrder: string[];
   leagueSlotAverages: Record<string, number>;
   teams: TeamPayload[];
+  /** The last week that counts (A37): the week before the playoffs, else 18, less any settled weeks at the end nobody scored in. */
+  lastRegularWeek: number;
+}
+
+/**
+ * True once the fantasy season's last counted week is final: nothing on the
+ * page can change after it, so it says so and stops polling (A37).
+ */
+export function isSeasonComplete(payload: SeasonPayload): boolean {
+  return payload.finalThroughWeek >= payload.lastRegularWeek;
 }
 
 /**

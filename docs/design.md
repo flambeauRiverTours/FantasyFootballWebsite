@@ -2,14 +2,14 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A36. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A37. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
 - **Cost:** about $0.25 a month, with an alert at $0.50 (§13)
 - **Sleeper load:** about 4.4 requests a minute per instance, capped at 25 (§07)
 - **League:** six rosters, five of them scoring. One is a placeholder team and is excluded from everything (A1)
-- **Status:** built and deployed, including past seasons and the season picker (A34). Next up: counting the regular season only (T64)
+- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Next up: head-to-head, playoffs and a champion (T67–T70)
 
 ## 01 · Scope
 
@@ -25,7 +25,7 @@ Sleeper's API has no projections, so there's no projected-points column and no s
 
 | Column | Definition | Better |
 |---|---|---|
-| **Points** | Sum of each week's score, live week included | Higher |
+| **Points** | Sum of each regular-season week's score, live week included (A37) | Higher |
 | **Consistency σ** | Population standard deviation of finalized weekly scores | Lower |
 | **Ideal** | Sum of the best legal lineup from each week's roster | Higher |
 
@@ -49,8 +49,8 @@ Sleeper's read API is free and needs no key. Everything I use is in the document
 
 | Endpoint | What I use from it | Cache |
 |---|---|---|
-| /v1/state/nfl | Current season, week and season type | 5 min |
-| /v1/league/{id} | `roster_positions` (the lineup slots), `previous_league_id` | 24 h |
+| /v1/state/nfl | Current season and week; season type, logged only (A37) | 5 min |
+| /v1/league/{id} | `roster_positions` (the lineup slots), `previous_league_id`, `settings.playoff_week_start` | 24 h |
 | /v1/league/{id}/users | Team names | 1 h |
 | /v1/league/{id}/rosters | Roster → owner | 5 min |
 | /v1/league/{id}/matchups/{wk} | `points`, `starters`, `players`, `players_points` | 15 s |
@@ -290,7 +290,7 @@ I use D3's scales, line generators and tick logic, and render the results as JSX
 
 #### Chart controls
 
-- **Season:** from `/api/seasons`, so a new year appears on its own. The picker is hidden until there are two seasons (A34). Choosing a past season stops polling and swaps "updated" for the season's final week.
+- **Season:** from `/api/seasons`, so a new year appears on its own. The picker is hidden until there are two seasons (A34). Choosing a past season stops polling and swaps "updated" for the season's final week. The current season says "Season completed" and stops polling once its last counted week is final (A37).
 - **Teams:** multi-select, all on by default, each team keeping its own colour everywhere (A25).
 - **Metric:** points, ideal or σ. Only one at a time, because σ's scale would flatten into the bottom of a shared axis.
 - **Mode** for points and ideal: running total, per week, or vs the league median. For σ: expanding or rolling, raw or CV (D3).
@@ -390,7 +390,7 @@ All but one are answered; the reasoning is in [`amendments.md`](amendments.md).
 - **Q1 answered:** six rosters, eleven startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus eight bench. The league ID is a secret (A2).
 - **Q2 answered:** SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3).
 - **Q3 answered:** moot, because the league has no IR or TAXI slots. If one appears, players there don't count toward ideal.
-- **Q4 answered:** regular season only (A33). Enforcing it in code is T64.
+- **Q4 answered:** regular season only (A33). Weeks from `playoff_week_start` on are stored but counted toward nothing (A37).
 - **Q5 answered:** σ needs four final weeks, set in one place (`Spread.MinWeeks`).
 - **Q6 open:** should the default be σ or CV? D3 picks σ for readability. If the gap between the highest- and lowest-scoring teams' averages passes about 30 points, CV is the fairer default.
 - **Q7 answered:** 2026 is the league's first season, so a null `previous_league_id` is expected (A4).
@@ -408,4 +408,4 @@ I ordered the work by risk, cheapest first. The solver was the most likely place
 - **M5 · Chart modes:** per week, vs median and CV. Saved for later because they're the most a matter of taste.
 - **M6 · Positional radar:** last, because it depends on the unverified `starters` alignment and benefits most from a full season of data.
 - **M7 · Motion:** optional, and listed separately so cutting it would be a decision rather than something forgotten.
-- **Since then:** σ's own panel (T59), past seasons and the season picker (T29, T56). Next: regular season only (T64).
+- **Since then:** σ's own panel (T59), past seasons and the season picker (T29, T56), chart zoom (T66), regular season only (T64). Next: head-to-head, playoffs and a champion (T67–T70).

@@ -17,10 +17,20 @@ namespace FantasyLeague.Seasons
         /// <param name="snapshot">The assembled season.</param>
         /// <param name="asOfUtc">When the snapshot was assembled.</param>
         /// <returns>The response body.</returns>
+        /// <remarks>
+        /// Only regular-season weeks reach the payload (Q4, A37), less any
+        /// unplayed weeks at its end, so the table, sigma, the chart and the radar
+        /// all stop at the same week.
+        /// </remarks>
         public static SeasonPayload ToSeasonPayload(SeasonSnapshot snapshot, DateTimeOffset asOfUtc)
         {
+            // a past season is settled to its end, even where its stored weeks stop short of the cut-off
+            var lastWeek = RegularSeason.LastCountedWeek(
+                snapshot.RegularSeasonCutoff,
+                snapshot.IsCurrent ? snapshot.FinalThroughWeek : int.MaxValue,
+                snapshot.Teams.SelectMany(t => t.Weeks));
             var teams = snapshot.Teams
-                .Select(ToTeam)
+                .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }))
                 .OrderByDescending(t => t.Totals.Actual)
                 .ToList();
 
@@ -30,11 +40,12 @@ namespace FantasyLeague.Seasons
                 snapshot.Season,
                 snapshot.IsCurrent,
                 snapshot.CurrentWeek,
-                snapshot.FinalThroughWeek,
+                Math.Min(snapshot.FinalThroughWeek, lastWeek),
                 asOfUtc,
                 SlotOrder(snapshot.Slots),
                 leagueSlotAverages,
-                teams);
+                teams,
+                lastWeek);
         }
 
         /// <summary>

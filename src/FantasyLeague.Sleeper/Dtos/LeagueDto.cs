@@ -7,9 +7,17 @@
     /// <param name="RosterPositions">Every slot, startable and bench, one entry per slot. The startable ones drive both the solver and the radar axes, and this is per-season data (A3).</param>
     /// <param name="Season">The season this league plays. Sent as a string; binds through <see cref="SleeperJson.Options"/>.</param>
     /// <param name="PreviousLeagueId">The league this one rolled over from, or null for a first season (A4). The season chain walks it (D8).</param>
+    /// <param name="Settings">The league's settings, of which only the playoff start is read.</param>
     internal sealed record LeagueDto(
         string? Name,
         IReadOnlyList<string>? RosterPositions,
         int Season,
-        string? PreviousLeagueId);
+        string? PreviousLeagueId,
+        LeagueSettingsDto? Settings);
+
+    /// <summary>
+    /// The part of a league's <c>settings</c> object this app reads.
+    /// </summary>
+    /// <param name="PlayoffWeekStart">The first playoff week. Zero, or absent, when the league has no playoffs.</param>
+    internal sealed record LeagueSettingsDto(int? PlayoffWeekStart);
 }

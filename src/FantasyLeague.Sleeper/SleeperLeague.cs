@@ -8,10 +8,12 @@ namespace FantasyLeague.Sleeper
     /// <param name="Name">The league's name, or a default when the commissioner set none.</param>
     /// <param name="Slots">Startable slots in roster_positions order, for this season only (A3).</param>
     /// <param name="Teams">Every roster, by roster id.</param>
+    /// <param name="PlayoffWeekStart">The first playoff week as Sleeper sends it: zero or null when the league has none. Weeks from here on are not counted (A37).</param>
     public sealed record SleeperLeague(
         string Name,
         IReadOnlyList<Slot> Slots,
-        IReadOnlyDictionary<int, SleeperTeam> Teams);
+        IReadOnlyDictionary<int, SleeperTeam> Teams,
+        int? PlayoffWeekStart);
 
     /// <summary>
     /// One roster as the league shows it.

@@ -131,10 +131,10 @@ namespace FantasyLeague.Core.Tests
             return $$"""{"league_id":"L1","previous_league_id":null,"season":"2026","name":"Test","status":"in_season","total_rosters":2,"roster_positions":{{json}}}""";
         }
 
-        public static string League(int season, string? previousLeagueId, string name = "Test")
+        public static string League(int season, string? previousLeagueId, string name = "Test", int playoffWeekStart = 0)
         {
             var previous = previousLeagueId is null ? "null" : $"\"{previousLeagueId}\"";
-            return $$"""{"previous_league_id":{{previous}},"season":"{{season}}","name":"{{name}}","roster_positions":["QB","RB","FLEX","BN"]}""";
+            return $$$"""{"previous_league_id":{{{previous}}},"season":"{{{season}}}","name":"{{{name}}}","roster_positions":["QB","RB","FLEX","BN"],"settings":{"playoff_week_start":{{{playoffWeekStart}}}}}""";
         }
 
         public static string Users() =>
@@ -290,6 +290,29 @@ namespace FantasyLeague.Core.Tests
                 var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
 
                 snapshot.FinalThroughWeek.Should().Be(snapshot.CurrentWeek - 1);
+            }
+        }
+
+        [Fact]
+        public async Task Playoff_weeks_are_kept_for_storage_but_left_out_of_the_payload()
+        {
+            // T64: the finalize job stores what the snapshot holds, and the bracket needs playoff weeks
+            var socket = TwoTeamsTwoWeeks();
+            socket.State = Bodies.State(week: 4);
+            socket.League = Bodies.League(2026, null, playoffWeekStart: 3);
+            socket.Matchups[3] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 35m));
+            socket.Matchups[4] = Bodies.Week(Bodies.Matchup(1, 35m), Bodies.Matchup(2, 35m));
+
+            var (service, provider) = await BuildAsync(socket);
+            using (provider)
+            {
+                var snapshot = await service.BuildAsync(TestContext.Current.CancellationToken);
+                var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, DateTimeOffset.UnixEpoch);
+
+                snapshot.RegularSeasonCutoff.Should().Be(2);
+                snapshot.Teams[0].Weeks.Select(w => w.Week).Should().Equal(1, 2, 3, 4);
+                payload.Teams[0].Weeks.Select(w => w.Week).Should().Equal(1, 2);
+                payload.Teams[0].Totals.Actual.Should().Be(70m);
             }
         }
 

@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A36 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A37 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 ## Open questions, answered
 
@@ -9,7 +9,7 @@ A decision log. [`design.md`](design.md) describes what's built; this file says 
 | **Q1** | League shape | 6 rosters; 11 startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus 8 bench. 2¹¹ = 2,048 DP states, exactly what §05 assumed. |
 | **Q2** | SUPER_FLEX or IDP? | SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3). |
 | **Q3** | Do IR players count? | Moot: the league has no IR or TAXI slots. |
-| **Q4** | Playoffs? | Regular season only (A33). T64 enforces it. |
+| **Q4** | Playoffs? | Regular season only (A33), enforced since A37. |
 | **Q5** | Weeks before σ shows | Four (D1), in `Spread.MinWeeks`. |
 | **Q6** | σ or CV by default? | Open. |
 | **Q7** | Is the season chain intact? | 2026 is the first season, so there's nothing to walk yet (A4). |
@@ -230,7 +230,7 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 - **σ gets its own panel, steadiest first:** one row per team, with the weekly range, a ±σ band and the mean, beside the σ figure. It's absent, not empty, below four final weeks.
 - **Each mark is centred on its team's mean,** so widths compare straight down the column. The scale reaches the widest range or ±σ, whichever is further, because a skewed team's band can pass its own extremes.
 - **Contrast is measured:** a soft fill alone reached 1.4:1. The outlined band reaches at least 3.5:1 in both themes.
-- **Q4: regular season only.** Not yet enforced in code (T64).
+- **Q4: regular season only.** Enforced in code by T64 (A37).
 
 ## A34 · Past seasons, and the season picker
 
@@ -266,6 +266,21 @@ Found in the same logs:
 - **Muting had never worked.** Motion left an inline `opacity: 1` on every line, which beat the stylesheet's 0.18 for a muted line. Opacity is now the stylesheet's alone.
 - **Charts are no longer scroll anchors.** Chrome anchors scrolling to SVG text, so when the viewport's top edge cut through the chart, every zoom step moved a tick label and the page scrolled with it. Every `svg` now has `overflow-anchor: none`, which also covers the radar and bars.
 - **A touch no longer hovers.** A scroll that started on the plot fired `pointermove`, raising and reordering lines mid-scroll. Only a mouse hovers now; a tap, which a scroll never produces, raises the nearest line and a second tap lowers it.
+
+## A37 · The regular season only, enforced
+
+2026-11-15. Q4 settled on the regular season (A33), and T64 makes the code agree before week 15 goes live.
+
+- **The cut-off is the week before `settings.playoff_week_start`.** A league with no playoffs sends zero, or no settings at all, and counts the NFL's 18 regular weeks. A start past week 19 is capped at 18. One function, `RegularSeason.LastWeek`, decides it for every caller, and `LastCountedWeek` trims unplayed weeks off its end (below).
+- **Playoff weeks are still read and stored.** The design review caught that stopping the read at the playoffs would starve the bracket and a past season's champion (T69, T70). The snapshot keeps every week, so the finalize job stores them; only the payload stops at the cut-off.
+- **Whether a week is a playoff week is derived, not stored.** It follows from its number and that season's league settings, which a past season already reads. No column, no migration.
+- **The cut-off is applied once, in the payload mapper,** so totals, σ, the chart, the radar and the "weeks 1–N" label all stop at the same week. `finalThroughWeek` is capped at it too; `currentWeek` is not, because the masthead still says what week it is.
+- **`season_type` is read and logged, not acted on.** The plan said to ignore weeks while it is `post`, but what Sleeper's state reports after the NFL regular season has never been observed. Each value is logged the first time an instance sees it, so the logs record the answer.
+- **A week that goes backwards cannot shrink the season.** Only final weeks are stored, so in a season moving forward Sleeper's week is always past them. If it falls behind them (a January reset to week 1, or 0 in the offseason), the stored season stands, every stored week counts as final, and a warning is logged once. The design review found this would otherwise have shown one week, or none, on the public page about a week after the fantasy season ended.
+- **The page says when the season is over.** The payload carries `lastRegularWeek`; once `finalThroughWeek` reaches it, the masthead says "Season completed" and the page stops polling, because nothing on it can change. The season meant is the fantasy one.
+- **A league with no playoffs counts 18 weeks, less any it never played.** Jack's league has playoffs disabled (`playoff_week_start: 0`, captured). Sleeper's settings do not say when such a league ends: `last_scored_leg` and `leg` only count the weeks played so far. So 18 is assumed, and settled weeks at the end where no roster scored are taken off (`RegularSeason.LastCountedWeek`): a league that ends at 17 would otherwise get a week 18 of zeros counted in σ and the chart. A real week never scores zero for everyone. Only the end is trimmed, and only once settled, so a season in progress is never shortened. A past season, and a current one whose state has reset, count as settled to their end. The snapshot's field is `RegularSeasonCutoff`, the settings' answer; the payload's `lastRegularWeek` is the trimmed one.
+- **The real league's settings are captured,** by `capture_fixtures.py` into `league-settings.json` (`start_week` and the playoff fields only), and a test pins the captured value. Every other test uses invented starts.
+- **Found in the same review:** the slot-alignment error logged every 5 s for a live week whose lineup never lines up (an eliminated team's playoff week could), so it is now reported once per roster-week like every other problem. The CLI header now names the weeks counted. A mid-season change to `playoff_week_start` reaches the page within a day (the league cache) and applies to every week, which is consistent because nothing about it is stored.
 
 ## What the original design got wrong
 

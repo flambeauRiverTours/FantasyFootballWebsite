@@ -118,6 +118,19 @@ describe('useSeason', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('stops polling the current season once its last counted week is final (A37)', async () => {
+    vi.setSystemTime(InWindow);
+    const fetch = stubFetch(() =>
+      ok({ ...payload, currentWeek: 15, finalThroughWeek: 14, lastRegularWeek: 14 }),
+    );
+
+    const { result } = renderHook(() => useSeason(null));
+    await waitFor(() => expect(result.current.payload).not.toBeNull());
+
+    await act(() => vi.advanceTimersByTimeAsync(PollMs * 3));
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes when the tab becomes visible again, whatever the day', async () => {
     vi.setSystemTime(OutOfWindow);
     const fetch = stubFetch(() => ok(payload), notModified);

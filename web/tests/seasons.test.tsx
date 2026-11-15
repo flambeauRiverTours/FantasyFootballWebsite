@@ -31,6 +31,13 @@ describe('Masthead', () => {
     );
   });
 
+  it('says the season is completed once its last counted week is final', () => {
+    const done = { ...payload, currentWeek: 16, finalThroughWeek: 14, lastRegularWeek: 14 };
+    render(<Masthead payload={done} updatedAgo="just now" />);
+
+    expect(document.querySelector('.masthead p')).toHaveTextContent('2026 · Season completed');
+  });
+
   it('offers every season, newest first, once there are two', () => {
     render(
       <Masthead

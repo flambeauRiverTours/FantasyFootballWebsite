@@ -10,10 +10,10 @@ git history.
 
 - [ ] **T66–T70 · Zoom, head-to-head, playoffs, a champion** (A36, planned 2026-11-15, revised
       after design review). Reverses §01's "out of scope: head-to-head, playoffs" for leagues
-      configured that way. Order: T66 (in progress) → **T64 by 2026-12-15, when week 15 goes live**
-      → T67 → T68 → T69 → T70.
-  - [ ] **T66** Chart zoom and the mobile flash — 5 h `±`. Front end only. Built on
-       `feat/T66-chart-zoom` (A36); left: Jack checks it on a real phone, then review.
+      configured that way. Order: T66 (merged) → T64 (built, needed by 2026-12-15) → T67 →
+      T68 → T69 → T70.
+  - [x] **T66** Chart zoom and the mobile flash — 5 h `±`. Front end only. Merged
+       2026-11-15 (A36).
     1. The flash, first. Two suspects:
        - every option change gives every line a new key (`displayKey`), so the old paths fade
          while the new ones draw from `pathLength: 0`;
@@ -25,8 +25,9 @@ git history.
        touch emulation, not just a narrow window.
        Confirmed: the keyed remount (old lines held on the new axes for ~1 s, new ones hidden),
        and muting never worked. Fix: key paths by `rosterId` only; set `d` directly with no
-       tween (the point counts differ between modes); draw in on mount only; let CSS own the opacity; take hover only
-       from `pointerType === 'mouse'`. Then confirm on a real phone (lesson: timing UI).
+       tween (the point counts differ between modes); draw in on mount only; let CSS own the
+       opacity; take hover only from `pointerType === 'mouse'`. Then confirm on a real phone
+       (lesson: timing UI).
     2. A brush strip under the chart: mini lines for every visible team plus a window with two
        handles. Drag across the strip to choose weeks, drag the window to pan. Pointer events
        in React (D9). `touch-action: none` on the strip only.
@@ -41,9 +42,10 @@ git history.
        clipped (`useId()` for the clip id), and the pointer snapping, ticks, line-end names
        and the aria label's `latestExtremes` all limited to the range. A range with no points
        (σ zoomed to weeks 1–3) shows the not-plottable message.
-  - [ ] **T64** (below) is rewritten by the review. Keep reading **and storing** playoff weeks,
-       marked as playoff weeks from `playoff_week_start`, so T69 and past-season crowns have
-       them. Leave them out of totals, σ, the chart, the radar and the record, in both modes.
+  - [ ] **T64** (below) is rewritten by the review, and built that way (A37). Keep reading
+       **and storing** playoff weeks, marked as playoff weeks from `playoff_week_start`, so T69
+       and past-season crowns have them. Leave them out of totals, σ, the chart, the radar and
+       the record, in both modes.
   - [ ] **T67** `League:Mode` = `TotalPoints` (default) | `HeadToHead` — 1 h. Bound and validated
        in `LeagueOptions`, sent as `mode` in the payload. Nothing changes in `TotalPoints`.
        Past seasons render in the deployment's mode (Q10).
@@ -103,10 +105,13 @@ git history.
   - **Answered 2026-11-15:** Q9 an excluded roster in the bracket is shown, and crowned if it
        wins. Q10 every season renders in the deployment's mode. Q11 no seeds. Q12 a median game
        counts in W-L, as in Sleeper.
-- [ ] **T64** Count the regular season only (Q4, A33) — 1.5 h `±`. Stop at the week before
-      `settings.playoff_week_start` when set, else the NFL's last regular week; ignore weeks while
-      `season_type` is `post`. Needed before week 15. Test on the captured league plus an invented
-      playoff week.
+- [ ] **T64** Count the regular season only (Q4, A33). Built 2026-11-15 (A37). The payload stops
+      at the week before `settings.playoff_week_start` (else week 18); playoff weeks are still read
+      and stored. After design review: a week that goes backwards cannot shrink the season,
+      `season_type` is logged, the masthead says "Season completed", and the playoff settings are
+      captured: this league sends `playoff_week_start: 0` (no playoffs), so it counts all 18
+      weeks less any unplayed ones at the end (Sleeper does not say when it ends); a binding
+      test pins the capture.
 - [x] **T29 + T56** Past seasons and the season picker. Done 2026-10-13 (A34). Decided: the
       chain is walked on demand and cached a day, with no table; a past season's names and slots
       come from Sleeper for that season's league ID; the August rollover stays a hand edit of

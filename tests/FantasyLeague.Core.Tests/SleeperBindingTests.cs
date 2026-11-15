@@ -95,6 +95,29 @@ namespace FantasyLeague.Core.Tests
             Slot.Parse(league.RosterPositions!).Should().HaveCount(11);
         }
 
+        [Theory]
+        [InlineData("""{"season":"2026","roster_positions":["QB"],"settings":{"playoff_week_start":15,"playoff_teams":4}}""", 15)]
+        [InlineData("""{"season":"2026","roster_positions":["QB"],"settings":{"playoff_week_start":0}}""", 0)]
+        [InlineData("""{"season":"2026","roster_positions":["QB"]}""", null)]
+        public void The_playoff_start_binds_from_the_league_settings(string body, int? expected) =>
+            (Read<LeagueDto>(body).Settings?.PlayoffWeekStart).Should().Be(expected);
+
+        [Fact]
+        public void The_season_type_binds_from_the_NFL_state() =>
+            SleeperMapper.ToNFLState(Read<NFLStateDto>("""{"season":"2026","week":3,"season_type":"post","leg":3}"""))
+                .Should().Be(new NFLState(2026, 3, "post"));
+
+        [Fact]
+        public void The_captured_league_has_no_playoffs_so_counts_every_NFL_week()
+        {
+            // A37: the one real answer, captured 2026-11-15. Sleeper sends a playoff start of 0, so
+            // nothing is a playoff week; if the commissioner adds playoffs, recapture and this fails
+            var league = Read<LeagueDto>(FixtureText("league-settings.json"));
+
+            league.Settings!.PlayoffWeekStart.Should().Be(0);
+            RegularSeason.LastWeek(league.Settings.PlayoffWeekStart).Should().Be(RegularSeason.NFLWeeks);
+        }
+
         [Fact]
         public void Fields_this_app_does_not_read_are_ignored_when_binding()
         {
@@ -264,7 +287,7 @@ namespace FantasyLeague.Core.Tests
         [InlineData("   ")]
         public void An_unnamed_league_gets_the_default_name(string? name)
         {
-            var league = new LeagueDto(name, ["QB"], 2026, null);
+            var league = new LeagueDto(name, ["QB"], 2026, null, null);
 
             SleeperMapper.ToLeagueName(league).Should().Be("Fantasy Football League");
         }
@@ -276,7 +299,7 @@ namespace FantasyLeague.Core.Tests
         [InlineData("0", null)]
         public void A_league_links_to_the_season_before_it(string? previous, string? expected)
         {
-            var link = SleeperMapper.ToSeasonLink(new LeagueDto("Bosty Base", ["QB"], 2027, previous));
+            var link = SleeperMapper.ToSeasonLink(new LeagueDto("Bosty Base", ["QB"], 2027, previous, null));
 
             link.Should().Be(new SeasonLink(2027, expected));
         }
@@ -284,7 +307,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void A_named_league_keeps_its_name()
         {
-            var league = new LeagueDto("Bosty Base", ["QB"], 2026, null);
+            var league = new LeagueDto("Bosty Base", ["QB"], 2026, null, null);
 
             SleeperMapper.ToLeagueName(league).Should().Be("Bosty Base");
         }
@@ -292,7 +315,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void A_league_with_no_roster_positions_is_rejected()
         {
-            var league = new LeagueDto("Bosty Base", null, 2026, null);
+            var league = new LeagueDto("Bosty Base", null, 2026, null, null);
 
             var act = () => SleeperMapper.ToSlots(league);
 
