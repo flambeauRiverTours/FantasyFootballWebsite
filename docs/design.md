@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A35. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A36. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
@@ -294,6 +294,7 @@ I use D3's scales, line generators and tick logic, and render the results as JSX
 - **Teams:** multi-select, all on by default, each team keeping its own colour everywhere (A25).
 - **Metric:** points, ideal or σ. Only one at a time, because σ's scale would flatten into the bottom of a shared axis.
 - **Mode** for points and ideal: running total, per week, or vs the league median. For σ: expanding or rolling, raw or CV (D3).
+- **Weeks:** a brush strip under the chart, once there are four weeks. Drag across it to zoom, drag the window to pan; its two handles are sliders, and **Reset zoom** appears while zoomed. The values rescale to the weeks in view. The range is `?weeks=6-12`, written when a drag or key press ends, because Safari limits history calls (A36).
 
 #### The median mode is worth it
 
@@ -301,7 +302,7 @@ Subtracting the league's weekly median doesn't change any ranking, but it remove
 
 #### The table comes first
 
-The standings table works with no interaction: tabular figures, the sorted column marked, and the gap to first shown. Hovering a team in the chart highlights it and mutes the rest.
+The standings table works with no interaction: tabular figures, the sorted column marked, and the gap to first shown. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
 
 #### Motion
 

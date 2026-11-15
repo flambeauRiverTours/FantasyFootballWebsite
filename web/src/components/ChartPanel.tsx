@@ -1,13 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { SeasonPayload, TeamPayload, WeekPayload } from '../api/types';
-import type { Measure, Point, PointMode } from '../api/calculations';
+import type { Measure, Point, PointMode, WeekRange } from '../api/calculations';
 import {
   canPlotMedian,
   canPlotSigma,
+  canZoom,
   cumulative,
+  formatWeekRange,
   hasMovement,
+  isZoomed,
   latestExtremes,
+  parseWeekRange,
   perWeek,
+  pointsIn,
   rankByPoints,
   sigmaSeries,
   startedWeeks,
@@ -18,7 +23,9 @@ import { teamColours } from '../api/teamColours';
 import { useEnumQuery } from '../hooks/useEnumQuery';
 import type { Options } from '../hooks/useEnumQuery';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
+import { useQueryState } from '../hooks/useQueryState';
 import { useTeamFilter } from '../hooks/useTeamFilter';
+import Brush from './Brush';
 import Chart from './Chart';
 import type { Series } from './Chart';
 import Panel from './Panel';
@@ -114,19 +121,21 @@ function describe(
   sigmaWindow: SigmaWindow,
   scale: SpreadScale,
   visible: Series[],
+  weeks: WeekRange | null,
 ): string {
   const names = visible.map((s) => s.name).join(', ');
+  const span = weeks ? ` Zoomed to weeks ${weeks[0]} to ${weeks[1]}.` : '';
   const what =
     metric === 'sigma'
       ? `${scale === 'cv' ? 'Coefficient of variation' : 'Consistency sigma'}, ${sigmaWindow} window, by week for ${names}.`
       : `${ModeWords[mode](metric === 'ideal' ? 'ideal points' : 'points')} by week for ${names}.`;
 
   const extremes = latestExtremes(visible);
-  if (extremes === null) return what;
+  if (extremes === null) return what + span;
 
   const digits = metric === 'sigma' && scale === 'cv' ? 2 : 1;
   const { week, high, low } = extremes;
-  return `${what} At week ${week}, highest ${high.name} at ${high.value.toFixed(digits)}, lowest ${low.name} at ${low.value.toFixed(digits)}.`;
+  return `${what}${span} At week ${week}, highest ${high.name} at ${high.value.toFixed(digits)}, lowest ${low.name} at ${low.value.toFixed(digits)}.`;
 }
 
 export default function ChartPanel({ payload }: ChartPanelProps) {
@@ -152,6 +161,11 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
   // chart state
   const [wrapper, width] = useMeasuredWidth<HTMLDivElement>();
   const [hovered, setHovered] = useState<number | null>(null);
+  // the zoom: in the URL once settled, in a draft while a drag or key is still moving it
+  const [weeksParam, setWeeksParam] = useQueryState('weeks', '');
+  const [draft, setDraft] = useState<WeekRange | null>(null);
+  // a pointerup can land before the last move re-renders, so the commit reads the latest move here
+  const latest = useRef<WeekRange | null>(null);
 
   // sigma replaces the modes rather than composing with them
   const showSigma = metric === 'sigma';
@@ -170,6 +184,24 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
       : pointsFor(mode, measure, weeks, medians);
   });
   const visible = series.filter((s) => shown.has(s.rosterId));
+
+  // the zoom, over every week played, whatever the metric
+  const maxWeek = Math.max(0, ...started);
+  const zoomable = canZoom(maxWeek);
+  const weeks = draft ?? parseWeekRange(weeksParam, maxWeek);
+  const zoomed = zoomable && isZoomed(weeks, maxWeek);
+  const inView = zoomed
+    ? visible.map((s) => ({ ...s, points: pointsIn(s.points, weeks) }))
+    : visible;
+  const moveWeeks = (next: WeekRange) => {
+    latest.current = next;
+    setDraft(next);
+  };
+  const commitWeeks = () => {
+    if (latest.current) setWeeksParam(formatWeekRange(latest.current, maxWeek));
+    latest.current = null;
+    setDraft(null);
+  };
 
   return (
     <Panel id="chart" title="Season Movement">
@@ -221,26 +253,51 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
 
       {/* chart. the wrapper always mounts so the observer has something to watch */}
       <div className="chart-wrap" ref={wrapper}>
-        {isPlottable(visible) ? (
+        {isPlottable(inView) ? (
           <Chart
             series={visible}
+            weeks={zoomed ? weeks : undefined}
             width={width}
             height={Math.round(width * AspectRatio)}
             hovered={hovered}
             onHover={setHovered}
             zeroBased={zeroBased}
-            displayKey={showSigma ? `sigma-${sigmaWindow}-${scale}` : `${mode}-${metric}`}
-            label={describe(metric, mode, sigmaWindow, scale, visible)}
+            label={describe(metric, mode, sigmaWindow, scale, inView, zoomed ? weeks : null)}
             yTitle={showSigma ? (scale === 'cv' ? 'CV' : Sigma) : ''}
           />
         ) : (
           <p className="muted">
-            {showSigma
-              ? 'Available with five weeks of data. Stay tuned!'
-              : 'Point chart will appear here once multiple weeks are final. Stay tuned!'}
+            {zoomed
+              ? `Nothing to show in weeks ${weeks[0]}–${weeks[1]}.`
+              : showSigma
+                ? 'Available with five weeks of data. Stay tuned!'
+                : 'Point chart will appear here once multiple weeks are final. Stay tuned!'}
           </p>
         )}
       </div>
+
+      {zoomable && visible.length > 0 ? (
+        <div className="brush-row">
+          <Brush
+            series={visible}
+            width={width}
+            maxWeek={maxWeek}
+            weeks={weeks}
+            onChange={moveWeeks}
+            onCommit={commitWeeks}
+          />
+          <div className="brush-caption">
+            <span className="muted">
+              {zoomed ? `Weeks ${weeks[0]}–${weeks[1]}` : 'Drag across the strip to zoom'}
+            </span>
+            {zoomed ? (
+              <button type="button" className="reset-zoom" onClick={() => setWeeksParam('')}>
+                Reset zoom
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </Panel>
   );
 }

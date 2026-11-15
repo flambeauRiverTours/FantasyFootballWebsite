@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A35 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A36 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 ## Open questions, answered
 
@@ -255,6 +255,17 @@ Found in the same logs:
 
 - **The finalize log's "Next:" showed the run in progress.** The timer's `ScheduleStatus.Next` is that run's own start, so the log now asks `FinalizeSchedule.NextRunAfter`, which reads the same schedule as the timer.
 - **The placeholder team (A1) logged an alignment error every live week.** Its lineup is never set, so its starters never match the slots; it was logged 53 times on one Sunday. It's still solved and checked by both invariants, but no longer reported, since it never reaches the radar.
+
+## A36 · Zooming the chart, and the flash on phones
+
+2026-11-15. Over a full season the weekly lines crossed so often they were hard to follow, and on a phone the lines flashed whenever a chart option changed. Head-to-head, playoffs and a champion are planned under the same number (T67–T70) and get their entries when built.
+
+- **A brush strip under the chart sets the weeks shown,** and the values rescale to them. It is drawn in React with pointer events (D9). Its handles are sliders with arrow, Home and End keys, and a **Reset zoom** button stands in for a double-tap, which has no keyboard equivalent and clashes with zooming on iOS.
+- **The range goes into the URL only when a drag or key press ends.** Safari throws after about 100 history calls in ten seconds, and a drag writes on every frame. The commit reads the latest move from a ref, because a quick flick can lift the finger before the last move has rendered.
+- **The flash was the lines being remounted.** Each option change gave every line a new key, so for about a second the old lines stayed on the new axes while the new ones waited invisible, then swapped. Each line now keeps one path for its life and changes shape in place. It does not tween between shapes: σ and vs-median plot fewer weeks than the total, so the point counts differ and a tween would distort.
+- **Muting had never worked.** Motion left an inline `opacity: 1` on every line, which beat the stylesheet's 0.18 for a muted line. Opacity is now the stylesheet's alone.
+- **Charts are no longer scroll anchors.** Chrome anchors scrolling to SVG text, so when the viewport's top edge cut through the chart, every zoom step moved a tick label and the page scrolled with it. Every `svg` now has `overflow-anchor: none`, which also covers the radar and bars.
+- **A touch no longer hovers.** A scroll that started on the plot fired `pointermove`, raising and reordering lines mid-scroll. Only a mouse hovers now; a tap, which a scroll never produces, raises the nearest line and a second tap lowers it.
 
 ## What the original design got wrong
 

@@ -3,10 +3,15 @@ import type { TeamPayload, WeekPayload } from '../src/api/types';
 import {
   canPlotMedian,
   canPlotSigma,
+  canZoom,
   cumulative,
+  formatWeekRange,
   hasMovement,
+  isZoomed,
   latestExtremes,
+  parseWeekRange,
   perWeek,
+  pointsIn,
   populationSigma,
   rankByPoints,
   sigmaSeries,
@@ -274,5 +279,41 @@ describe('latestExtremes', () => {
   it('is null with nothing plotted', () => {
     expect(latestExtremes([])).toBeNull();
     expect(latestExtremes([{ name: 'A', points: [] }])).toBeNull();
+  });
+});
+
+describe('week ranges (T66)', () => {
+  it('reads a range from the URL', () => {
+    expect(parseWeekRange('6-12', 14)).toEqual([6, 12]);
+  });
+
+  it('treats anything malformed as the whole season', () => {
+    for (const raw of ['', 'abc', '6', '6-', '-3-4', '6-12-14']) {
+      expect(parseWeekRange(raw, 14)).toEqual([1, 14]);
+    }
+  });
+
+  it('clamps to the weeks played, puts the ends in order and keeps two weeks at least', () => {
+    expect(parseWeekRange('0-40', 14)).toEqual([1, 14]);
+    expect(parseWeekRange('12-6', 14)).toEqual([6, 12]);
+    expect(parseWeekRange('9-9', 14)).toEqual([9, 10]);
+    expect(parseWeekRange('14-14', 14)).toEqual([13, 14]);
+  });
+
+  it('writes nothing for the whole season, so the URL stays clean', () => {
+    expect(formatWeekRange([1, 14], 14)).toBe('');
+    expect(formatWeekRange([6, 12], 14)).toBe('6-12');
+    expect(isZoomed([1, 14], 14)).toBe(false);
+    expect(isZoomed([1, 13], 14)).toBe(true);
+  });
+
+  it('offers zoom only once the season is long enough to need it', () => {
+    expect(canZoom(3)).toBe(false);
+    expect(canZoom(4)).toBe(true);
+  });
+
+  it('keeps the points inside a range', () => {
+    const points = [1, 2, 3, 4].map((week) => ({ week, value: week }));
+    expect(pointsIn(points, [2, 3]).map((p) => p.week)).toEqual([2, 3]);
   });
 });

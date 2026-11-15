@@ -39,6 +39,8 @@ incident itself belongs in the commit or the amendment.
 - A sticky panel taller than its container hides its overflow; test by forcing tall content.
 - UI whose job is timing must be watched with the slow case forced; tests cannot see it.
 - Check a planned task's premise against the code before building it; unbuilt tasks keep stale premises longest.
+- Chrome anchors scrolling to SVG text, so a redrawn chart can drag the page; test changes with the viewport's top edge cutting through the chart.
+- Leave more than the focus ring's 4px between adjacent controls, and check new controls by tabbing to them.
 
 ## Shell and CI
 
