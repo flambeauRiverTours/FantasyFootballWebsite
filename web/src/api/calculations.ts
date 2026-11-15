@@ -99,6 +99,48 @@ export function sigmaSeries(weeks: WeekPayload[], rolling: boolean, asCv: boolea
   });
 }
 
+/** An inclusive span of weeks, first then last, always at least two weeks wide. */
+export type WeekRange = readonly [number, number];
+
+/** True when the season is long enough for zooming to help. */
+export function canZoom(maxWeek: number): boolean {
+  return maxWeek >= 4;
+}
+
+/**
+ * Keeps a range inside weeks 1 to `maxWeek` and at least two weeks wide (the
+ * week scale's floor), moving the end that was not dragged when it must.
+ */
+export function clampRange([first, last]: WeekRange, maxWeek: number): WeekRange {
+  const top = Math.max(maxWeek, 2);
+  const lo = Math.min(Math.max(Math.round(first), 1), top - 1);
+  const hi = Math.min(Math.max(Math.round(last), lo + 1), top);
+  return [lo, hi];
+}
+
+/** Reads `?weeks=6-12`. Anything malformed, or no zoom, is the whole season. */
+export function parseWeekRange(raw: string, maxWeek: number): WeekRange {
+  const match = /^(\d{1,2})-(\d{1,2})$/.exec(raw);
+  if (!match) return [1, Math.max(maxWeek, 2)];
+  const [a, b] = [Number(match[1]), Number(match[2])];
+  return clampRange([Math.min(a, b), Math.max(a, b)], maxWeek);
+}
+
+/** Writes a range for the URL; the whole season is empty, so the URL stays clean. */
+export function formatWeekRange(range: WeekRange, maxWeek: number): string {
+  return isZoomed(range, maxWeek) ? `${range[0]}-${range[1]}` : '';
+}
+
+/** True when the range is narrower than the season. */
+export function isZoomed([first, last]: WeekRange, maxWeek: number): boolean {
+  return first > 1 || last < maxWeek;
+}
+
+/** The points that fall inside a range. */
+export function pointsIn(points: Point[], [first, last]: WeekRange): Point[] {
+  return points.filter((p) => p.week >= first && p.week <= last);
+}
+
 /** A team's row in the standings. */
 export interface Standing {
   team: TeamPayload;

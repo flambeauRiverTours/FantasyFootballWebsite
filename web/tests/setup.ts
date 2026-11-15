@@ -26,4 +26,7 @@ vi.stubGlobal(
   },
 );
 
+// jsdom has no pointer capture; the brush captures the pointer so a drag can leave the strip
+Element.prototype.setPointerCapture ??= () => {};
+
 afterEach(cleanup);

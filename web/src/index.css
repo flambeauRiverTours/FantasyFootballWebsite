@@ -11,6 +11,12 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* Chrome anchors scrolling to SVG text: when a chart rescales, a tick label at the top of the
+   viewport moves and drags the page with it. Anchor on the HTML around the drawings instead. */
+svg {
+  overflow-anchor: none;
+}
+
 /* colour */
 
 :root {
@@ -446,6 +452,81 @@ td.is-sorted {
 /* the plot's one pointer target lets a touch still scroll the page vertically */
 .chart .hit {
   touch-action: pan-y;
+}
+
+/* brush (T66): an overview strip whose window sets the weeks the chart shows */
+
+.brush-row {
+  margin-top: var(--space-2);
+}
+
+.brush {
+  position: relative;
+  /* the strip takes every drag itself; the page scrolls from anywhere else */
+  touch-action: none;
+  user-select: none;
+  background: var(--bg-subtle);
+  border-radius: 4px;
+  cursor: crosshair;
+}
+
+.brush svg {
+  display: block;
+}
+
+.brush-line {
+  fill: none;
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.brush-window {
+  position: absolute;
+  inset-block: 0;
+  background: var(--accent-weak);
+  border-inline: 1px solid var(--accent);
+  cursor: grab;
+}
+
+/* a 24px target around a 4px bar, centred on the week it stands for */
+.brush-handle {
+  position: absolute;
+  inset-block: 0;
+  width: 24px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+
+.brush-handle::after {
+  content: '';
+  position: absolute;
+  inset-block: 25%;
+  left: 10px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.brush-caption {
+  /* clear of the strip by more than the 4px focus ring (2px outline, 2px offset) */
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px; /* touch target for the reset button */
+  font-size: var(--text-xs);
+}
+
+.reset-zoom {
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: var(--fg);
+  cursor: pointer;
 }
 
 /* radar */

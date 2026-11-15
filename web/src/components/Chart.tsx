@@ -1,9 +1,12 @@
+import { useId, useRef } from 'react';
 import { max, min } from 'd3-array';
 import { scaleLinear } from 'd3-scale';
 import type { LinearScale } from './drawing';
+import { LabelledMinWidth, Margin, plotInsets } from './drawing';
 import { line } from 'd3-shape';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
-import type { Point } from '../api/calculations';
+import type { Point, WeekRange } from '../api/calculations';
+import { pointsIn } from '../api/calculations';
 
 export interface Series {
   rosterId: number;
@@ -21,23 +24,16 @@ interface ChartProps {
   zeroBased?: boolean;
   label: string;
   yTitle?: string;
-  displayKey?: string;
+  /** The weeks shown. Omitted, every week any line reaches. */
+  weeks?: WeekRange;
 }
-
-const Margin = { top: 16, right: 84, bottom: 28, left: 44 };
-
-/** The narrowest chart that keeps its line-end names; roughly the 40rem breakpoint less panel padding. */
-const LabelledMinWidth = 600;
-
-/** The right margin once the names are dropped: room for the last point, nothing more. */
-const UnlabelledRight = 16;
 
 // scales
 
 /** Weeks across. Always at least two wide so a single week is not a zero domain. */
-function weekScale(width: number, right: number, maxWeek: number): LinearScale {
+function weekScale(width: number, right: number, [first, last]: WeekRange): LinearScale {
   return scaleLinear()
-    .domain([1, Math.max(maxWeek, 2)])
+    .domain([first, Math.max(last, first + 1)])
     .range([Margin.left, width - right]);
 }
 
@@ -80,11 +76,11 @@ function Gridlines({
   );
 }
 
-function WeekAxis({ x, height, maxWeek }: { x: LinearScale; height: number; maxWeek: number }) {
+function WeekAxis({ x, height, span }: { x: LinearScale; height: number; span: number }) {
   return (
     <g className="x-axis">
       {x
-        .ticks(Math.min(maxWeek, 9))
+        .ticks(Math.min(span, 9))
         .filter(Number.isInteger)
         .map((t) => (
           <text
@@ -138,8 +134,12 @@ function SeriesLabels({
 }
 
 /**
- * Every visible team's line over the weeks played. Hovering or focusing a team
- * raises its line and mutes the rest.
+ * Every visible team's line over the weeks played. Hovering with a mouse, tapping,
+ * or focusing a team raises its line and mutes the rest.
+ *
+ * A line keeps one path for its whole life: a change of metric or mode changes
+ * its shape in place, so nothing fades out and redraws (T66). It draws in only
+ * when it first appears. Opacity is left to the stylesheet, which mutes lines.
  */
 export default function Chart({
   series,
@@ -150,24 +150,32 @@ export default function Chart({
   zeroBased = true,
   label,
   yTitle = '',
-  displayKey = '',
+  weeks,
 }: ChartProps) {
   const reduced = useReducedMotion();
+  const clipId = useId();
+  // a click does not say whether it was a tap, so the pointer that started it is kept
+  const pointer = useRef<string>('mouse');
 
   // below this the line-end names collide and clip; the team chips are the legend instead
   const labelled = width >= LabelledMinWidth;
-  const right = labelled ? Margin.right : UnlabelledRight;
+  const { right } = plotInsets(width);
 
   if (width <= Margin.left + right || series.length === 0) return null;
 
-  // extents
-  const maxWeek = max(series, (s) => max(s.points, (p) => p.week)) ?? 1;
-  const maxValue = max(series, (s) => max(s.points, (p) => p.value)) ?? 0;
-  const minValue = min(series, (s) => min(s.points, (p) => p.value)) ?? 0;
+  // extents, from the weeks in view only, so a zoom rescales the values too
+  const lastWeek = max(series, (s) => max(s.points, (p) => p.week)) ?? 1;
+  const range: WeekRange = weeks ?? [1, Math.max(lastWeek, 2)];
+  const inView = series.map((s) => ({ ...s, points: pointsIn(s.points, range) }));
+  const extentOf = inView.some((s) => s.points.length > 0) ? inView : series;
+  const maxValue = max(extentOf, (s) => max(s.points, (p) => p.value)) ?? 0;
+  const minValue = min(extentOf, (s) => min(s.points, (p) => p.value)) ?? 0;
 
-  const x = weekScale(width, right, maxWeek);
+  const x = weekScale(width, right, range);
   const y = valueScale(minValue, maxValue, height, zeroBased);
   const tickCount = Math.max(2, Math.round((height - Margin.top - Margin.bottom) / 48));
+  const plotWidth = width - Margin.left - right;
+  const plotHeight = height - Margin.top - Margin.bottom;
 
   const path = line<Point>()
     .defined((p) => Number.isFinite(p.value))
@@ -183,12 +191,12 @@ export default function Chart({
           ...series.filter((s) => s.rosterId === hovered),
         ];
 
-  /** Nearest line to the pointer. Vertical distance at the snapped week. */
-  function onMove(e: React.PointerEvent<SVGRectElement>) {
+  /** Nearest line to the pointer. Vertical distance at the snapped week in view. */
+  function nearest(e: React.PointerEvent<SVGRectElement> | React.MouseEvent<SVGRectElement>) {
     const box = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - box.left + Margin.left;
     const py = e.clientY - box.top + Margin.top;
-    const week = Math.min(Math.max(Math.round(x.invert(px)), 1), maxWeek);
+    const week = Math.min(Math.max(Math.round(x.invert(px)), range[0]), range[1]);
 
     let best: { id: number; d: number } | null = null;
     for (const s of series) {
@@ -199,7 +207,20 @@ export default function Chart({
       if (best === null || d < best.d) best = { id: s.rosterId, d };
     }
 
-    onHover(best ? best.id : null);
+    return best ? best.id : null;
+  }
+
+  // a touch that starts a scroll must not raise a line, so only a mouse hovers;
+  // a tap is a click, which a scroll never produces
+  function onMove(e: React.PointerEvent<SVGRectElement>) {
+    pointer.current = e.pointerType;
+    if (e.pointerType === 'mouse') onHover(nearest(e));
+  }
+
+  function onTap(e: React.MouseEvent<SVGRectElement>) {
+    if (pointer.current === 'mouse') return;
+    const id = nearest(e);
+    onHover(id === hovered ? null : id);
   }
 
   return (
@@ -211,6 +232,13 @@ export default function Chart({
       role="img"
       aria-label={label}
     >
+      <defs>
+        <clipPath id={clipId}>
+          {/* the stroke's half-width either side, so a line on the edge is not shaved */}
+          <rect x={Margin.left - 2} y={0} width={plotWidth + 4} height={height} />
+        </clipPath>
+      </defs>
+
       <Gridlines y={y} width={width} right={right} count={tickCount} />
 
       {/* zero matters only when values cross it */}
@@ -224,38 +252,41 @@ export default function Chart({
         </text>
       ) : null}
 
-      <WeekAxis x={x} height={height} maxWeek={maxWeek} />
+      <WeekAxis x={x} height={height} span={range[1] - range[0] + 1} />
 
-      {/* a metric change gives every line a new key, so the old lines fade out as the new ones draw */}
-      <AnimatePresence>
-        {ordered.map((s) => (
-          <m.path
-            key={`${s.rosterId}-${displayKey}`}
-            className="series"
-            d={path(s.points) ?? undefined}
-            stroke={s.colour}
-            data-muted={hovered !== null && hovered !== s.rosterId}
-            data-raised={hovered === s.rosterId}
-            initial={{ opacity: 0, pathLength: reduced ? 1 : 0 }}
-            animate={{ opacity: 1, pathLength: 1 }}
-            exit={{ opacity: 0 }}
-            transition={reduced ? { duration: 0 } : { duration: 0.8, ease: 'easeOut' }}
-          />
-        ))}
-      </AnimatePresence>
+      <g clipPath={`url(#${clipId})`}>
+        <AnimatePresence initial={!reduced}>
+          {ordered.map((s) => (
+            <m.path
+              key={s.rosterId}
+              className="series"
+              d={path(s.points) ?? undefined}
+              stroke={s.colour}
+              data-muted={hovered !== null && hovered !== s.rosterId}
+              data-raised={hovered === s.rosterId}
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              exit={{ pathLength: 0 }}
+              transition={reduced ? { duration: 0 } : { duration: 0.8, ease: 'easeOut' }}
+            />
+          ))}
+        </AnimatePresence>
+      </g>
 
-      {labelled ? <SeriesLabels series={series} x={x} y={y} hovered={hovered} /> : null}
+      {labelled ? <SeriesLabels series={inView} x={x} y={y} hovered={hovered} /> : null}
 
       {/* one transparent area takes the pointer: a line under 2px wide is too thin to aim at */}
       <rect
         className="hit"
         x={Margin.left}
         y={Margin.top}
-        width={width - Margin.left - right}
-        height={height - Margin.top - Margin.bottom}
+        width={plotWidth}
+        height={plotHeight}
         fill="transparent"
+        onPointerDown={(e) => (pointer.current = e.pointerType)}
         onPointerMove={onMove}
-        onPointerLeave={() => onHover(null)}
+        onPointerLeave={(e) => (e.pointerType === 'mouse' ? onHover(null) : undefined)}
+        onClick={onTap}
       />
     </svg>
   );
