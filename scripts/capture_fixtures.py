@@ -9,6 +9,7 @@ Usage:
 Writes:
     tests/fixtures/wk{N}-matchups.json    the payload verbatim
     tests/fixtures/roster-positions.json  roster_positions only, lifted out of the league
+    tests/fixtures/league-settings.json   which weeks the season plays, named fields only (T64)
     tests/fixtures/player-positions.json  id -> name/team/fantasyPositions
 
 Needs no jq. Standard library only.
@@ -21,7 +22,8 @@ Two things this script exists to get right:
     not contain.
 
 2.  Nothing carrying the league ID or a user ID is ever written. The league
-    object holds `league_id`, so only its `roster_positions` array is kept, and
+    object holds `league_id`, so only its `roster_positions` array and the named
+    `SEASON_SETTINGS` are kept, and
     /league/{id}/users is not fetched at all.
 """
 
@@ -38,6 +40,12 @@ API = "https://api.sleeper.app/v1"
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures"
 NOT_STARTABLE = {"BN", "IR", "TAXI"}
+# the settings that say which weeks a season plays; named, so nothing else can carry an id to disk.
+# last_scored_leg and leg are not: they count the weeks played so far, and change every week
+SEASON_SETTINGS = (
+    "start_week",
+    "playoff_week_start", "playoff_round_type", "playoff_teams", "playoff_type",
+)
 
 
 def fail(message: str) -> None:
@@ -97,6 +105,16 @@ def main() -> None:
         "roster-positions.json",
         {"season": league["season"], "roster_positions": league["roster_positions"]},
     )
+
+    # T64
+    settings = league.get("settings") or {}
+    kept = {k: settings[k] for k in SEASON_SETTINGS if k in settings}
+    write("league-settings.json", {"season": league["season"], "settings": kept})
+    # raw values only; RegularSeason decides what they mean. Every week-like setting is listed,
+    # numbers only, so a field not in SEASON_SETTINGS still shows up here
+    for key in sorted(k for k in settings if "week" in k or "leg" in k):
+        value = settings[key]
+        print(f"  {key}: {value if isinstance(value, (int, float)) else type(value).__name__}")
 
     # Union of every captured week on disk, not merely this run's.
     rostered: set[str] = set()

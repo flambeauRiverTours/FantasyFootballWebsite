@@ -113,7 +113,8 @@ namespace FantasyLeague.Sleeper
             return new SleeperLeague(
                 SleeperMapper.ToLeagueName(league),
                 SleeperMapper.ToSlots(league),
-                SleeperMapper.ToTeams(users, rosters));
+                SleeperMapper.ToTeams(users, rosters),
+                league.Settings?.PlayoffWeekStart);
         }
 
         /// <inheritdoc />

@@ -105,6 +105,56 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public async Task A_past_season_counts_its_regular_season_only()
+        {
+            // T64 applies to past seasons too, from that year's own league settings
+            var socket = TwoSeasons();
+            socket.Leagues["L0"] = Bodies.League(2025, null, "Last Year", playoffWeekStart: 2);
+            var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(1, 2, 300m));
+            var (service, _) = await BuildAsync(socket, store);
+
+            var snapshot = (await service.BuildPastAsync(2025, Token))!;
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, DateTimeOffset.UnixEpoch);
+
+            snapshot.RegularSeasonCutoff.Should().Be(1);
+            payload.Teams[0].Totals.Actual.Should().Be(90m);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(0)]
+        public async Task A_week_that_goes_back_past_stored_weeks_cannot_shrink_the_season(int resetWeek)
+        {
+            // A37: if Sleeper's state resets after the NFL season, the stored season stands
+            var socket = TwoSeasons();
+            socket.State = Bodies.State(week: resetWeek);
+            var store = new SeasonStore().With("L1", 2026, Week(1, 1, 90m), Week(1, 2, 80m), Week(1, 3, 70m));
+            var (service, _) = await BuildAsync(socket, store);
+
+            var snapshot = await service.BuildAsync(Token);
+
+            snapshot.Teams[0].Weeks.Select(w => w.Week).Should().Equal(1, 2, 3);
+            snapshot.Teams[0].Weeks.Should().OnlyContain(w => w.IsFinal);
+
+            // the NFL season is over, so the weeks the league never played are trimmed and it is complete
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, DateTimeOffset.UnixEpoch);
+            payload.LastRegularWeek.Should().Be(3);
+            payload.FinalThroughWeek.Should().Be(3);
+        }
+
+        [Fact]
+        public async Task A_past_season_stored_short_of_week_18_ends_at_its_last_played_week()
+        {
+            var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(1, 2, 80m));
+            var (service, _) = await BuildAsync(TwoSeasons(), store);
+
+            var payload = SeasonPayloadMapper.ToSeasonPayload((await service.BuildPastAsync(2025, Token))!, DateTimeOffset.UnixEpoch);
+
+            payload.LastRegularWeek.Should().Be(2);
+            payload.FinalThroughWeek.Should().Be(2);
+        }
+
+        [Fact]
         public async Task A_past_season_leaves_out_the_placeholder_team()
         {
             var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(2, 1, 0m));

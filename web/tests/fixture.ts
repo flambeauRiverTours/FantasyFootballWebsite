@@ -31,4 +31,5 @@ export const payload: SeasonPayload = {
   slotOrder: [],
   leagueSlotAverages: {},
   teams,
+  lastRegularWeek: 14,
 };

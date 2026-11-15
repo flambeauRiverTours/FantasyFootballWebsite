@@ -6,6 +6,7 @@ Real Sleeper payloads for offline tests.
 |---|---|
 | `wk{N}-matchups.json` | `/v1/league/{id}/matchups/{N}`, verbatim. Weeks 1–5, all final. 6 rosters, 11 starters, 19–20 players each |
 | `roster-positions.json` | `roster_positions`, lifted out of the league object |
+| `league-settings.json` | `start_week` and the four `playoff_*` settings only: which weeks the season plays (T64). This league has playoffs disabled (`playoff_week_start: 0`) |
 | `player-positions.json` | `{ playerId → { name, team, fantasyPositions } }` for the 137 players rostered in any captured week |
 
 `player-positions.json` projects the 5 MB `/v1/players/nfl` dump down to the rostered players, so

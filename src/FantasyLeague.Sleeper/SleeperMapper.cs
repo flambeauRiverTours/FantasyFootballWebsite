@@ -52,11 +52,11 @@ namespace FantasyLeague.Sleeper
         }
 
         /// <summary>
-        /// Keeps the two fields of the NFL state anything downstream reads.
+        /// Keeps the fields of the NFL state anything downstream reads.
         /// </summary>
         /// <param name="state">The state as Sleeper returned it.</param>
-        /// <returns>The current season and week.</returns>
-        internal static NFLState ToNFLState(NFLStateDto state) => new(state.Season, state.Week);
+        /// <returns>The current season, week and season type.</returns>
+        internal static NFLState ToNFLState(NFLStateDto state) => new(state.Season, state.Week, state.SeasonType);
 
         /// <summary>
         /// Joins each roster to its owner, and so to the name it is shown under.

@@ -68,12 +68,20 @@ const Scales = [
   ['cv', 'CV'],
 ] as const satisfies readonly (readonly [SpreadScale, string])[];
 
-/** What each mode plots, in words, given what is being counted. */
-const ModeWords: Record<PointMode, (what: string) => string> = {
-  cumulative: (what) => `Cumulative ${what}`,
-  perWeek: (what) => `Weekly ${what}`,
-  vsMedian: (what) => `Cumulative ${what} above the league median`,
-};
+/**
+ * What each mode plots, in words, given what is being counted. A switch, like
+ * `pointsFor`, so nothing is looked up by a string that came from the URL.
+ */
+function modeWords(mode: PointMode, what: string): string {
+  switch (mode) {
+    case 'perWeek':
+      return `Weekly ${what}`;
+    case 'vsMedian':
+      return `Cumulative ${what} above the league median`;
+    default:
+      return `Cumulative ${what}`;
+  }
+}
 
 // series building
 
@@ -128,7 +136,7 @@ function describe(
   const what =
     metric === 'sigma'
       ? `${scale === 'cv' ? 'Coefficient of variation' : 'Consistency sigma'}, ${sigmaWindow} window, by week for ${names}.`
-      : `${ModeWords[mode](metric === 'ideal' ? 'ideal points' : 'points')} by week for ${names}.`;
+      : `${modeWords(mode, metric === 'ideal' ? 'ideal points' : 'points')} by week for ${names}.`;
 
   const extremes = latestExtremes(visible);
   if (extremes === null) return what + span;

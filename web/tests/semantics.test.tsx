@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
 import StandingsPanel from '../src/components/StandingsPanel';
 import ChartPanel from '../src/components/ChartPanel';
@@ -217,6 +217,36 @@ describe('ChartPanel', () => {
     render(<ChartPanel payload={payload} />);
     const img = screen.getByRole('img');
     expect(img.getAttribute('aria-label')).toMatch(/Alpha, Bravo, Charlie/);
+  });
+
+  it('names what each mode plots', () => {
+    // weeks that differ, so every mode has a line to draw
+    const varied = {
+      ...payload,
+      teams: payload.teams.map((team, i) => ({
+        ...team,
+        weeks: team.weeks.map((w) => ({ ...w, actual: w.actual + w.week * (i + 1) * 10 })),
+      })),
+    };
+    render(<ChartPanel payload={varied} />);
+    const label = () => screen.getByRole('img').getAttribute('aria-label');
+
+    expect(label()).toMatch(/^Cumulative points by week/);
+    fireEvent.click(screen.getByRole('button', { name: 'Per week' }));
+    expect(label()).toMatch(/^Weekly points by week/);
+    fireEvent.click(screen.getByRole('button', { name: 'vs median' }));
+    expect(label()).toMatch(/^Cumulative points above the league median by week/);
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('treats a mode in the URL that is not one of its own as the default', () => {
+    // the code scanning alert: nothing is looked up or called by a name taken from the URL
+    window.history.replaceState(null, '', '/?mode=constructor');
+    render(<ChartPanel payload={payload} />);
+    expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(
+      /^Cumulative points by week/,
+    );
+    window.history.replaceState(null, '', '/');
   });
 
   it('states the highest and lowest values at the latest week, not just what is drawn', () => {

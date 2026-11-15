@@ -16,7 +16,7 @@ namespace FantasyLeague.Core.Tests
             new("Name", season, currentWeek, finalThroughWeek, Slot.Parse(["QB"]),
                 [.. teams.Select(t => new TeamSeason(t.RosterId, $"Team {t.RosterId}",
                     [.. t.Weeks.Select(w => new TeamWeek(t.RosterId, w.Week, w.Actual, w.Ideal, [], [], [], w.IsFinal, NoAttribution))]))],
-                [], [], IsCurrent: true);
+                [], [], IsCurrent: true, RegularSeason.NFLWeeks);
 
         private static SeasonSnapshot OneTeam(decimal actual = 100m, decimal ideal = 120m, bool isFinal = true) =>
             Snapshot(teams: (1, [(1, actual, ideal, isFinal)]));
@@ -111,7 +111,7 @@ namespace FantasyLeague.Core.Tests
     public class SeasonCacheTests
     {
         private static SeasonPayload Payload(bool isCurrent) =>
-            new("Name", 2026, isCurrent, 5, 4, DateTimeOffset.UnixEpoch, [], new Dictionary<string, decimal>(), []);
+            new("Name", 2026, isCurrent, 5, 4, DateTimeOffset.UnixEpoch, [], new Dictionary<string, decimal>(), [], RegularSeason.NFLWeeks);
 
         [Fact]
         public void A_live_season_is_cached_for_five_seconds() =>
@@ -186,12 +186,12 @@ namespace FantasyLeague.Core.Tests
             var before = ETag.Of(
                 new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], false, NoAttribution)])],
-                    [], [], IsCurrent: true));
+                    [], [], IsCurrent: true, RegularSeason.NFLWeeks));
 
             var after = ETag.Of(
                 new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 17m, 20m, [], [], [], false, NoAttribution)])],
-                    [], [], IsCurrent: true));
+                    [], [], IsCurrent: true, RegularSeason.NFLWeeks));
 
             SeasonETag.Matches(new StringValues(before), after)
                 .Should().BeFalse("a 304 here would freeze the page mid-Sunday");
@@ -206,12 +206,12 @@ namespace FantasyLeague.Core.Tests
                 new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [],
                         true, new Dictionary<string, decimal> { ["QB"] = 10m })])],
-                    [], [], IsCurrent: true));
+                    [], [], IsCurrent: true, RegularSeason.NFLWeeks));
 
             var after = ETag.Of(
                 new SeasonSnapshot("Name", 2026, 1, 0, Slot.Parse(["QB"]),
                     [new TeamSeason(1, "One", [new TeamWeek(1, 1, 10m, 10m, [], [], [], true, NoAttribution)])],
-                    [], [], IsCurrent: true));
+                    [], [], IsCurrent: true, RegularSeason.NFLWeeks));
 
             SeasonETag.Matches(new StringValues(before), after).Should().BeFalse();
         }

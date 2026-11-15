@@ -35,10 +35,18 @@ namespace FantasyLeague.Cli
 
             var lead = rows.Count == 0 ? 0m : rows[0].ActualPts;
             var teamWeeks = snapshot.Teams.Sum(t => t.Weeks.Count);
+            // playoff weeks are stored for the bracket, so the invariants check them; the table does not
+            // count them. Past the settings' cut-off is the playoffs; short of it, weeks nobody played (A37)
+            var inPlayoffs = snapshot.CurrentWeek > snapshot.RegularSeasonCutoff;
+            var checkedWeeks = inPlayoffs ? $"{teamWeeks} team-weeks, playoffs included" : $"{teamWeeks} team-weeks";
+            var counted = Math.Min(payload.CurrentWeek, payload.LastRegularWeek);
+            var after = payload.CurrentWeek > payload.LastRegularWeek
+                ? $"   {(inPlayoffs ? "playoffs" : "weeks")} from wk {payload.LastRegularWeek + 1} not counted"
+                : string.Empty;
 
             output.WriteLine(
-                $"season {payload.Season}   weeks 1-{payload.CurrentWeek}   " +
-                $"final through wk {payload.FinalThroughWeek}   {payload.AsOfUtc:yyyy-MM-dd HH:mm}Z");
+                $"season {payload.Season}   weeks 1-{counted}   " +
+                $"final through wk {payload.FinalThroughWeek}   {payload.AsOfUtc:yyyy-MM-dd HH:mm}Z{after}");
             output.WriteLine();
             output.WriteLine($"{"TEAM",-Name}{"POINTS",9}{"SPREAD",8}{"IDEAL",9}{"EFF",6}{"GAP",8}");
             output.WriteLine(new string('-', Rule));
@@ -63,8 +71,8 @@ namespace FantasyLeague.Cli
             var starters = Count(snapshot, InvariantKind.StartersSumMatchesPoints);
             var ideal = Count(snapshot, InvariantKind.IdealNotBelowActual);
 
-            output.WriteLine($"invariants   starters==points  {Verdict(starters),-5}({teamWeeks} team-weeks)");
-            output.WriteLine($"             ideal>=points     {Verdict(ideal),-5}({teamWeeks} team-weeks)");
+            output.WriteLine($"invariants   starters==points  {Verdict(starters),-5}({checkedWeeks})");
+            output.WriteLine($"             ideal>=points     {Verdict(ideal),-5}({checkedWeeks})");
             output.WriteLine($"unresolved   {(snapshot.UnresolvedPlayerIds.Count == 0 ? "none" : string.Join(", ", snapshot.UnresolvedPlayerIds))}");
 
             if (snapshot.Violations.Count == 0)

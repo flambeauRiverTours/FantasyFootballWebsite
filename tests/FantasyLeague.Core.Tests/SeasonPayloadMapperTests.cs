@@ -25,10 +25,11 @@ namespace FantasyLeague.Core.Tests
             IReadOnlyList<TeamSeason>? teams = null,
             string[]? rosterPositions = null,
             int currentWeek = 5,
-            int finalThroughWeek = 4) =>
+            int finalThroughWeek = 4,
+            int cutoff = RegularSeason.NFLWeeks) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], [], IsCurrent: true);
+                teams ?? [], [], [], IsCurrent: true, cutoff);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,
@@ -116,6 +117,68 @@ namespace FantasyLeague.Core.Tests
             totals.Actual.Should().Be(81m);
             totals.Sigma.Should().Be(2.0);
             totals.Max.Should().Be(12m, "41 belongs to a week that has not finished");
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void Playoff_weeks_count_toward_nothing_final_or_live(bool playoffWeekFinal)
+        {
+            // Q4: regular season only; week 5 is the first playoff week and a huge one
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                Team(1, "Playoff Hero",
+                    (8m, 9m, true), (12m, 13m, true), (8m, 9m, true), (12m, 13m, true),
+                    (200m, 210m, playoffWeekFinal)),
+            ], currentWeek: playoffWeekFinal ? 6 : 5, finalThroughWeek: playoffWeekFinal ? 5 : 4, cutoff: 4), AsOf);
+
+            var team = payload.Teams[0];
+            team.Totals.Actual.Should().Be(40m);
+            team.Totals.Ideal.Should().Be(44m);
+            team.Totals.Sigma.Should().Be(2.0);
+            team.Totals.Max.Should().Be(12m);
+            team.Weeks.Select(w => w.Week).Should().Equal(1, 2, 3, 4);
+            payload.FinalThroughWeek.Should().Be(4, "sigma's label must not promise a playoff week");
+            payload.LastRegularWeek.Should().Be(4, "the page says the season is complete from it");
+            payload.CurrentWeek.Should().BeGreaterThan(4, "the masthead still says what week it is");
+        }
+
+        [Fact]
+        public void The_last_regular_week_still_in_play_is_counted_and_not_yet_final()
+        {
+            // week 2 is live and the last that counts; the season completes when it finalizes
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                Team(1, "Last Week", (10m, 11m, true), (20m, 21m, false)),
+            ], currentWeek: 2, finalThroughWeek: 1, cutoff: 2), AsOf);
+
+            payload.Teams[0].Totals.Actual.Should().Be(30m);
+            payload.FinalThroughWeek.Should().Be(1);
+        }
+
+        [Fact]
+        public void A_season_that_ends_before_week_18_ends_at_its_last_played_week()
+        {
+            // the cut-off (18 in life, 3 here) has settled with nobody scoring: the league ended at week 2
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                Team(1, "Short", (10m, 11m, true), (20m, 21m, true), (0m, 0m, true)),
+                Team(2, "Season", (12m, 13m, true), (22m, 23m, true), (0m, 0m, true)),
+            ], currentWeek: 4, finalThroughWeek: 3, cutoff: 3), AsOf);
+
+            payload.LastRegularWeek.Should().Be(2);
+            payload.FinalThroughWeek.Should().Be(2, "the season is complete, so the page says so");
+            payload.Teams.Should().OnlyContain(t => t.Weeks.Select(w => w.Week).SequenceEqual(new[] { 1, 2 }));
+        }
+
+        [Fact]
+        public void Playoff_weeks_stay_off_the_radar()
+        {
+            var regular = new Dictionary<string, decimal> { ["QB"] = 10m };
+            var playoff = new Dictionary<string, decimal> { ["QB"] = 90m };
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                TeamWithSlots(1, "Radar", (true, regular), (true, playoff)),
+            ], cutoff: 1), AsOf);
+
+            payload.Teams[0].SlotAverages["QB"].Should().Be(10m);
+            payload.LeagueSlotAverages["QB"].Should().Be(10m);
         }
 
         [Fact]

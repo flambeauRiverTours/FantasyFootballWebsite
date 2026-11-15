@@ -46,6 +46,7 @@ incident itself belongs in the commit or the amendment.
 
 - Run the runbook's shell blocks in Git Bash; a command that depends on its shell says so and checks it.
 - On Windows, `$( )` keeps a trailing `\r`; strip it with `tr -d '\r'` before storing a value.
+- A script given to paste runs in a subshell `( … )`: `set -e` left on in an interactive shell closes it at the next failing command.
 - `! cmd` under `set -e` is not a guard; write `if cmd; then …; exit 1; fi`, and prove a gate fails once.
 - Under `pipefail`, never pipe a large download into an early-exit reader (`grep -q`, `head`); write a file.
 - A post-deploy check waits for this run's artefact, identified by build, not whatever is live.

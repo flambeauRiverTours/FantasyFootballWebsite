@@ -13,6 +13,7 @@
     /// <param name="SlotOrder">Distinct startable slots in roster_positions order. Fixed, never re-sorted (R2).</param>
     /// <param name="LeagueSlotAverages">The radar's reference circle, averaged over non-excluded teams (A1).</param>
     /// <param name="Teams">One entry per scoring roster.</param>
+    /// <param name="LastRegularWeek">The last week that counts (A37). Once <paramref name="FinalThroughWeek"/> reaches it the season is complete.</param>
     public sealed record SeasonPayload(
         string LeagueName,
         int Season,
@@ -22,7 +23,8 @@
         DateTimeOffset AsOfUtc,
         IReadOnlyList<string> SlotOrder,
         IReadOnlyDictionary<string, decimal> LeagueSlotAverages,
-        IReadOnlyList<TeamPayload> Teams);
+        IReadOnlyList<TeamPayload> Teams,
+        int LastRegularWeek);
 
     /// <summary>
     /// One roster's season.

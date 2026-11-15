@@ -54,6 +54,9 @@ namespace FantasyLeague.Seasons
 
         /// <summary>Gets every invariant breach.</summary>
         public List<InvariantViolation> Violations { get; } = [];
+
+        /// <summary>Gets or sets the week the season was built to: Sleeper's, unless it went back past stored weeks.</summary>
+        public int CurrentWeek { get; set; }
     }
 
     /// <summary>
@@ -164,7 +167,8 @@ namespace FantasyLeague.Seasons
                 GroupTeams(weeks, league.Teams, excluded),
                 [],
                 [],
-                IsCurrent: false);
+                IsCurrent: false,
+                RegularSeason.LastWeek(league.PlayoffWeekStart));
         }
 
         /// <summary>
@@ -178,6 +182,13 @@ namespace FantasyLeague.Seasons
             var started = time.GetTimestamp();
 
             var state = await sleeper.GetNFLStateAsync(cancellationToken);
+            if (state.SeasonType is { } seasonType && reported.IsNew($"season-type:{state.Season}:{seasonType}"))
+            {
+                // A37: what the state does after the NFL regular season is unobserved; this records it
+                logger.LogInformation(
+                    "Sleeper's NFL state for {Season} is {SeasonType} at week {Week}.", state.Season, seasonType, state.Week);
+            }
+
             var league = await sleeper.GetLeagueAsync(configured.CurrentLeagueId, cancellationToken);
             var excluded = ResolveExclusions(league, configured, state.Season);
             var weeks = await ReadWeeksAsync(configured.CurrentLeagueId, state, league.Slots, playerMap, excluded, cancellationToken);
@@ -188,13 +199,14 @@ namespace FantasyLeague.Seasons
             return new SeasonSnapshot(
                 string.IsNullOrWhiteSpace(configured.OverrideLeagueName) ? league.Name : configured.OverrideLeagueName,
                 state.Season,
-                state.Week,
-                WeekFinality.FinalThroughWeek(state.Week),
+                weeks.CurrentWeek,
+                WeekFinality.FinalThroughWeek(weeks.CurrentWeek),
                 league.Slots,
                 GroupTeams(weeks.TeamWeeks, league.Teams, excluded),
                 [.. weeks.Unresolved.Distinct()],
                 weeks.Violations,
-                IsCurrent: true);
+                IsCurrent: true,
+                RegularSeason.LastWeek(league.PlayoffWeekStart));
         }
 
         /// <summary>
@@ -236,11 +248,27 @@ namespace FantasyLeague.Seasons
             CancellationToken cancellationToken)
         {
             var weeks = new SeasonWeeks();
-            var storedByWeek = (await stored.ReadAsync(leagueId, state.Season, cancellationToken)).ToLookup(w => w.Week);
+            var storedWeeks = await stored.ReadAsync(leagueId, state.Season, cancellationToken);
+            var storedByWeek = storedWeeks.ToLookup(w => w.Week);
+            var storedThrough = storedWeeks.Count == 0 ? 0 : storedWeeks.Max(w => w.Week);
 
-            for (var week = 1; week <= state.Week; week++)
+            // only final weeks are stored, so in a season that moves forward Sleeper's week is always
+            // past them; a week behind them means the state reset, and the stored season stands.
+            // Equal is not a reset: the live week is read from Sleeper whatever the store holds for it
+            var wentBack = state.Week < storedThrough;
+            var lastRead = Math.Max(state.Week, storedThrough);
+            // a reset comes after the NFL's regular season, so every week to 18 has settled, stored or not
+            weeks.CurrentWeek = wentBack ? Math.Max(storedThrough, RegularSeason.NFLWeeks) + 1 : state.Week;
+            if (wentBack && reported.IsNew($"week-back:{state.Season}:{state.Week}"))
             {
-                var isFinal = WeekFinality.IsFinal(week, state.Week);
+                logger.LogWarning(
+                    "Sleeper reports week {Week} ({SeasonType}) of {Season}, but weeks through {StoredThrough} are stored; showing the stored season.",
+                    state.Week, state.SeasonType, state.Season, storedThrough);
+            }
+
+            for (var week = 1; week <= lastRead; week++)
+            {
+                var isFinal = WeekFinality.IsFinal(week, weeks.CurrentWeek);
                 if (isFinal && storedByWeek.Contains(week))
                 {
                     weeks.TeamWeeks.AddRange(storedByWeek[week]);
@@ -274,8 +302,10 @@ namespace FantasyLeague.Seasons
             var positions = mapped.Players.ToDictionary(p => p.Id.Value, p => p.FantasyPositions);
             var slotAverages = SlotAverager.WeekAverages(mapped.SlotStarters, mapped.PlayersPoints, positions, slots);
             // the placeholder team's lineup is never set, so it fails this every live week;
-            // it never reaches the radar, so there is nothing to report
-            if (slotAverages is null && !isExcluded)
+            // it never reaches the radar, so there is nothing to report. Anyone else is reported
+            // once per instance: a live week is rebuilt every 5 s, and an eliminated team's
+            // playoff lineup may never be set either
+            if (slotAverages is null && !isExcluded && reported.IsNew($"slots:{mapped.RosterId}:{week}"))
             {
                 // roster_positions changed after this week was played
                 logger.LogError(

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchSeason } from '../api/client';
 import { isGameWindow } from '../api/gameWindow';
+import { isSeasonComplete } from '../api/types';
 import type { SeasonPayload } from '../api/types';
 
 const PollIntervalMs = 30_000;
@@ -17,7 +18,8 @@ export interface SeasonState {
  * Fetches a season and keeps it current while it is still being played.
  *
  * The ETag does the work: a poll that finds nothing new costs a 304 with no
- * body. A finished season is never polled at all, because it cannot change.
+ * body. A finished season is never polled at all, because it cannot change;
+ * nor is the current one once its last counted week is final (A37).
  *
  * @param season The season to show, or null for the current one. Fixed for the
  * page's life: it comes from the URL at load, and nothing changes it after.
@@ -31,8 +33,9 @@ export function useSeason(season: number | null): SeasonState {
 
   const loading = payload === null && error === null;
 
-  // unknown until the first response, so poll until told otherwise
-  const isCurrent = payload?.isCurrent ?? true;
+  // poll the current season until its last counted week is final (A37); before the first
+  // response it is unknown, so poll until told otherwise
+  const polls = !payload || (payload.isCurrent && !isSeasonComplete(payload));
 
   const load = useCallback(async () => {
     controller.current?.abort();
@@ -59,7 +62,7 @@ export function useSeason(season: number | null): SeasonState {
   }, [load]);
 
   useEffect(() => {
-    if (!isCurrent) return;
+    if (!polls) return;
 
     const poll = () => {
       if (document.visibilityState === 'visible' && isGameWindow(new Date())) void load();
@@ -77,7 +80,7 @@ export function useSeason(season: number | null): SeasonState {
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [load, isCurrent]);
+  }, [load, polls]);
 
   return { payload, error, loading, refetch: () => void load() };
 }
