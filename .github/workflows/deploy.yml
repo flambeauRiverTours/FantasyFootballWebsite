@@ -68,6 +68,10 @@ jobs:
     timeout-minutes: 15
     needs: infra
     environment: production
+    env:
+      RESOURCE_GROUP: ${{ secrets.AZ_RESOURCE_GROUP_NAME }}
+      SQL_FQDN: ${{ needs.infra.outputs.sqlServerFqdn }}
+      FIREWALL_RULE: gh-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/dotnet
@@ -78,16 +82,26 @@ jobs:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      # no firewall rule for the runner: GitHub's hosted runners are in Azure, so
-      # the server's "allow Azure services" rule admits them (tested, A31)
+      # hosted runners can be on AWS, which "allow Azure services" does not admit (A40),
+      # so the runner's own address is let in for the run and removed after it
+      - name: Open the SQL firewall to this runner
+        id: firewall
+        run: |
+          ip=$(curl -fsS --retry 3 https://api.ipify.org)
+          [[ "$ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "::error::not an IPv4 address: $ip"; exit 1; }
+          az sql server firewall-rule create -g "$RESOURCE_GROUP" -s "${SQL_FQDN%%.*}" -n "$FIREWALL_RULE" \
+            --start-ip-address "$ip" --end-ip-address "$ip" --output none
       - name: Apply migrations
         env:
-          # Active Directory Default would probe managed identity first, and on some
-          # hosted runners the VM's metadata service answers 401, which ends the chain
-          # before the azure/login session is tried. Developer credentials only.
+          # Active Directory Default would probe managed identity first, and on an AWS
+          # runner the metadata service answers 401, which ends the chain before the
+          # azure/login session is tried (A40). Developer credentials only.
           AZURE_TOKEN_CREDENTIALS: dev
           ConnectionStrings__FantasyLeague: "Server=tcp:${{ needs.infra.outputs.sqlServerFqdn }},1433;Database=${{ needs.infra.outputs.sqlDatabaseName }};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;"
         run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Data
+      - name: Close the SQL firewall
+        if: always() && steps.firewall.outcome == 'success'
+        run: az sql server firewall-rule delete -g "$RESOURCE_GROUP" -s "${SQL_FQDN%%.*}" -n "$FIREWALL_RULE" --output none
 
   functions:
     runs-on: ubuntu-latest
