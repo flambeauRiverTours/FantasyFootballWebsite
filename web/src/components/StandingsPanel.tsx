@@ -1,5 +1,5 @@
 import { m } from 'motion/react';
-import { hasRecords, hasTies, standings } from '../api/calculations';
+import { hasMedianGame, hasRecords, hasTies, standings } from '../api/calculations';
 import type { SeasonPayload } from '../api/types';
 import { RowSlide } from './motion';
 import Panel from './Panel';
@@ -20,7 +20,7 @@ interface StandingsPanelProps {
 export default function StandingsPanel({ payload }: StandingsPanelProps) {
   const byRecord = hasRecords(payload);
   const rows = standings(payload);
-  const columns = standingsColumns(byRecord, hasTies(payload.teams));
+  const columns = standingsColumns(byRecord, hasTies(payload.teams), hasMedianGame(payload.teams));
   // head-to-head, but a counted week still lacks its games: the points table stands in
   const waiting = payload.format === 'HeadToHead' && !byRecord;
 
@@ -45,7 +45,9 @@ export default function StandingsPanel({ payload }: StandingsPanelProps) {
             </table>
           </div>
           {waiting ? (
-            <p className="muted">Win-loss records appear once every week's games are in.</p>
+            <p className="muted">
+              Records are still loading, so the table is ranked by points for now.
+            </p>
           ) : null}
         </>
       )}

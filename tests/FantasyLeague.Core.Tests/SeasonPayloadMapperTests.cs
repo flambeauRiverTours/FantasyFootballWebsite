@@ -108,6 +108,68 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void Head_to_head_keeps_the_median_results_apart_when_the_league_plays_one()
+        {
+            // the median of 10 and 12 is 11: One loses both its games, Two wins both
+            var snapshot = Snapshot([
+                InGame(Team(1, "One", (10m, 11m, true)), 1),
+                InGame(Team(2, "Two", (12m, 13m, true)), 1),
+            ], currentWeek: 2, finalThroughWeek: 1, format: LeagueFormat.HeadToHead) with
+            { HasMedianGame = true };
+
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf);
+
+            payload.Teams.ToDictionary(t => t.RosterId, t => t.Record).Should().BeEquivalentTo(new Dictionary<int, RecordPayload>
+            {
+                [1] = new(0, 2, 0, 10m, 12m, new MedianPayload(0, 1, 0)),
+                [2] = new(2, 0, 0, 12m, 10m, new MedianPayload(1, 0, 0)),
+            });
+        }
+
+        [Fact]
+        public void Head_to_head_before_any_week_settles_gives_an_empty_median_record_too()
+        {
+            var snapshot = Snapshot([
+                InGame(Team(1, "One", (10m, 11m, false)), 1),
+                InGame(Team(2, "Two", (12m, 13m, false)), 1),
+            ], currentWeek: 1, finalThroughWeek: 0, format: LeagueFormat.HeadToHead) with
+            { HasMedianGame = true };
+
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Teams
+                .Should().OnlyContain(t => t.Record == new RecordPayload(0, 0, 0, 0m, 0m, new MedianPayload(0, 0, 0)));
+        }
+
+        [Fact]
+        public void A_league_without_a_median_game_sends_no_median()
+        {
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                InGame(Team(1, "One", (10m, 11m, true)), 1),
+                InGame(Team(2, "Two", (12m, 13m, true)), 1),
+            ], currentWeek: 1, finalThroughWeek: 1, format: LeagueFormat.HeadToHead), AsOf);
+
+            payload.Matchups.Should().NotBeNull("the test needs a week of games");
+            payload.Matchups!.Median.Should().BeNull();
+            JsonSerializer.Serialize(payload, JsonSerializerOptions.Web).Should().NotContain("median");
+        }
+
+        [Fact]
+        public void The_matchups_carry_the_week_s_median_over_every_roster_the_placeholder_included()
+        {
+            // 30, 40, 50 and 60: the median game's line is 45, live
+            var snapshot = Snapshot([
+                TeamInGames(1, "One", (50m, 1, false)),
+                TeamInGames(2, "Two", (30m, 2, false)),
+                TeamInGames(3, "Three", (40m, 2, false)),
+            ], currentWeek: 1, finalThroughWeek: 0, format: LeagueFormat.HeadToHead) with
+            {
+                HasMedianGame = true,
+                ExcludedTeams = [TeamInGames(9, "Placeholder", (60m, 1, false))],
+            };
+
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Matchups!.Median.Should().Be(45m);
+        }
+
+        [Fact]
         public void Head_to_head_leaves_the_record_out_while_a_counted_week_lacks_its_games()
         {
             // all or nothing: a week stored before matchups were read

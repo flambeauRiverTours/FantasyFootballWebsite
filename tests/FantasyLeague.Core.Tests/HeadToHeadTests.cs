@@ -34,7 +34,27 @@ namespace FantasyLeague.Core.Tests
             var sleepers = Fixtures.Read<List<RosterDto>>(document.RootElement.GetProperty("rosters").GetRawText())
                 .ToDictionary(r => r.RosterId, r => SleeperMapper.ToRecord(r)!);
 
-            HeadToHead.Records(CapturedWeeks(), lastWeek: 18, hasMedianGame: true).Should().BeEquivalentTo(sleepers);
+            // Sleeper keeps no median split, so compare the totals
+            HeadToHead.Records(CapturedWeeks(), lastWeek: 18, hasMedianGame: true)!
+                .ToDictionary(r => r.Key, r => r.Value with { Median = null })
+                .Should().BeEquivalentTo(sleepers);
+        }
+
+        [Fact]
+        public void The_captured_season_s_median_shares_are_one_a_week_and_the_rest_are_games()
+        {
+            var weeks = CapturedWeeks().ToList();
+
+            var records = HeadToHead.Records(weeks, lastWeek: 18, hasMedianGame: true)!;
+
+            records.Should().NotBeEmpty();
+            foreach (var (rosterId, record) in records)
+            {
+                var played = weeks.Where(w => w.RosterId == rosterId).ToList();
+                var median = record.Median!;
+                (median.Wins + median.Losses + median.Ties).Should().Be(played.Count);
+                (record.Games - played.Count).Should().Be(played.Count(w => w.MatchupId > 0));
+            }
         }
 
         [Fact]
@@ -64,10 +84,21 @@ namespace FantasyLeague.Core.Tests
             var records = HeadToHead.Records(
                 [Week(1, 1, 100m, 1), Week(2, 1, 70m, 1), Week(3, 1, 90m, 2), Week(4, 1, 80m, 2)], 18, hasMedianGame: true)!;
 
-            records[2].Should().Be(new TeamRecord(0, 2, 0, 70m, 100m));
-            records[4].Should().Be(new TeamRecord(0, 2, 0, 80m, 90m));
-            records[3].Should().Be(new TeamRecord(2, 0, 0, 90m, 80m));
+            records[2].Should().Be(new TeamRecord(0, 2, 0, 70m, 100m, new MedianResults(0, 1, 0)));
+            records[4].Should().Be(new TeamRecord(0, 2, 0, 80m, 90m, new MedianResults(0, 1, 0)));
+            records[3].Should().Be(new TeamRecord(2, 0, 0, 90m, 80m, new MedianResults(1, 0, 0)));
         }
+
+        [Fact]
+        public void A_league_without_a_median_game_has_no_median_results() =>
+            HeadToHead.Records([Week(1, 1, 100m, 1), Week(2, 1, 90m, 1)], 18, hasMedianGame: false)![1].Median.Should().BeNull();
+
+        [Theory]
+        [InlineData(new[] { 70.0 }, 70.0)]
+        [InlineData(new[] { 100.0, 70.0, 90.0 }, 90.0)]
+        [InlineData(new[] { 100.0, 70.0, 90.0, 80.0 }, 85.0)]
+        public void The_median_is_the_middle_score_or_the_mean_of_the_middle_two(double[] scores, double expected) =>
+            HeadToHead.Median(scores.Select(s => (decimal)s)).Should().Be((decimal)expected);
 
         [Fact]
         public void Weeks_past_the_last_counted_week_do_not_count() =>
@@ -78,7 +109,7 @@ namespace FantasyLeague.Core.Tests
         [Fact]
         public void The_live_week_does_not_count() =>
             HeadToHead.Records([Week(1, 1, 100m, 1), Week(2, 1, 90m, 1), Week(1, 2, 10m, 1, isFinal: false), Week(2, 2, 50m, 1, isFinal: false)], 18, hasMedianGame: true)![1]
-                .Should().Be(new TeamRecord(2, 0, 0, 100m, 90m));
+                .Should().Be(new TeamRecord(2, 0, 0, 100m, 90m, new MedianResults(1, 0, 0)));
 
         [Fact]
         public void A_week_stored_before_matchups_were_read_leaves_every_record_unknown() =>

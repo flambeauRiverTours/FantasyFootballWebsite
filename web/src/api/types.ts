@@ -33,6 +33,8 @@ export interface MatchupsPayload {
   /** Whether the week is settled; until then the points are live. */
   isFinal: boolean;
   games: GamePayload[];
+  /** The week's median score (A43). */
+  median?: number;
 }
 
 /** One game. Its sides are in roster id order, so they never swap between polls. */
@@ -76,14 +78,20 @@ export interface TeamPayload {
   record?: TeamRecord;
 }
 
-/** Results and points over the settled weeks that count; median results included (Q12). */
-export interface TeamRecord {
+/** Wins, losses and ties (C#'s `MedianPayload`). */
+export interface Results {
   wins: number;
   losses: number;
   ties: number;
+}
+
+/** Results and points over the settled weeks that count; median results included (Q12). */
+export interface TeamRecord extends Results {
   /** Every settled week's points, a bye included: the tiebreak after win rate. */
   pointsFor: number;
   pointsAgainst: number;
+  /** The median game's share (A43). */
+  median?: Results;
 }
 
 /**

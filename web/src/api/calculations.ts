@@ -3,6 +3,9 @@ import { hasConsistency } from './types';
 import type {
   ConsistentTotals,
   GamePayload,
+  MatchupsPayload,
+  MatchupTeamPayload,
+  Results,
   SeasonPayload,
   TeamPayload,
   TeamRecord,
@@ -153,6 +156,10 @@ export interface Standing {
   team: TeamPayload;
   /** Points behind the leader. Zero for the leader. */
   gap: number;
+  /** 1 for the top row. */
+  rank: number;
+  /** Games behind the leader; ties count half. */
+  gamesBack: number | null;
 }
 
 /** Teams ranked by points, highest first. Points decide the league. */
@@ -197,13 +204,28 @@ export function settledIdeal(team: TeamPayload): number {
   return team.weeks.filter((w) => w.isFinal).reduce((sum, w) => sum + w.ideal, 0);
 }
 
+/** A record without its median share (A43). */
+export function gameResults(record: TeamRecord): Results {
+  const median = record.median ?? { wins: 0, losses: 0, ties: 0 };
+  return {
+    wins: record.wins - median.wins,
+    losses: record.losses - median.losses,
+    ties: record.ties - median.ties,
+  };
+}
+
+/** Whether the records carry a median share (A43). */
+export function hasMedianGame(teams: TeamPayload[]): boolean {
+  return teams.some((t) => t.record?.median !== undefined);
+}
+
 /** True when any team has a tied game, so every record shows its ties. */
 export function hasTies(teams: TeamPayload[]): boolean {
   return teams.some((t) => (t.record?.ties ?? 0) > 0);
 }
 
 /** A record as the table shows it: "13-5", or "13-5-0" when the league has a tie. */
-export function recordText({ wins, losses, ties }: TeamRecord, showTies: boolean): string {
+export function recordText({ wins, losses, ties }: Results, showTies: boolean): string {
   return showTies ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`;
 }
 
@@ -212,36 +234,70 @@ function counted(n: number, one: string, many: string): string {
 }
 
 /** A record in words, for screen readers: "13 wins, 5 losses". */
-export function recordSpoken({ wins, losses, ties }: TeamRecord, showTies: boolean): string {
+export function recordSpoken({ wins, losses, ties }: Results, showTies: boolean): string {
   const parts = [counted(wins, 'win', 'wins'), counted(losses, 'loss', 'losses')];
   return (showTies ? [...parts, counted(ties, 'tie', 'ties')] : parts).join(', ');
 }
 
-/** What a matchup card says beside a side's points: a result once final, the state of play before. */
-export type MatchupStatus = 'Won' | 'Tied' | 'Leading' | 'Level' | null;
-
-/**
- * Each side's status, in the game's side order (T71). Live: "Leading" or "Level",
- * but nothing before kick-off, while both are 0. Final: "Won", or "Tied" on both.
- */
-export function matchupStatus(
-  { teams: [a, b] }: GamePayload,
-  isFinal: boolean,
-): [MatchupStatus, MatchupStatus] {
-  if (!isFinal && a.actual === 0 && b.actual === 0) {
-    return [null, null];
-  }
-  const [ahead, level] = isFinal ? (['Won', 'Tied'] as const) : (['Leading', 'Level'] as const);
+/** Index of the side ahead; null when level. */
+export function matchupLeader({ teams: [a, b] }: GamePayload): 0 | 1 | null {
   if (a.actual === b.actual) {
-    return [level, level];
+    return null;
   }
-  return a.actual > b.actual ? [ahead, null] : [null, ahead];
+  return a.actual > b.actual ? 0 : 1;
+}
+
+/** Screen reader result per side (A43). */
+export function matchupSpoken(game: GamePayload, isFinal: boolean): [string, string] {
+  const leader = matchupLeader(game);
+  if (leader === null) {
+    const kickOff = !isFinal && game.teams[0].actual === 0;
+    const word = kickOff ? '' : isFinal ? 'tied' : 'level';
+    return [word, word];
+  }
+  const word = isFinal ? 'won' : 'leading';
+  return leader === 0 ? [word, ''] : ['', word];
+}
+
+/** Sides above and on the week's median (A43). */
+export function medianSplit({ games, median }: MatchupsPayload): {
+  above: MatchupTeamPayload[];
+  on: MatchupTeamPayload[];
+} {
+  if (median === undefined) {
+    return { above: [], on: [] };
+  }
+  const sides = games.flatMap((g) => g.teams);
+  return {
+    above: sides.filter((t) => t.actual > median),
+    on: sides.filter((t) => t.actual === median),
+  };
+}
+
+/** Whether any side has scored this week. */
+export function weekStarted({ games }: MatchupsPayload): boolean {
+  return games.some((g) => g.teams.some((t) => t.actual !== 0));
+}
+
+/** Wins less losses: what games back compares. */
+function margin({ wins, losses }: Results): number {
+  return wins - losses;
 }
 
 /** The standings table: teams as the league ranks them, each with its gap to the points leader. */
 export function standings(payload: SeasonPayload): Standing[] {
   const leader = rankByPoints(payload.teams)[0]?.totals.actual ?? 0;
-  return rankTeams(payload).map((team) => ({ team, gap: leader - team.totals.actual }));
+  const ranked = rankTeams(payload);
+  // from the best wins less losses, not the top row: a bye can leave win rate and margin apart
+  const best = hasRecords(payload)
+    ? Math.max(...payload.teams.map((t) => margin(t.record!)))
+    : null;
+  return ranked.map((team, i) => ({
+    team,
+    gap: leader - team.totals.actual,
+    rank: i + 1,
+    gamesBack: best === null ? null : (best - margin(team.record!)) / 2,
+  }));
 }
 
 /** Final weeks before sigma draws a line: four for its first value (D1), one more for a second. */

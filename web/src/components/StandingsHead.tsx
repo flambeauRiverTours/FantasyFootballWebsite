@@ -1,3 +1,4 @@
+import { headClass } from './standingsColumns';
 import type { StandingsColumn } from './standingsColumns';
 
 interface StandingsHeadProps {
@@ -13,7 +14,7 @@ export default function StandingsHead({ columns }: StandingsHeadProps) {
           <th
             key={column.key}
             scope="col"
-            className={column.wide ? 'col-wide' : undefined}
+            className={headClass(column)}
             aria-sort={column.sorted ? 'descending' : undefined}
           >
             {column.label}

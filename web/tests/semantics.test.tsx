@@ -80,18 +80,19 @@ describe('StandingsPanel', () => {
 });
 
 describe('StandingsPanel in head-to-head', () => {
-  // the visible labels; PF and PA also carry their full names for screen readers
+  // the visible labels, first text only: PF and PA also carry their full names for
+  // screen readers, and the record its "games · median" line
   const labels = (c: HTMLElement) =>
-    [...c.querySelectorAll('thead th')].map(
-      (th) => th.querySelector('[aria-hidden="true"]')?.textContent ?? th.textContent,
-    );
+    [...c.querySelectorAll('thead th')].map((th) => th.firstChild?.textContent);
   const bodyRows = () => screen.getAllByRole('row').slice(1);
   const recordShown = (row: HTMLElement) =>
-    row.querySelectorAll('td')[1].querySelector('[aria-hidden="true"]')?.textContent;
+    row.querySelectorAll('td')[2].querySelector('[aria-hidden="true"]')?.textContent;
 
-  it('shows the record, points for and against, and ideal, ranked and sorted by record', () => {
+  it('shows rank, record, games back, points for and against, and ideal, sorted by record', () => {
     const { container } = render(<StandingsPanel payload={headToHead} />);
-    expect(labels(container)).toEqual(['Team', 'Record', 'PF', 'PA', 'Ideal']);
+    expect(labels(container)).toEqual(['#', 'Team', 'Record', 'GB', 'PF', 'PA', 'Ideal']);
+    expect(screen.getByRole('columnheader', { name: 'Rank' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Games back' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Points for' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Points against' })).toBeInTheDocument();
 
@@ -99,25 +100,66 @@ describe('StandingsPanel in head-to-head', () => {
     expect(sorted).toHaveLength(1);
     expect(sorted[0]).toHaveTextContent('Record');
     expect(container.querySelectorAll('td.is-sorted')).toHaveLength(teams.length);
-    expect(bodyRows().map((r) => r.querySelector('td')?.textContent)).toEqual([
-      'Charlie',
-      'Bravo',
-      'Alpha',
-    ]);
+    const cells = (i: number) => bodyRows().map((r) => r.querySelectorAll('td')[i].textContent);
+    expect(cells(0)).toEqual(['1', '2', '3']);
+    expect(cells(1)).toEqual(['Charlie', 'Bravo', 'Alpha']);
+    expect(cells(3)).toEqual(['—', '1.0', '2.0']);
   });
 
-  it('hides points against on narrow screens, on the header and every body cell', () => {
+  it('marks the rank as a lead column, so the team column stays the wide one', () => {
     const { container } = render(<StandingsPanel payload={headToHead} />);
-    expect(container.querySelectorAll('th.col-wide')).toHaveLength(1);
-    expect(container.querySelectorAll('td.col-wide')).toHaveLength(teams.length);
-    expect(container.querySelector('th.col-wide')).toHaveAccessibleName('Points against');
+    expect(container.querySelector('thead th')).toHaveClass('col-lead');
+    expect(container.querySelectorAll('td.col-lead')).toHaveLength(teams.length);
+    expect(container.querySelectorAll('.col-lead')).toHaveLength(teams.length + 1);
+  });
+
+  it('hides points against and ideal on narrow screens, keeping games back', () => {
+    const { container } = render(<StandingsPanel payload={headToHead} />);
+    const wide = [...container.querySelectorAll('th.col-wide')];
+    expect(wide.map((th) => th.textContent)).toEqual(
+      expect.arrayContaining([expect.stringContaining('PA'), 'Ideal']),
+    );
+    expect(wide).toHaveLength(2);
+    expect(container.querySelectorAll('td.col-wide')).toHaveLength(2 * teams.length);
   });
 
   it('reads the record short on screen and in full to a screen reader', () => {
     render(<StandingsPanel payload={headToHead} />);
-    const cell = bodyRows()[0].querySelectorAll('td')[1];
+    const cell = bodyRows()[0].querySelectorAll('td')[2];
     expect(cell.querySelector('[aria-hidden="true"]')).toHaveTextContent('3-1');
     expect(cell.querySelector('.visually-hidden')).toHaveTextContent('3 wins, 1 loss');
+  });
+
+  it('splits each record into games and the median game, labelled in the header', () => {
+    const { container } = render(<StandingsPanel payload={headToHead} />);
+    const cell = bodyRows()[0].querySelectorAll('td')[2];
+    expect(cell.querySelector('.record-split')).toHaveTextContent('2-0 · 1-1');
+    expect(cell.querySelector('.visually-hidden')).toHaveTextContent(
+      '3 wins, 1 loss: 2 wins, 0 losses in games, 1 win, 1 loss against the median',
+    );
+    expect(container.querySelector('thead .record-split')).toHaveTextContent('games · median');
+    expect(screen.getByRole('columnheader', { name: 'Record' })).toBeInTheDocument();
+  });
+
+  it('shows ties in the games share only, never in the median share', () => {
+    const tied = {
+      ...headToHead,
+      teams: headToHead.teams.map((t, i) =>
+        i === 0 ? { ...t, record: { ...t.record!, losses: 2, ties: 1 } } : t,
+      ),
+    };
+    render(<StandingsPanel payload={tied} />);
+    const cell = bodyRows()[0].querySelectorAll('td')[2];
+    expect(cell.querySelector('.record-split')).toHaveTextContent('2-0-0 · 1-1');
+  });
+
+  it('shows no split in a league without a median game', () => {
+    const plain = {
+      ...headToHead,
+      teams: headToHead.teams.map((t) => ({ ...t, record: { ...t.record!, median: undefined } })),
+    };
+    const { container } = render(<StandingsPanel payload={plain} />);
+    expect(container.querySelector('.record-split')).toBeNull();
   });
 
   it('shows ties on every row once any team has one', () => {
@@ -143,27 +185,27 @@ describe('StandingsPanel in head-to-head', () => {
     };
     render(<StandingsPanel payload={live} />);
     const cells = [...bodyRows()[0].querySelectorAll('td')].map((td) => td.textContent);
-    expect(cells.slice(2)).toEqual(['250.7', '280.9', '310.9']);
+    expect(cells.slice(4)).toEqual(['250.7', '280.9', '310.9']);
   });
 
   it('keeps the points table, and says why, until every record is known', () => {
     const waiting = { ...headToHead, isCurrent: false, teams };
     const { container } = render(<StandingsPanel payload={waiting} />);
     expect(labels(container)).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
-    expect(screen.getByText(/records appear once every week's games are in/i)).toBeInTheDocument();
+    expect(screen.getByText(/records are still loading/i)).toHaveTextContent(/ranked by points/i);
   });
 
   it('says nothing about records in total points', () => {
     render(<StandingsPanel payload={payload} />);
-    expect(screen.queryByText(/records appear/i)).toBeNull();
+    expect(screen.queryByText(/still loading/i)).toBeNull();
   });
 
   it('takes the records when they arrive between polls', () => {
     const { container, rerender } = render(<StandingsPanel payload={{ ...headToHead, teams }} />);
     rerender(<StandingsPanel payload={headToHead} />);
-    expect(labels(container)).toEqual(['Team', 'Record', 'PF', 'PA', 'Ideal']);
-    expect(container.querySelectorAll('tbody tr:first-child td')).toHaveLength(5);
-    expect(screen.queryByText(/records appear/i)).toBeNull();
+    expect(labels(container)).toEqual(['#', 'Team', 'Record', 'GB', 'PF', 'PA', 'Ideal']);
+    expect(container.querySelectorAll('tbody tr:first-child td')).toHaveLength(7);
+    expect(screen.queryByText(/still loading/i)).toBeNull();
   });
 });
 

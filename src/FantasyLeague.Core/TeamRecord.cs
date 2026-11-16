@@ -8,7 +8,8 @@
     /// <param name="Ties">Games tied, median results included.</param>
     /// <param name="PointsFor">Points over every counted week, a bye included, as Sleeper's are; the tiebreak after win rate.</param>
     /// <param name="PointsAgainst">Opponents' points over the same weeks. Median results add none.</param>
-    public sealed record TeamRecord(int Wins, int Losses, int Ties, decimal PointsFor, decimal PointsAgainst)
+    /// <param name="Median">The median game's share; null without one (A43).</param>
+    public sealed record TeamRecord(int Wins, int Losses, int Ties, decimal PointsFor, decimal PointsAgainst, MedianResults? Median = null)
     {
         /// <summary>
         /// Gets how many results the record holds. Two a week with a median game.
