@@ -1,7 +1,8 @@
-import type { CSSProperties } from 'react';
-import { matchupStatus } from '../api/calculations';
+import { matchupLeader, matchupSpoken, weekStarted } from '../api/calculations';
 import { teamColours } from '../api/teamColours';
 import type { MatchupsPayload, SeasonPayload } from '../api/types';
+import MatchupSide from './MatchupSide';
+import MatchupsNotes from './MatchupsNotes';
 import Panel from './Panel';
 
 interface MatchupsPanelProps {
@@ -10,42 +11,37 @@ interface MatchupsPanelProps {
   matchups: MatchupsPayload;
 }
 
-/**
- * One week's games in head-to-head (T71): a card per game, each side a line read
- * as written: name, points, status. Nothing is announced as a poll changes the
- * scores, and nothing moves.
- */
+/** One week's games, higher score bold (A43). */
 export default function MatchupsPanel({ payload, matchups }: MatchupsPanelProps) {
   const colours = teamColours(payload.teams);
-  const title = `Week ${matchups.week} ${matchups.isFinal ? 'results' : 'matchups'}`;
+  const { week, isFinal } = matchups;
+  const state = isFinal ? 'results' : weekStarted(matchups) ? '· live' : '· upcoming';
 
   return (
-    <Panel id="matchups" title={title}>
+    <Panel id="matchups" title={`Week ${week} ${state}`}>
       {/* the role keeps list semantics in Safari, which drops them with list-style: none */}
       <ul role="list" className="matchups">
         {matchups.games.map((game) => {
-          const status = matchupStatus(game, matchups.isFinal);
+          const leader = matchupLeader(game);
+          const spoken = matchupSpoken(game, isFinal);
           return (
             <li key={game.matchupId} className="matchup">
               {game.teams.map((side, i) => (
-                <p
+                <MatchupSide
                   key={side.rosterId}
-                  className={status[i] === 'Won' ? 'matchup-side is-winner' : 'matchup-side'}
-                >
-                  <span
-                    className="swatch"
-                    aria-hidden="true"
-                    style={{ '--swatch': colours.get(side.rosterId) } as CSSProperties}
-                  />
-                  <span>{side.name}</span>{' '}
-                  <span className="matchup-points">{side.actual.toFixed(1)}</span>{' '}
-                  <span className="matchup-status">{status[i]}</span>
-                </p>
+                  side={side}
+                  colour={colours.get(side.rosterId)}
+                  ahead={leader === i}
+                  won={isFinal && leader === i}
+                  spoken={spoken[i] ?? ''}
+                  versus={i === 1}
+                />
               ))}
             </li>
           );
         })}
       </ul>
+      <MatchupsNotes matchups={matchups} ranked={colours} />
     </Panel>
   );
 }

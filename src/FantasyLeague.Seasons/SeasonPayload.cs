@@ -41,10 +41,12 @@ namespace FantasyLeague.Seasons
     /// <param name="Week">The current week, held to the last counted week (A41).</param>
     /// <param name="IsFinal">Whether that week is settled; until then the points are live.</param>
     /// <param name="Games">Each game, in matchup id order.</param>
+    /// <param name="Median">The week's median score; null without a median game (A43).</param>
     public sealed record MatchupsPayload(
         int Week,
         bool IsFinal,
-        IReadOnlyList<GamePayload> Games);
+        IReadOnlyList<GamePayload> Games,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Median = null);
 
     /// <summary>
     /// One game, never a bye: a game always has two sides.
@@ -95,12 +97,22 @@ namespace FantasyLeague.Seasons
     /// <param name="Ties">Games tied, median results included.</param>
     /// <param name="PointsFor">Points over every settled week that counts, a bye included; the tiebreak after win rate.</param>
     /// <param name="PointsAgainst">Opponents' points over the same weeks.</param>
+    /// <param name="Median">The median game's share of the results (A43). Absent in a league without one.</param>
     public sealed record RecordPayload(
         int Wins,
         int Losses,
         int Ties,
         decimal PointsFor,
-        decimal PointsAgainst);
+        decimal PointsAgainst,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MedianPayload? Median = null);
+
+    /// <summary>
+    /// The median game's share of a record (A43).
+    /// </summary>
+    /// <param name="Wins">Weeks scored above the median.</param>
+    /// <param name="Losses">Weeks scored below it.</param>
+    /// <param name="Ties">Weeks scored exactly on it.</param>
+    public sealed record MedianPayload(int Wins, int Losses, int Ties);
 
     /// <summary>
     /// Season-to-date figures for one roster.

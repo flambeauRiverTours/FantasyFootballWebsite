@@ -32,10 +32,12 @@ actually returns.
   page reads it as `TotalPoints`; absent there is expected, not a finding.
 - `record` on a team (A39) is optional. It is absent in `TotalPoints`, and in
   `HeadToHead` until every counted week has its games; then every team has one.
-  One team with it and another without is a finding.
+  One team with it and another without is a finding. `record.median` (A43) is
+  present on every record or on none: none in a league without a median game.
 - `matchups` (A41) is optional. It is absent in `TotalPoints`, in the preseason, and
   for a week with no games; when present, `games` is never empty and every game
-  has exactly two teams.
+  has exactly two teams. `matchups.median` (A43) is absent in a league without a
+  median game.
 
 ## Why this matters
 

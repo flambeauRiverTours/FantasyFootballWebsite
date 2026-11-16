@@ -49,14 +49,14 @@ describe('The page', () => {
     serveApi(headToHead);
     const shown = render(<App />);
     await screen.findByRole('columnheader', { name: 'Record' });
-    await screen.findByRole('region', { name: 'Week 3 matchups' });
+    await screen.findByRole('region', { name: 'Week 3 · live' });
     expect(await violations(shown.container)).toEqual([]);
     shown.unmount();
     vi.restoreAllMocks();
 
     serveApi({ ...headToHead, teams: payload.teams });
     const waiting = render(<App />);
-    await screen.findByText(/records appear/i);
+    await screen.findByText(/records are still loading/i);
     expect(await violations(waiting.container)).toEqual([]);
   });
 

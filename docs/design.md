@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A41. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A43. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
@@ -259,12 +259,14 @@ ETag: W/"2026-wk7-…"
       ],
       "record": {                 // HeadToHead only, once every counted week has its games (A39)
         "wins": 9, "losses": 3, "ties": 0,
-        "pointsFor": 766.46, "pointsAgainst": 701.12   // settled weeks only
+        "pointsFor": 766.46, "pointsAgainst": 701.12,  // settled weeks only
+        "median": { "wins": 4, "losses": 2, "ties": 0 } // the median game's share, if it plays one (A43)
       }
     }
   ],
   "matchups": {                   // HeadToHead only, when the week has games (A41)
     "week": 7, "isFinal": false,  // the current week, held to the last counted week
+    "median": 41.65,              // every roster's median that week, if the league plays one (A43)
     "games": [{ "matchupId": 1, "teams": [
       { "rosterId": 3, "name": "Bijan Mustard", "actual": 46.20 },
       { "rosterId": 5, "name": "…", "actual": 38.10 } ] }]
@@ -316,11 +318,11 @@ Subtracting the league's weekly median doesn't change any ranking, but it remove
 
 #### The table comes first
 
-The standings table works with no interaction: tabular figures, the sorted column marked, and, in `TotalPoints`, the gap to first shown. In `HeadToHead` it is Team · Record · PF · PA · Ideal, ranked by win rate (a tie as half a win), then points for, then name, with PF, PA and Ideal over settled weeks only (A39). A record reads "13-5", or "13-5-1" on every row once any team has a tie. Until every record is known, the points table stands in, with a line saying why. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
+The standings table works with no interaction: tabular figures, the sorted column marked, and, in `TotalPoints`, the gap to first shown. In `HeadToHead` it is # · Team · Record · GB · PF · PA · Ideal, ranked by win rate (a tie as half a win), then points for, then name, with PF, PA and Ideal over settled weeks only (A39); on a phone PA and Ideal give way (A43). A record reads "13-5", or "13-5-1" on every row once any team has a tie; with a median game, "games · median" sits under it, labelled under the Record header (A43). Games back counts from the best wins less losses. Until every record is known, the points table stands in, with a line saying it is ranked by points for now. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
 
 #### This week's matchups
 
-Under the table, a head-to-head league gets one week's games, a card per game: "Week 7 matchups" while live, "Week 7 results" once final. Each side is a line of text, name, points and status ("Leading", "Won"), with the winner also in a heavier weight. Panels are a screen tall, so a few cards fill one; accepted (A41).
+Under the table, a head-to-head league gets one week's games, a card per game: "Week 7 · upcoming" before kick-off, "Week 7 · live" while live, "Week 7 results" once final. Each side is a line of text, name then points, with the higher score in bold, and neither of a tie (A42); once final the winner's whole line is bold, and a screen reader hears who leads or won. The placeholder's side has a ring for a swatch and "(not ranked)". Under the cards, once the week has started, the median game's line (two decimals) with who is above and on it, and, while live, that the table adds these scores once the week is final (A43). Panels are a screen tall, so a few cards fill one; accepted (A41).
 
 #### Motion
 

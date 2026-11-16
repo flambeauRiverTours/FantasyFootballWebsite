@@ -50,12 +50,12 @@
                     var median = Median(week.Select(w => w.ActualPts));
                     foreach (var w in week)
                     {
-                        tally[w.RosterId].AddResult(w.ActualPts.CompareTo(median));
+                        tally[w.RosterId].AddMedianResult(w.ActualPts.CompareTo(median));
                     }
                 }
             }
 
-            return tally.ToDictionary(t => t.Key, t => t.Value.ToRecord());
+            return tally.ToDictionary(t => t.Key, t => t.Value.ToRecord(hasMedianGame));
         }
 
         /// <summary>
@@ -86,9 +86,9 @@
         /// <summary>
         /// Takes the middle score, or the mean of the middle two.
         /// </summary>
-        /// <param name="scores">One week's scores, at least one.</param>
+        /// <param name="scores">One week's scores, every roster's, at least one.</param>
         /// <returns>The median.</returns>
-        private static decimal Median(IEnumerable<decimal> scores)
+        public static decimal Median(IEnumerable<decimal> scores)
         {
             var sorted = scores.Order().ToList();
             var middle = sorted.Count / 2;
@@ -103,6 +103,9 @@
             private int wins;
             private int losses;
             private int ties;
+            private int medianWins;
+            private int medianLosses;
+            private int medianTies;
             private decimal pointsFor;
             private decimal pointsAgainst;
 
@@ -124,10 +127,22 @@
             }
 
             /// <summary>
-            /// Adds a result alone, as the median game does.
+            /// Adds a median game's result, to the record and to its median share.
+            /// </summary>
+            /// <param name="comparison">Positive above the median, negative below, zero on it.</param>
+            public void AddMedianResult(int comparison)
+            {
+                AddResult(comparison);
+                medianWins += comparison > 0 ? 1 : 0;
+                medianLosses += comparison < 0 ? 1 : 0;
+                medianTies += comparison == 0 ? 1 : 0;
+            }
+
+            /// <summary>
+            /// Adds a result alone.
             /// </summary>
             /// <param name="comparison">Positive for a win, negative for a loss, zero for a tie.</param>
-            public void AddResult(int comparison)
+            private void AddResult(int comparison)
             {
                 if (comparison > 0)
                 {
@@ -146,8 +161,10 @@
             /// <summary>
             /// Freezes the tally.
             /// </summary>
+            /// <param name="hasMedianGame">Whether the league plays a median game, so the record carries its share.</param>
             /// <returns>The results and points so far.</returns>
-            public TeamRecord ToRecord() => new(wins, losses, ties, pointsFor, pointsAgainst);
+            public TeamRecord ToRecord(bool hasMedianGame) =>
+                new(wins, losses, ties, pointsFor, pointsAgainst, hasMedianGame ? new(medianWins, medianLosses, medianTies) : null);
         }
     }
 }

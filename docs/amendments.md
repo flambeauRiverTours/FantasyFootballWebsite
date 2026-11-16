@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A41 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A43 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -322,6 +322,28 @@ Found in the same logs:
 - **Live points while the week plays.** R1 governs what counts, not what shows; the title says "matchups" while live and "results" once final, so a final week is never shown as current.
 - **Readable without colour or announcements.** Each side is one line of text, name, points and status: "Leading" or "Level" live, "Won" or "Tied" once final, nothing before kick-off. The winner is also in a heavier weight. No `aria-live`, so the 30 s poll announces nothing, and no motion.
 - **The median game is not a card.** The record counts it (A39) and the table shows the result; a median line on the panel is left for later.
+
+## A42 · The higher score in bold, not in words
+
+2026-11-16. Corrects A41's "readable without colour" bullet before the panel was ever shown (it is still gated until T72). "Leading", "Level", "Won" and "Tied" beside each score read as clutter on a two-line card. A side's points are now the whole line after its name, and the higher score is bold, live or final; a tie, 0-0 before kick-off included, bolds neither.
+
+- **Still not colour alone.** Weight carries it visually, and the two numbers carry it for a screen reader, which reads both in order.
+- **Live or final is the title's job.** "Week 7 matchups" or "Week 7 results" (A41) says whether the bold score is a lead or a win, so the line no longer has to.
+- `matchupLeader(game)` replaces `matchupStatus(game, isFinal)`: the index of the side ahead, or null.
+
+## A43 · Head-to-head, read by a manager
+
+2026-11-16. A UI review and a fantasy-manager review of the gated head-to-head section (T68b, T71) agreed the layout held and the meaning did not: a visitor had to work out the median game, whether a score was live, and who the unranked team was. Six changes, still gated until T72.
+
+- **The median game is shown, not just counted.** It is half of every record (A39) and was invisible, so a 6-0 team read "9-3" and looked wrong. Each record now carries its median share (`record.median`, absent in a league without a median game); the table shows "games · median" under the record, labelled so under the Record header, and a screen reader hears the total, the games and the median share. The median share never shows ties: one needs two equal decimal scores. The matchups carry the week's median over every roster, the placeholder's included, as the record counts it (`matchups.median`), and a line under the cards names who is above it and who is on it, the placeholder tagged. It prints two decimals because the list compares exact scores: at one, a side shown level with the median could be listed above it. Sleeper keeps no split, so the record check compares totals only.
+- **A rank and games back.** In head-to-head the order is the answer, so the table leads with "#" and shows games back beside the record, to one decimal so halves line up. Games back is measured from the best wins less losses, not the top row: a bye leaves teams on different game counts, so win rate and margin can disagree, and measuring from the top row could go negative. On a phone, games back stays and points against and ideal give way: ideal is the points format's story. The rank is a lead column, so the team column after it stays the wide, left one.
+- **Live or final in the title.** "Week 7 · upcoming" before any side has scored, "Week 7 · live" until the week settles, "Week 7 results" after; "matchups" did not say in progress, and "live" over a row of 0.0s would mislead. While live, a line says the table adds these scores once the week is final, since points for counts settled weeks only (A39) and the cards sit right under it.
+- **The placeholder named as such.** Its empty swatch was invisible, a blank gap; it is now a ring in the muted text colour, which reads in both themes, and "(not ranked)" follows its name (A1).
+- **The winner's whole line in bold once final,** not just the score (A42), so "who won" does not rest on comparing two digit weights on a phone. Live, only the higher score is bold.
+- **A screen reader hears the result.** Bold carries it on screen; a screen reader now hears "versus" between the sides and "leading", "level", "won" or "tied" after a score, nothing at 0-0 before kick-off.
+- **The waiting line says what it means.** "Records are still loading, so the table is ranked by points for now", not "once every week's games are in", which read as "after Sunday" when it meant the backfill.
+
+Not done here: the champion. T70 crowns the winner of the final playoff game, but a league with no playoffs (A37) has none, so it needs a rule for that case before T72 lifts the gate.
 
 ## What the original design got wrong
 

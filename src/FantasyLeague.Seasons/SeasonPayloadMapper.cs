@@ -31,7 +31,7 @@ namespace FantasyLeague.Seasons
             // shown only in head-to-head; the record check builds them in either format
             var records = headToHead ? snapshot.Records : null;
             var teams = snapshot.Teams
-                .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }, records))
+                .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }, records, snapshot.HasMedianGame))
                 .OrderByDescending(t => t.Totals.Actual)
                 .ToList();
 
@@ -77,8 +77,9 @@ namespace FantasyLeague.Seasons
         /// </summary>
         /// <param name="team">The roster, its weeks already trimmed to the last counted week.</param>
         /// <param name="records">Every roster's record, or null when none is shown.</param>
+        /// <param name="hasMedianGame">Whether the league plays a median game.</param>
         /// <returns>The team entry.</returns>
-        private static TeamPayload ToTeam(TeamSeason team, IReadOnlyDictionary<int, TeamRecord>? records)
+        private static TeamPayload ToTeam(TeamSeason team, IReadOnlyDictionary<int, TeamRecord>? records, bool hasMedianGame)
         {
             var spread = SpreadCalculator.Calculate(
                 [.. team.Weeks.Where(w => w.IsFinal).Select(w => w.ActualPts)]);
@@ -101,7 +102,7 @@ namespace FantasyLeague.Seasons
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.ActualPts, w.IdealPts, w.IsFinal))],
-                records is null ? null : ToRecord(records.GetValueOrDefault(team.RosterId)));
+                records is null ? null : ToRecord(records.GetValueOrDefault(team.RosterId), hasMedianGame));
         }
 
         /// <summary>
@@ -117,7 +118,8 @@ namespace FantasyLeague.Seasons
             var week = snapshot.MatchupWeek;
             var rosters = snapshot.Teams.Concat(snapshot.ExcludedTeams).ToList();
             var names = rosters.ToDictionary(t => t.RosterId, t => t.Name);
-            var games = HeadToHead.Games(rosters.SelectMany(t => t.Weeks).Where(w => w.Week == week));
+            var weeks = rosters.SelectMany(t => t.Weeks).Where(w => w.Week == week).ToList();
+            var games = HeadToHead.Games(weeks);
             MatchupTeamPayload Side(TeamWeek w) => new(w.RosterId, names[w.RosterId], w.ActualPts);
 
             // Games is null when any id is null, so every paired side has one
@@ -126,17 +128,25 @@ namespace FantasyLeague.Seasons
                 : new MatchupsPayload(
                     week,
                     week <= snapshot.FinalThroughWeek,
-                    [.. games.Select(g => new GamePayload(g.First.MatchupId!.Value, [Side(g.First), Side(g.Second)]))]);
+                    [.. games.Select(g => new GamePayload(g.First.MatchupId!.Value, [Side(g.First), Side(g.Second)]))],
+                    snapshot.HasMedianGame ? HeadToHead.Median(weeks.Select(w => w.ActualPts)) : null);
         }
 
         /// <summary>
         /// Maps a roster's record for the page.
         /// </summary>
         /// <param name="record">The record, or null for a roster with no counted week yet.</param>
+        /// <param name="hasMedianGame">Whether the league plays a median game, so an empty record carries an empty share too.</param>
         /// <returns>The record, no wins and no losses before a week settles.</returns>
-        private static RecordPayload ToRecord(TeamRecord? record) =>
+        private static RecordPayload ToRecord(TeamRecord? record, bool hasMedianGame) =>
             record is null
-                ? new RecordPayload(0, 0, 0, 0m, 0m)
-                : new RecordPayload(record.Wins, record.Losses, record.Ties, record.PointsFor, record.PointsAgainst);
+                ? new RecordPayload(0, 0, 0, 0m, 0m, hasMedianGame ? new MedianPayload(0, 0, 0) : null)
+                : new RecordPayload(
+                    record.Wins,
+                    record.Losses,
+                    record.Ties,
+                    record.PointsFor,
+                    record.PointsAgainst,
+                    record.Median is { } m ? new MedianPayload(m.Wins, m.Losses, m.Ties) : null);
     }
 }

@@ -11,7 +11,12 @@ import {
   hasTies,
   isZoomed,
   latestExtremes,
-  matchupStatus,
+  gameResults,
+  hasMedianGame,
+  matchupLeader,
+  matchupSpoken,
+  medianSplit,
+  weekStarted,
   parseWeekRange,
   perWeek,
   pointsIn,
@@ -209,6 +214,66 @@ describe('standings', () => {
     const rows = standings(headToHead);
     expect(rows.map((r) => r.team.name)).toEqual(['Charlie', 'Bravo', 'Alpha']);
     expect(rows.map((r) => Number(r.gap.toFixed(1)))).toEqual([89.5, 40.2, 0]);
+  });
+
+  it('numbers the rows in rank order', () => {
+    expect(standings(headToHead).map((r) => r.rank)).toEqual([1, 2, 3]);
+  });
+
+  it('counts games back from the record leader, a tie as half', () => {
+    // 3-1 leads; 2-2 is one back; 1-3 is two back
+    expect(standings(headToHead).map((r) => r.gamesBack)).toEqual([0, 1, 2]);
+    const tied = headToHead.teams.map((t, i) =>
+      i === 0 ? { ...t, record: { ...t.record!, losses: 2, ties: 1 } } : t,
+    );
+    expect(standings({ ...headToHead, teams: tied }).map((r) => r.gamesBack)).toEqual([0, 1, 1.5]);
+  });
+
+  it('counts games back from the best wins less losses, never below zero', () => {
+    // a bye leaves teams on different game counts: win rate ranks 4-0 first, but
+    // 7-1 has the best wins less losses, so 4-0 is one behind it, never 7-1 one ahead
+    const at = (i: number, wins: number, losses: number) => ({
+      ...headToHead.teams[i % 3],
+      rosterId: i,
+      name: `T${i}`,
+      record: { ...headToHead.teams[0].record!, wins, losses, ties: 0 },
+    });
+    const teams = [at(1, 4, 0), at(2, 5, 1), at(3, 7, 1), at(4, 1, 3)];
+    const rows = standings({ ...headToHead, teams });
+    expect(rows.map((r) => r.team.name)).toEqual(['T1', 'T3', 'T2', 'T4']);
+    expect(rows.map((r) => r.gamesBack)).toEqual([1, 0, 1, 4]);
+  });
+
+  it('has no games back without records', () => {
+    expect(standings(payload).every((r) => r.gamesBack === null)).toBe(true);
+  });
+});
+
+describe('the median game', () => {
+  it('takes the median share off a record, leaving the games', () => {
+    const record = {
+      wins: 10,
+      losses: 2,
+      ties: 0,
+      pointsFor: 1,
+      pointsAgainst: 1,
+      median: { wins: 5, losses: 1, ties: 0 },
+    };
+    expect(gameResults(record)).toEqual({ wins: 5, losses: 1, ties: 0 });
+  });
+
+  it('leaves a record without a median share as it is', () => {
+    const record = { wins: 3, losses: 1, ties: 1, pointsFor: 1, pointsAgainst: 1 };
+    expect(gameResults(record)).toEqual({ wins: 3, losses: 1, ties: 1 });
+  });
+
+  it('knows whether the league plays one', () => {
+    expect(hasMedianGame(headToHead.teams)).toBe(true);
+    const plain = headToHead.teams.map((t) => ({
+      ...t,
+      record: { ...t.record!, median: undefined },
+    }));
+    expect(hasMedianGame(plain)).toBe(false);
   });
 });
 
@@ -421,7 +486,7 @@ describe('week ranges (T66)', () => {
   });
 });
 
-describe('matchupStatus', () => {
+describe('matchupLeader', () => {
   const game = (a: number, b: number): GamePayload => ({
     matchupId: 1,
     teams: [
@@ -430,23 +495,47 @@ describe('matchupStatus', () => {
     ],
   });
 
-  it('marks the side ahead as leading while the week plays', () => {
-    expect(matchupStatus(game(41.2, 96.4), false)).toEqual([null, 'Leading']);
+  it('picks the first side when it has more points', () => {
+    expect(matchupLeader(game(96.4, 41.2))).toBe(0);
   });
 
-  it('marks both sides level on equal live scores', () => {
-    expect(matchupStatus(game(50, 50), false)).toEqual(['Level', 'Level']);
+  it('picks the second side when it has more points', () => {
+    expect(matchupLeader(game(41.2, 96.4))).toBe(1);
   });
 
-  it('says nothing before kick-off', () => {
-    expect(matchupStatus(game(0, 0), false)).toEqual([null, null]);
+  it('picks neither on equal scores, kick-off included', () => {
+    expect(matchupLeader(game(50, 50))).toBeNull();
+    expect(matchupLeader(game(0, 0))).toBeNull();
   });
 
-  it('marks the winner only once the week is final', () => {
-    expect(matchupStatus(game(96.4, 41.2), true)).toEqual(['Won', null]);
+  it('gives a screen reader the state of play while live', () => {
+    expect(matchupSpoken(game(96.4, 41.2), false)).toEqual(['leading', '']);
+    expect(matchupSpoken(game(50, 50), false)).toEqual(['level', 'level']);
+    expect(matchupSpoken(game(0, 0), false)).toEqual(['', '']);
   });
 
-  it('marks both sides of a settled tie', () => {
-    expect(matchupStatus(game(0, 0), true)).toEqual(['Tied', 'Tied']);
+  it('gives a screen reader the result once final', () => {
+    expect(matchupSpoken(game(41.2, 96.4), true)).toEqual(['', 'won']);
+    expect(matchupSpoken(game(0, 0), true)).toEqual(['tied', 'tied']);
+  });
+
+  it('splits the sides above the median from those on it, in card order', () => {
+    const week = { week: 3, isFinal: false, median: 45, games: [game(96.4, 41.2), game(45, 50)] };
+    const { above, on } = medianSplit(week);
+    expect(above.map((t) => t.actual)).toEqual([96.4, 50]);
+    expect(on.map((t) => t.actual)).toEqual([45]);
+  });
+
+  it('splits nothing without a median game', () => {
+    expect(medianSplit({ week: 3, isFinal: false, games: [game(96.4, 41.2)] })).toEqual({
+      above: [],
+      on: [],
+    });
+  });
+
+  it('knows whether the week has kicked off', () => {
+    const week = (a: number, b: number) => ({ week: 3, isFinal: false, games: [game(a, b)] });
+    expect(weekStarted(week(0, 0))).toBe(false);
+    expect(weekStarted(week(0, 0.5))).toBe(true);
   });
 });

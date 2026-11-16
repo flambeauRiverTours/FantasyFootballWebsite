@@ -35,6 +35,10 @@ export const payload: SeasonPayload = {
   format: 'TotalPoints',
 };
 
+function result(wins: number, losses: number, ties: number) {
+  return { wins, losses, ties };
+}
+
 /**
  * A head-to-head season whose records rank the teams in the reverse of their
  * points, so anything still ordered by points shows (T68).
@@ -43,17 +47,29 @@ export const headToHead: SeasonPayload = {
   ...payload,
   format: 'HeadToHead',
   teams: [
-    { ...teams[0], record: { wins: 1, losses: 3, ties: 0, pointsFor: 340.2, pointsAgainst: 300 } },
-    { ...teams[1], record: { wins: 2, losses: 2, ties: 0, pointsFor: 300, pointsAgainst: 310 } },
+    {
+      ...teams[0],
+      record: { ...result(1, 3, 0), pointsFor: 340.2, pointsAgainst: 300, median: result(1, 1, 0) },
+    },
+    {
+      ...teams[1],
+      record: { ...result(2, 2, 0), pointsFor: 300, pointsAgainst: 310, median: result(1, 1, 0) },
+    },
     {
       ...teams[2],
-      record: { wins: 3, losses: 1, ties: 0, pointsFor: 250.7, pointsAgainst: 280.9 },
+      record: {
+        ...result(3, 1, 0),
+        pointsFor: 250.7,
+        pointsAgainst: 280.9,
+        median: result(1, 1, 0),
+      },
     },
   ],
   // week 3 is live; Charlie plays roster 9, which has no table row (A1)
   matchups: {
     week: 3,
     isFinal: false,
+    median: 50,
     games: [
       {
         matchupId: 1,
