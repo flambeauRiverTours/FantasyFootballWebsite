@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A39 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A40 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -200,7 +200,7 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 
 - **The budget is deployed once, by hand,** because its start date can't change after creation. That had cost a parameter, a duplicated lookup and one failed deploy. The trade-off: a budget deleted by hand isn't restored by the next deploy.
 - **The cost-check script is gone.** The template sets every value on each deploy, and what-if shows any drift.
-- **Migrations open no firewall rule.** GitHub's runners are in Azure, so they're already allowed. Tested twice before removing the steps.
+- **Migrations open no firewall rule.** GitHub's runners are in Azure, so they're already allowed. Tested twice before removing the steps. Reversed by A40: from 2026-11-15 a runner can be on AWS.
 - **The template stops restating Azure defaults,** except security ones, so a change in Azure's defaults can't loosen them.
 
 ## A32 · The supply chain covers the web app too
@@ -300,6 +300,16 @@ Found in the same logs:
   - **PF, PA and Ideal count settled weeks only,** as Sleeper's table does, so no column moves mid-game and none disagrees with the order. The live week shows in the chart.
   - **Points for counts every counted week, a bye included.** It had counted only paired games, so a bye's points went missing, while the Ideal column beside it counted them; the design review caught this. Points against counts games only.
   - **Records are computed per request, not cached on the snapshot.** A field set at construction is copied stale by `with`, and the pairing is one pass over about a hundred rows, next to serializing and hashing the whole body. The mapper reads it only in `HeadToHead`; the record check builds it once per snapshot build in either format.
+
+## A40 · A hosted runner can be on AWS
+
+2026-11-16. The deploy's migrate job failed three times in a row (T67, T68b and its rerun, T73) after passing on every deploy before.
+
+- **The cause is where the runner runs.** Each job's log names its cloud. All 19 migrate jobs from 2026-10-08 to the morning of 2026-11-15 ran on Azure; from that afternoon some ran on AWS, and each AWS run failed while each Azure one passed. Nothing in the repo changed.
+- **Two symptoms, one cause.**
+  - **Sign-in:** `Active Directory Default` probes managed identity before the Azure CLI. On AWS the metadata service answers 401 rather than not answering, which ends the chain before the `azure/login` session is tried. `AZURE_TOKEN_CREDENTIALS: dev` restricts it to developer credentials, so managed identity is never tried (T73).
+  - **Firewall:** the SQL server admits Azure-hosted clients only (`AllowAllWindowsAzureIps`), so an AWS address is refused (error 40615). This reverses A31's third bullet: the migrate job opens a rule for the runner's own IPv4 address, named for the run and attempt, and removes it afterwards, even when the migration fails.
+- **The rule needs no new permission.** The deploy identity's Contributor role on the resource group covers firewall rules. A rule left behind by a cancelled run is harmless and named for the run that made it.
 
 ## What the original design got wrong
 
