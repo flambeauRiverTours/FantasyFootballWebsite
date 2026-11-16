@@ -22,7 +22,8 @@ branch; T69–T72 planned. One T61 check left.
       Also: the deploy's migrate step signs in with developer credentials only
       (`AZURE_TOKEN_CREDENTIALS: dev`); a runner's metadata service answering 401 had stopped
       `Active Directory Default` at managed identity and failed the T67 and T68b deploys.
-  - Jack's call: `deploy.yml` pins `dotnet-ef` 10.0.12 against EF 10.0.13.
+      `dotnet-ef` is a local tool in `.config/dotnet-tools.json` (10.0.13, it had drifted to
+      10.0.12 in the workflow), restored by the deploy and bumped by Dependabot's `ef-core` group.
 
 - [ ] **T74 · The standings rows never slide** — 1 h `±`. Its own `fix/` branch, any time.
       `App.tsx` loads `LazyMotion features={domAnimation}`, which has no layout feature, so

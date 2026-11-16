@@ -30,6 +30,8 @@ updates:
       ef-core:
         patterns:
           - Microsoft.EntityFrameworkCore*
+          # the migration tool in .config/dotnet-tools.json moves with the runtime it applies
+          - dotnet-ef
     ignore:
       # 8.x moved to the Xceed Community Licence, which is non-commercial only.
       # Pinned deliberately; see the licence gate in security.yml.
