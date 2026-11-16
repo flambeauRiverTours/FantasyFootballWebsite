@@ -43,11 +43,11 @@ namespace FantasyLeague.Seasons
         /// Gets or sets how the league decides its winner (A38).
         /// </summary>
         /// <remarks>
-        /// Bound from <c>League:Format</c>, by name and ignoring case. Only
-        /// <c>TotalPoints</c> until T72 (A38), which swaps in
-        /// <c>[EnumDataType(typeof(LeagueFormat))]</c>.
+        /// Bound from <c>League:Format</c>, by name and ignoring case. Listed
+        /// rather than <c>[EnumDataType]</c>, so a format added later has to be
+        /// opted into here (A44).
         /// </remarks>
-        [AllowedValues(LeagueFormat.TotalPoints, ErrorMessage = "League:Format can only be TotalPoints until head-to-head is complete (T72).")]
+        [AllowedValues(LeagueFormat.TotalPoints, LeagueFormat.HeadToHead, ErrorMessage = "League:Format must be TotalPoints or HeadToHead.")]
         public LeagueFormat Format { get; set; } = LeagueFormat.TotalPoints;
     }
 }

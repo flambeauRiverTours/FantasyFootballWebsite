@@ -41,4 +41,4 @@ var payload = SeasonPayloadMapper.ToSeasonPayload(
 
 StandingsRenderer.Render(payload, snapshot, Console.Out);
 
-return snapshot.Violations.Count > 0 || snapshot.UnresolvedPlayerIds.Count > 0 ? 1 : 0;
+return StandingsRenderer.Failed(snapshot) ? 1 : 0;

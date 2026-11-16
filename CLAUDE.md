@@ -22,7 +22,7 @@ boilerplate, documentation and task updates, and implements features when asked.
 | Path | What |
 |---|---|
 | [`docs/design.md`](docs/design.md) | Design, decisions D1–D11, corrected in place |
-| [`docs/amendments.md`](docs/amendments.md) | A1–A43: the reasoning behind every later decision and correction |
+| [`docs/amendments.md`](docs/amendments.md) | A1–A44: the reasoning behind every later decision and correction |
 | [`docs/standards.md`](docs/standards.md) | The standards, by domain |
 | [`docs/runbook.md`](docs/runbook.md) | Operations, including the yearly season rollover |
 | [`tasks/todo.md`](tasks/todo.md) · [`tasks/lessons.md`](tasks/lessons.md) | Task list · rules learned from corrections |
@@ -50,7 +50,7 @@ D4 exact bitmask DP, never greedy · D5 Static Web Apps + Functions · D6 pollin
 D8 one configured league, older seasons by walking `previous_league_id` (A34) · D9 React owns
 the DOM, D3 is maths only · D10 radar axes are ratios to the league average · D11 one team at
 a time · R2 radar axis order is fixed to `roster_positions` · A33/A37 regular season only ·
-A38 `League:Format`, TotalPoints only until T72.
+A38/A44 `League:Format`, HeadToHead allowed since T72a and switched by the `LEAGUE_FORMAT` variable.
 
 ## Sleeper traps
 

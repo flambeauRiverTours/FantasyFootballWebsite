@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A43 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A44 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -278,10 +278,10 @@ Found in the same logs:
 - **`League:Format` is `TotalPoints` (the default) or `HeadToHead`.** A setting, not something read from Sleeper: Sleeper scores matchups for every league, whether or not the league cares about them, so only the owner knows which one decides the winner. The default keeps every deployment as it was with no new setting.
 - **"Format", not "mode".** The chart already has `?mode=` and `PointMode`, and the head-to-head table would read both side by side.
 - **Bound by name, ignoring case.** An unknown name stops the app at start.
-- **Head-to-head stays off until T72 is complete,** at Jack's request. `[AllowedValues(TotalPoints)]` makes the app refuse to start with anything else. T68, T71 and T72 all key off the format, so this one gate keeps them from running or reaching the page while they are merged piece by piece, and none needs its own flag. The playoffs (T69) and the champion (T70) are built after it lifts, and appear once built. T72 replaces it with `[EnumDataType]`. Tests that need `HeadToHead` supply the options directly.
+- **Head-to-head stays off until T72 is complete,** at Jack's request. *Lifted by T72a with `AllowedValues`, not `[EnumDataType]` as planned below (A44).* `[AllowedValues(TotalPoints)]` makes the app refuse to start with anything else. T68, T71 and T72 all key off the format, so this one gate keeps them from running or reaching the page while they are merged piece by piece, and none needs its own flag. The playoffs (T69) and the champion (T70) are built after it lifts, and appear once built. T72 replaces it with `[EnumDataType]`. Tests that need `HeadToHead` supply the options directly.
 - **It rides on the snapshot,** set by `SeasonService` for the current season and past ones alike (Q10), as `OverrideLeagueName` is, so the mapper stays a function of the snapshot and the CLI gets it too (its header names the format). Snapshots are cached in memory only and a setting change restarts the app, so none outlives a switch. The payload sends it by name, `"format": "TotalPoints"`, and the ETag, a hash of the body, changes with it.
 - **A completed season is now cached for a day, not a year as `immutable`.** Its scores still cannot change, but its body now depends on configuration. The cost: bodies browsers already hold as `immutable` cannot be reached and may live up to a year with no `format`, so the page reads a missing one as `TotalPoints`. Nothing else holds them: no CDN, Front Door or service worker.
-- **Not plumbed into `infra/` yet.** `main.bicep` declares the whole app-settings list, so a value set by hand in the portal would be wiped by the next deploy. `League__Format` goes in as a bicep parameter once T72 lifts the gate, after T68's backfill, since switching before it would show records as missing.
+- **Not plumbed into `infra/` yet** (done by T72a, A44). `main.bicep` declares the whole app-settings list, so a value set by hand in the portal would be wiped by the next deploy. `League__Format` goes in as a bicep parameter once T72 lifts the gate, after T68's backfill, since switching before it would show records as missing.
 
 ## A39 · Head-to-head records, from the data up
 
@@ -344,6 +344,16 @@ Found in the same logs:
 - **The waiting line says what it means.** "Records are still loading, so the table is ranked by points for now", not "once every week's games are in", which read as "after Sunday" when it meant the backfill.
 
 Not done here: the champion. T70 crowns the winner of the final playoff game, but a league with no playoffs (A37) has none, so it needs a rule for that case before T72 lifts the gate.
+
+## A44 · The gate lifted
+
+2026-11-16. T72a. T72 was split: the real league has no divisions and no playoffs (its captured settings), so lifting the gate is the part it sees; divisions follow as T72b.
+
+- **The preconditions, from the production logs** (read-only queries, counts only): the matchup backfill read 0 weeks on its last two runs (15 and 16 Nov), logged "Matchups complete" for every season with stored weeks (2026, the only one served; no past year has had a request), and logged no "Could not backfill" error in 30 days. No record mismatch was logged in 30 days either, but the check logs only failures, so that alone proves nothing: hence the CLI's line below.
+- **`[AllowedValues(TotalPoints, HeadToHead)]`, not `[EnumDataType]`.** Both refuse an undefined number such as "7"; the list is chosen so a format added later has to be opted into. The binder still parses "1" and "TotalPoints,HeadToHead" to `HeadToHead`; production values only arrive through bicep's `@allowed`, so a test pins it as accepted.
+- **The ranking rule is also in Core** (`Standings.RankByRecord`, `GamesBack`), for the CLI now and T70's no-playoffs champion next. It is the page's rule: win rate in doubles with a tie as half, then points for, then name compared culture-aware (`InvariantCulture`), as `localeCompare` is. At 0-0 the name decides the whole table, and ordinal order would put "Bravo" before "alpha"; both suites test that pair.
+- **The record check is counted** (`RecordCheck`: compared, skipped, mismatches). An empty list could mean a clean check, incomplete records, or every roster skipped because Sleeper's game count lags ours. The CLI prints `OK` only when it compared at least one roster, `not run` otherwise, and exits non-zero on a mismatch.
+- **The switch is a repository variable,** `LEAGUE_FORMAT`, passed to bicep's `leagueFormat` (default `TotalPoints`) and on to `League__Format`, beside `OVERRIDE_LEAGUE_NAME`. Merging changes nothing; setting it and running the deploy switches, deleting it and deploying switches back. The runbook has the steps, the CLI check first.
 
 ## What the original design got wrong
 

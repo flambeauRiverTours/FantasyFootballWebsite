@@ -213,7 +213,7 @@ namespace FantasyLeague.Seasons
                 Violations = weeks.Violations,
             };
 
-            return snapshot with { RecordMismatches = RecordMismatch.Find(snapshot.Records, league.Teams) };
+            return snapshot with { RecordCheck = RecordCheck.Run(snapshot.Records, league.Teams) };
         }
 
         /// <summary>
@@ -251,7 +251,7 @@ namespace FantasyLeague.Seasons
                 configured.Format,
                 GroupTeams(weeks, league.Teams, excluded.Contains),
                 league.HasMedianGame,
-                []);
+                null);
 
         /// <summary>
         /// Resolves the configured owner ids to this season's rosters (A1).
@@ -433,12 +433,12 @@ namespace FantasyLeague.Seasons
                     violation.Invariant, violation.RosterId, violation.Week, violation.SleeperPts, violation.ComparedPts);
             }
 
-            foreach (var mismatch in snapshot.RecordMismatches.Where(m => reported.IsNew($"record:{m.RosterId}:{m.OurRecord.Games}")))
+            foreach (var mismatch in (snapshot.RecordCheck?.Mismatches ?? []).Where(m => reported.IsNew($"record:{m.RosterId}:{m.OurRecord.Games}")))
             {
                 // T68: the third check; logged in either format, so the record is proven before it is shown
                 logger.LogError(
                     "Roster {RosterId}'s head-to-head record after {Games} results is {Ours}, but Sleeper's is {Sleepers}.",
-                    mismatch.RosterId, mismatch.OurRecord.Games, WinLoss(mismatch.OurRecord), WinLoss(mismatch.SleeperRecord));
+                    mismatch.RosterId, mismatch.OurRecord.Games, mismatch.OurRecord.Format(), mismatch.SleeperRecord.Format());
             }
 
             foreach (var playerId in snapshot.UnresolvedPlayerIds.Where(id => reported.IsNew($"player:{id}")))
@@ -548,13 +548,6 @@ namespace FantasyLeague.Seasons
 
             return toRead.Count;
         }
-
-        /// <summary>
-        /// Writes a record as wins, losses and ties.
-        /// </summary>
-        /// <param name="record">A roster's results.</param>
-        /// <returns>For example, <c>13-5-0</c>.</returns>
-        private static string WinLoss(TeamRecord record) => $"{record.Wins}-{record.Losses}-{record.Ties}";
 
         /// <summary>
         /// A past season's build, null when it cannot be served, wrapped so the

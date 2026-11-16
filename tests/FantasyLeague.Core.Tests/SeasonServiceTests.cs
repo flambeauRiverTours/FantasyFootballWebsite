@@ -510,7 +510,7 @@ namespace FantasyLeague.Core.Tests
             {
                 await provider.GetRequiredService<HybridCache>().RemoveAsync("season:L1", TestContext.Current.CancellationToken);
                 var snapshot = await provider.GetRequiredService<ISeasonService>().BuildAsync(TestContext.Current.CancellationToken);
-                snapshot.RecordMismatches.Should().ContainSingle().Which.RosterId.Should().Be(1);
+                snapshot.RecordCheck!.Mismatches.Should().ContainSingle().Which.RosterId.Should().Be(1);
             }
 
             logs.Entries.Where(e => e.StartsWith("Roster 1's head-to-head record", StringComparison.Ordinal))

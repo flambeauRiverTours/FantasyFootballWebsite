@@ -39,7 +39,7 @@ namespace FantasyLeague.Core.Tests
             LeagueFormat format = LeagueFormat.TotalPoints) =>
             new("", 2026, currentWeek, finalThroughWeek,
                 Slot.Parse(rosterPositions ?? ["QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "K", "DEF", "BN"]),
-                teams ?? [], [], [], IsCurrent: true, cutoff, format, [], false, []);
+                teams ?? [], [], [], IsCurrent: true, cutoff, format, [], false, null);
 
         private static TeamSeason FourFinalWeeks(int rosterId = 1, string name = "Steady") =>
             Team(rosterId, name,

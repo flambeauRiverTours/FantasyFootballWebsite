@@ -15,5 +15,12 @@
         /// Gets how many results the record holds. Two a week with a median game.
         /// </summary>
         public int Games => Wins + Losses + Ties;
+
+        /// <summary>
+        /// Formats the results as a table shows them.
+        /// </summary>
+        /// <param name="showTies">False to leave ties out, when no team in the league has one.</param>
+        /// <returns>"13-5-0", or "13-5" without ties.</returns>
+        public string Format(bool showTies = true) => showTies ? $"{Wins}-{Losses}-{Ties}" : $"{Wins}-{Losses}";
     }
 }

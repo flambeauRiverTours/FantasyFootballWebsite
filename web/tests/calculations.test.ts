@@ -313,6 +313,11 @@ describe('head-to-head records', () => {
     expect(names(ranked)).toEqual(['Alpha', 'Bravo']);
   });
 
+  it('compares names as a reader would, not by code point, as the CLI does (T72a)', () => {
+    const ranked = rankByRecord([named('Bravo', record(0, 0, 0)), named('alpha', record(0, 0, 0))]);
+    expect(names(ranked)).toEqual(['alpha', 'Bravo']);
+  });
+
   it('leaves the input order alone', () => {
     const input = [...headToHead.teams];
     rankByRecord(input);
