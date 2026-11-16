@@ -34,6 +34,13 @@ param customDomain string = ''
 @description('A name to show instead of the league\'s name in Sleeper. Empty uses Sleeper\'s.')
 param overrideLeagueName string = ''
 
+@description('How the league decides its winner (A38, A44). Exact spelling; HeadToHead ranks by record.')
+@allowed([
+  'TotalPoints'
+  'HeadToHead'
+])
+param leagueFormat string = 'TotalPoints'
+
 var location = resourceGroup().location
 
 // Static Web Apps runs in fewer regions than everything else
@@ -198,6 +205,10 @@ resource functions 'Microsoft.Web/sites@2024-04-01' = {
           {
             name: 'League__OverrideLeagueName'
             value: overrideLeagueName
+          }
+          {
+            name: 'League__Format'
+            value: leagueFormat
           }
         ],
         excludedOwnerSettings

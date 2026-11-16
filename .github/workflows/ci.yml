@@ -127,6 +127,7 @@ jobs:
           SQL_ADMIN_NAME: ${{ secrets.AZ_SQL_DB_ADMIN_NAME }}
           CUSTOM_DOMAIN_NAME: ${{ vars.CUSTOM_DOMAIN_NAME }}
           OVERRIDE_LEAGUE_NAME: ${{ vars.OVERRIDE_LEAGUE_NAME }}
+          LEAGUE_FORMAT: ${{ vars.LEAGUE_FORMAT }}
         run: |
           az deployment group what-if \
             --resource-group "$RESOURCE_GROUP" \
@@ -134,4 +135,4 @@ jobs:
             --parameters leagueId="$LEAGUE_ID" excludedOwnerIds="$EXCLUDED_OWNER_IDS" \
             alertEmail="$BUDGET_ALERT_EMAIL" sqlAdminObjectId="$SQL_ADMIN_ID" \
             sqlAdminLogin="$SQL_ADMIN_NAME" customDomain="${CUSTOM_DOMAIN_NAME:-}" \
-            overrideLeagueName="${OVERRIDE_LEAGUE_NAME:-}"
+            overrideLeagueName="${OVERRIDE_LEAGUE_NAME:-}" leagueFormat="${LEAGUE_FORMAT:-TotalPoints}"

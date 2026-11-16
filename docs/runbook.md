@@ -168,6 +168,16 @@ gh secret set EXCLUDED_OWNER_IDS --body "123456789,987654321"
 
 With no dummy team, set it to an empty value.
 
+### If your league plays head-to-head
+
+The site ranks on total points unless told otherwise. A league that plays weekly games and ranks on wins and losses sets a repository variable (not a secret; it is not private), spelled exactly:
+
+```bash
+gh variable set LEAGUE_FORMAT --body "HeadToHead"
+```
+
+Leave it unset for total points. To switch an existing site, see **Switching to head-to-head** below.
+
 ---
 
 ## Step 6. Deploy
@@ -306,6 +316,39 @@ curl -s "https://$(az functionapp list -g rg-myleague \
 ```
 
 The site walks backwards from the configured league (A34). It never discovers a new season itself; item 3 is the whole job. Last season stays in the season picker, served from the database, once its weeks are stored.
+
+### Switching to head-to-head
+
+Once, when the league decides it. Nothing changes until step 3.
+
+1. Check the records first. From the repository, run the console and type the league number when asked:
+
+```bash
+dotnet run --project src/FantasyLeague.Cli -- --League:Format=HeadToHead
+```
+
+   The table ranks by record, and the footer's `record check` line must read `OK`, with no "not" count after the rosters compared. `not run` or `FAIL` means wait: the records are not proven yet.
+
+2. Set the variable, spelled exactly (a wrong spelling stops the deploy before anything changes):
+
+```bash
+gh variable set LEAGUE_FORMAT --body "HeadToHead"
+```
+
+3. Deploy. Setting a variable does not start one:
+
+```bash
+gh workflow run deploy.yml
+```
+
+4. Open the site: the table shows Record and GB, with this week's games under it. Open every year in the season picker too; none should say "Records are still loading". A browser that had a past season open may show its old table for up to a day.
+
+To switch back, clear the variable and deploy again:
+
+```bash
+gh variable delete LEAGUE_FORMAT
+gh workflow run deploy.yml
+```
 
 ### Whenever GitHub offers
 

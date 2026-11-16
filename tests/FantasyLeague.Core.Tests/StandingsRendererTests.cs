@@ -13,15 +13,34 @@ namespace FantasyLeague.Core.Tests
             new(rosterId, name,
                 [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Ideal, [], [], [], w.IsFinal, new Dictionary<string, decimal>(), null))]);
 
+        private static TeamSeason InGames(string name, int rosterId, params (decimal Actual, int MatchupId)[] weeks) =>
+            new(rosterId, name,
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Actual, [], [], [], true, new Dictionary<string, decimal>(), w.MatchupId))]);
+
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,
             int currentWeek = 3,
             int finalThroughWeek = 2,
             IReadOnlyList<string>? unresolved = null,
             IReadOnlyList<InvariantViolation>? violations = null,
-            int cutoff = RegularSeason.NFLWeeks) =>
+            int cutoff = RegularSeason.NFLWeeks,
+            LeagueFormat format = LeagueFormat.TotalPoints,
+            RecordCheck? recordCheck = null) =>
             new("Name", 2026, currentWeek, finalThroughWeek, Slot.Parse(["QB", "RB", "FLEX"]),
-                teams ?? [], unresolved ?? [], violations ?? [], IsCurrent: true, cutoff, LeagueFormat.TotalPoints, [], false, []);
+                teams ?? [], unresolved ?? [], violations ?? [], IsCurrent: true, cutoff, format, [], false, recordCheck);
+
+        // one settled week: Alpha beats Bravo 100-10, Delta beats Charlie 6-5. By points Bravo
+        // is second; by record Delta is, on win rate, then points for (T72a)
+        private static SeasonSnapshot HeadToHeadWeek(RecordCheck? recordCheck = null) =>
+            Snapshot([
+                InGames("Alpha", 1, (100m, 1)),
+                InGames("Bravo", 2, (10m, 1)),
+                InGames("Charlie", 3, (5m, 2)),
+                InGames("Delta", 4, (6m, 2)),
+            ], currentWeek: 2, finalThroughWeek: 1, format: LeagueFormat.HeadToHead, recordCheck: recordCheck);
+
+        private static string[] Row(string output, string name) =>
+            Lines(output).Single(l => l.StartsWith(name + " ", StringComparison.Ordinal)).Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         private static string Render(SeasonSnapshot snapshot)
         {
@@ -32,6 +51,90 @@ namespace FantasyLeague.Core.Tests
 
         private static string[] Lines(string output) =>
             output.Split(Environment.NewLine, StringSplitOptions.None);
+
+        [Fact]
+        public void In_head_to_head_teams_rank_by_record_with_games_back_and_points_for_and_against()
+        {
+            var output = Render(HeadToHeadWeek());
+
+            Lines(output)[2].Should().Be($"{"TEAM",-26}{"RECORD",9}{"GB",6}{"PF",9}{"PA",8}{"IDEAL",8}");
+            Lines(output).Skip(4).Take(4).Select(l => l.Split(' ')[0]).Should().Equal("Alpha", "Delta", "Bravo", "Charlie");
+            Row(output, "Alpha").Should().Equal("Alpha", "1-0", "-", "100.0", "10.0", "100.0");
+            Row(output, "Charlie").Should().Equal("Charlie", "0-1", "1.0", "5.0", "6.0", "5.0");
+            Lines(output).Skip(3).Take(6).Should().OnlyContain(l => l.Length == 66);
+        }
+
+        [Fact]
+        public void The_placeholder_s_record_is_neither_a_row_nor_the_mark_games_back_counts_from()
+        {
+            // A1: the placeholder beats Alpha twice (2-0, the best margin of anyone); Bravo and
+            // Charlie split, so the table's best margin is theirs, 0, and Charlie is no games back
+            var snapshot = Snapshot([
+                InGames("Alpha", 1, (100m, 1), (100m, 1)),
+                InGames("Bravo", 2, (10m, 2), (30m, 2)),
+                InGames("Charlie", 3, (20m, 2), (5m, 2)),
+            ], currentWeek: 3, finalThroughWeek: 2, format: LeagueFormat.HeadToHead) with
+            {
+                ExcludedTeams = [InGames("Placeholder", 9, (200m, 1), (200m, 1))],
+            };
+
+            var output = Render(snapshot);
+
+            output.Should().NotContain("Placeholder");
+            Row(output, "Charlie")[2].Should().Be("-");
+            Row(output, "Alpha")[2].Should().Be("1.0");
+        }
+
+        [Fact]
+        public void Head_to_head_keeps_the_points_table_until_every_record_is_known()
+        {
+            // no matchup ids: the records are unknown, as on the page (hasRecords)
+            var output = Render(Snapshot([Team("Only", 1, (10m, 20m, true))], format: LeagueFormat.HeadToHead));
+
+            Lines(output)[2].Should().StartWith("TEAM").And.Contain("POINTS");
+        }
+
+        [Fact]
+        public void A_clean_record_check_says_how_many_rosters_it_compared() =>
+            Render(HeadToHeadWeek(new RecordCheck(4, 0, []))).Should().Contain(
+                $"record check OK   (4 rosters compared){Environment.NewLine}");
+
+        [Fact]
+        public void A_record_check_says_how_many_rosters_it_could_not_compare() =>
+            Render(HeadToHeadWeek(new RecordCheck(3, 1, []))).Should().Contain(
+                "record check OK   (3 rosters compared; 1 not, Sleeper has counted a different number of games)");
+
+        [Fact]
+        public void A_record_check_that_compared_nothing_is_not_OK() =>
+            Render(HeadToHeadWeek(new RecordCheck(0, 4, []))).Should().Contain(
+                "record check not run (0 rosters compared; 4 not, Sleeper has counted a different number of games)");
+
+        [Fact]
+        public void A_record_check_that_could_not_run_says_so() =>
+            Render(HeadToHeadWeek()).Should().Contain("record check not run (records incomplete)");
+
+        [Fact]
+        public void A_record_mismatch_fails_and_is_printed_with_both_records()
+        {
+            var mismatch = new RecordMismatch(2, new TeamRecord(13, 5, 0, 0m, 0m), new TeamRecord(12, 6, 0, 0m, 0m));
+            var output = Render(HeadToHeadWeek(new RecordCheck(4, 0, [mismatch])));
+
+            output.Should().Contain("record check FAIL (1 of 4 rosters compared disagree)");
+            output.Should().Contain("  roster 2   ours 13-5-0   sleeper 12-6-0");
+        }
+
+        [Theory]
+        [InlineData(0, 0, false)]
+        [InlineData(1, 0, true)]
+        [InlineData(0, 1, true)]
+        public void The_exit_code_fails_on_a_violation_or_a_record_mismatch(int violations, int mismatches, bool failed)
+        {
+            var snapshot = HeadToHeadWeek(new RecordCheck(4, 0, [.. Enumerable.Repeat(new RecordMismatch(2, new(1, 0, 0, 0m, 0m), new(0, 1, 0, 0m, 0m)), mismatches)]))
+                with
+            { Violations = [.. Enumerable.Repeat(new InvariantViolation(1, 1, InvariantKind.IdealNotBelowActual, 10m, 9m), violations)] };
+
+            StandingsRenderer.Failed(snapshot).Should().Be(failed);
+        }
 
         [Fact]
         public void The_header_names_the_season_and_both_week_numbers()

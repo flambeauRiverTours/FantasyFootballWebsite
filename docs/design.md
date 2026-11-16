@@ -2,14 +2,14 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A43. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A44. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
 - **Cost:** about $0.25 a month, with an alert at $0.50 (§13)
 - **Sleeper load:** about 4.4 requests a minute per instance, capped at 25 (§07)
 - **League:** six rosters, five of them scoring. One is a placeholder team and is excluded from everything (A1)
-- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Next up: head-to-head, matchups, divisions, playoffs and a champion (T68–T72)
+- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Head-to-head and this week's matchups are built and can be switched on (A44); divisions, playoffs and a champion are next (T72b, T69, T70)
 
 ## 01 · Scope
 
@@ -17,7 +17,7 @@ One public, read-only page for one league: a standings table and some charts, up
 
 The league is decided on **total season points**, the sum of every week's actual score. Consistency and ideal points are just commentary; neither decides anything.
 
-Out of scope: logins, writes of any kind, trades, and anything needing a Sleeper account. Head-to-head, a `League:Format` setting, is off until T72, and playoffs and a champion follow it (A38); playoff weeks never count toward the standings (A33, A37). The site reads one league ID from configuration and nothing else.
+Out of scope: logins, writes of any kind, trades, and anything needing a Sleeper account. Head-to-head is a `League:Format` setting, `TotalPoints` unless the deployment sets it (A38, A44); playoffs and a champion follow it; playoff weeks never count toward the standings (A33, A37). The site reads one league ID from configuration and nothing else.
 
 Sleeper's API has no projections, so there's no projected-points column and no scoring engine. Sleeper's own scored points are used as-is.
 

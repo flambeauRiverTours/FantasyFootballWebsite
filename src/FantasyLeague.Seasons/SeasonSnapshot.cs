@@ -19,7 +19,7 @@ namespace FantasyLeague.Seasons
     /// <param name="Format">The deployment's format, applied to every season, past ones included (Q10, A38).</param>
     /// <param name="ExcludedTeams">The rosters A1 leaves out of every metric, kept apart so nothing that counts reads them. Stored, and paired in head-to-head, since a game against the placeholder counts (T68).</param>
     /// <param name="HasMedianGame">Whether each week adds a result against that week's median score (Q12, T68).</param>
-    /// <param name="RecordMismatches">Rosters whose record disagrees with Sleeper's (T68), reported like <see cref="Violations"/>.</param>
+    /// <param name="RecordCheck">Our records against Sleeper's (T68), mismatches reported like <see cref="Violations"/>; null until run, or when our records are incomplete.</param>
     /// <remarks>
     /// An excluded roster is left out of every metric but still checked: a
     /// solver bug shows on the placeholder team's lineup as well as any other.
@@ -41,7 +41,7 @@ namespace FantasyLeague.Seasons
         LeagueFormat Format,
         IReadOnlyList<TeamSeason> ExcludedTeams,
         bool HasMedianGame,
-        IReadOnlyList<RecordMismatch> RecordMismatches)
+        RecordCheck? RecordCheck)
     {
         /// <summary>
         /// Gets the last week that counts: the cut-off, less any settled weeks at its end nobody scored in (A37).

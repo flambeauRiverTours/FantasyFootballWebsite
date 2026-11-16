@@ -45,16 +45,25 @@ namespace FantasyLeague.Core.Tests
 
         [Theory]
         [InlineData("HeadToHead")]
-        [InlineData("1")]
-        [InlineData("TotalPoints,HeadToHead")]
-        [InlineData("7")]
-        public void Anything_but_total_points_is_refused_until_T72_is_built(string value)
+        [InlineData("headtohead")]
+        [InlineData("1")] // the binder parses numbers; production values only come through bicep's @allowed
+        [InlineData("TotalPoints,HeadToHead")] // a flag list parses to 0 | 1
+        public void Head_to_head_binds(string value)
         {
-            // A38: every head-to-head feature keys off the format, so this one gate holds them all back
+            // A44: the gate is lifted
             using var provider = Provider(("League:CurrentLeagueId", "L1"), ("League:Format", value));
 
+            Resolve(provider).Format.Should().Be(LeagueFormat.HeadToHead);
+        }
+
+        [Fact]
+        public void An_undefined_format_is_refused()
+        {
+            // "7" binds as a number, then fails the allowed values: a new format has to be opted into
+            using var provider = Provider(("League:CurrentLeagueId", "L1"), ("League:Format", "7"));
+
             FluentActions.Invoking(() => Resolve(provider)).Should().Throw<OptionsValidationException>()
-                .WithMessage("*T72*");
+                .WithMessage("*TotalPoints or HeadToHead*");
         }
 
         [Fact]
