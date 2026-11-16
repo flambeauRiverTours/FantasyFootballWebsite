@@ -24,11 +24,6 @@ namespace FantasyLeague.Seasons
                 .ValidateDataAnnotations()
                 .ValidateOnStart();
 
-            services.AddOptions<PlayerMapOptions>()
-                .BindConfiguration("PlayerMap")
-                .ValidateDataAnnotations()
-                .ValidateOnStart();
-
             services.AddHybridCache();
             services.TryAddSingleton(TimeProvider.System);
 

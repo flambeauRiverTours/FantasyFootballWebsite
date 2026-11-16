@@ -13,7 +13,6 @@ namespace FantasyLeague.Data
         /// Reads a blob as JSON.
         /// </summary>
         /// <typeparam name="T">The stored shape.</typeparam>
-        /// <param name="blob">The blob.</param>
         /// <returns>The stored value, or null when the blob does not exist.</returns>
         public static async Task<T?> ReadAsync<T>(BlobClient blob, CancellationToken cancellationToken)
             where T : class
@@ -33,9 +32,7 @@ namespace FantasyLeague.Data
         /// Replaces a blob with a value written as JSON, creating its container if needed.
         /// </summary>
         /// <typeparam name="T">The stored shape.</typeparam>
-        /// <param name="container">The container.</param>
-        /// <param name="blobName">The blob's name.</param>
-        /// <param name="value">The value to store.</param>
+
         /// <returns>The number of bytes written.</returns>
         public static async Task<long> WriteAsync<T>(BlobContainerClient container, string blobName, T value, CancellationToken cancellationToken)
         {

@@ -28,7 +28,6 @@ namespace FantasyLeague.Sleeper
         /// <summary>
         /// The name shown for a roster with no manager or no name of its own.
         /// </summary>
-        /// <param name="rosterId">The roster.</param>
         /// <returns>For example, <c>Roster 3</c>.</returns>
         public static string FallbackName(int rosterId) => $"Roster {rosterId}";
     }

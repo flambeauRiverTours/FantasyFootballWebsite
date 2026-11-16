@@ -5,7 +5,6 @@ using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Core.Tests
 {
@@ -61,8 +60,7 @@ namespace FantasyLeague.Core.Tests
     {
         private static PlayerMapRefresher Build(
             ScriptedSocket socket,
-            IPlayerMapStore? store = null,
-            TimeSpan? maxAge = null)
+            IPlayerMapStore? store = null)
         {
             var services = new ServiceCollection();
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
@@ -73,7 +71,6 @@ namespace FantasyLeague.Core.Tests
             return new PlayerMapRefresher(
                 client,
                 store ?? new NullPlayerMapStore(),
-                Options.Create(new PlayerMapOptions { MaxAge = maxAge ?? TimeSpan.FromHours(24) }),
                 TimeProvider.System,
                 NullLogger<PlayerMapRefresher>.Instance);
         }

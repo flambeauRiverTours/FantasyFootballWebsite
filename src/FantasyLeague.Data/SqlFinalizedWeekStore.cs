@@ -149,17 +149,11 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Writes one column's value as JSON, in the shape the blob stores it too.
         /// </summary>
-        /// <typeparam name="T">The value's type.</typeparam>
-        /// <param name="value">The value.</param>
-        /// <returns>The JSON.</returns>
         private static string ToJson<T>(T value) => JsonSerializer.Serialize(value, Json);
 
         /// <summary>
         /// Reads one column's JSON back.
         /// </summary>
-        /// <typeparam name="T">The value's type.</typeparam>
-        /// <param name="json">The column.</param>
-        /// <returns>The value.</returns>
         /// <exception cref="JsonException">The column is empty or not valid JSON: a row this store never wrote.</exception>
         /// <exception cref="InvalidDataException">The column holds JSON <c>null</c>.</exception>
         private static T FromJson<T>(string json)

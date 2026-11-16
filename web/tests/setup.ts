@@ -30,3 +30,6 @@ vi.stubGlobal(
 Element.prototype.setPointerCapture ??= () => {};
 
 afterEach(cleanup);
+
+// the page keeps its state in the URL, so every test starts from a clean one
+afterEach(() => window.history.replaceState(null, '', '/'));

@@ -405,24 +405,4 @@ namespace FantasyLeague.Core.Tests
             json.Should().Contain("\"sigma\":null");
         }
     }
-
-    public class SeasonsPayloadMapperTests
-    {
-        [Fact]
-        public void A_first_season_lists_only_itself()
-        {
-            var payload = SeasonPayloadMapper.ToSeasonsPayload(2026, []);
-
-            payload.Current.Should().Be(2026);
-            payload.Available.Should().Equal(2026);
-        }
-
-        [Fact]
-        public void Seasons_are_listed_newest_first_with_the_current_one_once()
-        {
-            // what the season picker binds to
-            SeasonPayloadMapper.ToSeasonsPayload(2026, [2024, 2026, 2025])
-                .Available.Should().Equal(2026, 2025, 2024);
-        }
-    }
 }

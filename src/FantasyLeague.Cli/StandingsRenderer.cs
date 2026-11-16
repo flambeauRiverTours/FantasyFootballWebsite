@@ -93,9 +93,7 @@ namespace FantasyLeague.Cli
         /// <summary>
         /// Counts violations of one invariant.
         /// </summary>
-        /// <param name="snapshot">The season.</param>
-        /// <param name="kind">Which invariant.</param>
-        /// <returns>How many failed.</returns>
+        /// <returns>How many team-weeks failed it, excluded rosters included.</returns>
         private static int Count(SeasonSnapshot snapshot, InvariantKind kind) =>
             snapshot.Violations.Count(v => v.Invariant == kind);
 
@@ -109,9 +107,7 @@ namespace FantasyLeague.Cli
         /// <summary>
         /// Truncates a name so the columns cannot move.
         /// </summary>
-        /// <param name="value">The name.</param>
-        /// <param name="width">The column width.</param>
-        /// <returns>A name no wider than the column.</returns>
+        /// <returns>The name, cut with a trailing <c>~</c> when it would reach the next column.</returns>
         private static string Fit(string value, int width) =>
             value.Length <= width - 1 ? value : value[..(width - 2)] + "~";
     }

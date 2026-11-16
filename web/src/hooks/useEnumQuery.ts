@@ -1,7 +1,7 @@
 import { useQueryState } from './useQueryState';
 
 /** One choice: its value in the URL, and its label on screen. */
-export type Option<T extends string> = readonly [T, string];
+type Option<T extends string> = readonly [T, string];
 
 /** At least one choice, so there is always a default. */
 export type Options<T extends string> = readonly [Option<T>, ...Option<T>[]];

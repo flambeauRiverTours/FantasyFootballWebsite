@@ -53,10 +53,10 @@ namespace FantasyLeague.Seasons
         /// Maps the seasons that can be served.
         /// </summary>
         /// <param name="current">The live season.</param>
-        /// <param name="available">Every season that can be served.</param>
-        /// <returns>The response body, newest season first.</returns>
-        public static SeasonsPayload ToSeasonsPayload(int current, IEnumerable<int> available) =>
-            new(current, [.. available.Append(current).Distinct().OrderDescending()]);
+        /// <param name="available">Every season that can be served, newest first, the current one included.</param>
+        /// <returns>The response body.</returns>
+        public static SeasonsPayload ToSeasonsPayload(int current, IReadOnlyList<int> available) =>
+            new(current, available);
 
         /// <summary>
         /// Reduces the startable slots to the distinct codes, in roster_positions order.
@@ -73,7 +73,7 @@ namespace FantasyLeague.Seasons
         /// <summary>
         /// Maps one roster's season.
         /// </summary>
-        /// <param name="team">The roster.</param>
+        /// <param name="team">The roster, its weeks already trimmed to the last counted week.</param>
         /// <param name="records">Every roster's record, or null when none is shown.</param>
         /// <returns>The team entry.</returns>
         private static TeamPayload ToTeam(TeamSeason team, IReadOnlyDictionary<int, TeamRecord>? records)

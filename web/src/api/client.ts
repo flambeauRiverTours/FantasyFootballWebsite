@@ -12,7 +12,7 @@ import type { SeasonPayload, SeasonsPayload } from './types';
 const base = `${import.meta.env.VITE_API_ORIGIN ?? ''}/api`;
 
 /** A response, plus the tag to send back next time. */
-export interface Fetched<T> {
+interface Fetched<T> {
   /** Null when the server answered 304 and the caller should keep what it has. */
   payload: T | null;
   etag: string | null;

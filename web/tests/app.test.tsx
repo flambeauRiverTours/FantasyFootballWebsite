@@ -8,7 +8,6 @@ const stubFetch = () => serveApi(payload);
 
 afterEach(() => {
   vi.restoreAllMocks();
-  window.history.replaceState(null, '', '/');
 });
 
 describe('App', () => {

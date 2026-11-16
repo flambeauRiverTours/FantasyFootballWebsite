@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 
-export interface RadarProps {
+interface RadarProps {
   slots: string[];
   ratios: (number | null)[];
   size: number;

@@ -1,47 +1,10 @@
 ﻿using System.Net;
-using System.Text;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FantasyLeague.Core.Tests
 {
-    /// <summary>
-    /// Records every request it is handed and answers with a canned body, so the
-    /// client can be exercised without a network.
-    /// </summary>
-    internal sealed class RecordingHandler(
-        Func<HttpRequestMessage, HttpResponseMessage>? respond = null) : HttpMessageHandler
-    {
-        public List<HttpRequestMessage> Requests { get; } = [];
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Requests.Add(request);
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult((respond ?? Default)(request));
-        }
-
-        /// <summary>Answers with the smallest body that binds for the path asked for.</summary>
-        private static HttpResponseMessage Default(HttpRequestMessage request)
-        {
-            var path = request.RequestUri!.AbsolutePath;
-            var body =
-                path.EndsWith("state/nfl", StringComparison.Ordinal) ? """{"season":"2026","week":1}""" :
-                path.EndsWith("players/nfl", StringComparison.Ordinal) ? "{}" :
-                path.Contains("/users", StringComparison.Ordinal) ||
-                path.Contains("/rosters", StringComparison.Ordinal) ||
-                path.Contains("/matchups/", StringComparison.Ordinal) ? "[]" :
-                """{"league_id":"L1","season":"2026","roster_positions":["QB","BN"]}""";
-
-            return Json(HttpStatusCode.OK, body);
-        }
-
-        public static HttpResponseMessage Json(HttpStatusCode status, string body) =>
-            new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
-    }
-
     /// <summary>
     /// The client's request construction, which is the part a stray slash breaks
     /// silently.
@@ -50,9 +13,9 @@ namespace FantasyLeague.Core.Tests
     {
         private const string BaseAddress = "https://api.sleeper.app/v1/";
 
-        private static (SleeperClient Client, RecordingHandler Handler) Build()
+        private static (SleeperClient Client, FakeSleeper Handler) Build()
         {
-            var handler = new RecordingHandler();
+            var handler = new FakeSleeper();
             var http = new HttpClient(handler) { BaseAddress = new Uri(BaseAddress) };
             return (new SleeperClient(http), handler);
         }
@@ -118,9 +81,9 @@ namespace FantasyLeague.Core.Tests
     /// </summary>
     public class SleeperClientResponseTests
     {
-        private static SleeperClient ClientReturning(HttpStatusCode status, string body, out RecordingHandler handler)
+        private static SleeperClient ClientReturning(HttpStatusCode status, string body, out FakeSleeper handler)
         {
-            handler = new RecordingHandler(_ => RecordingHandler.Json(status, body));
+            handler = FakeSleeper.Answering(status, body);
             var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.sleeper.app/v1/") };
             return new SleeperClient(http);
         }

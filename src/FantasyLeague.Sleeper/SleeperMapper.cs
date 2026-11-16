@@ -139,7 +139,7 @@ namespace FantasyLeague.Sleeper
         /// Picks a display name for one manager: their team name, else their
         /// handle, else the roster number.
         /// </summary>
-        /// <param name="user">The manager.</param>
+        /// <param name="user">The manager, whose metadata may hold a team name.</param>
         /// <param name="rosterId">Their roster, used for the last-resort name.</param>
         /// <returns>A non-empty display name.</returns>
         /// <remarks>

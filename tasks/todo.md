@@ -4,45 +4,24 @@ Reasons live in [`docs/amendments.md`](../docs/amendments.md); finished work's d
 git history.
 `±` marks an estimate that could run double.
 
-**Status (2026-11-16).** M0–M7 built and deployed. T64, T66, T67 and T68a merged; T68b built on
-its branch; T73 (cleanup) next; T69–T72 planned. One T61 check left.
+**Status (2026-11-16).** M0–M7 built and deployed. T64 and T66–T68 merged; T73 (cleanup) on its
+branch; T69–T72 planned. One T61 check left.
 
 ## Open
 
-- [ ] **T73 · Repo-wide simplification and standards cleanup** — 3 h `±`. **Next**, on its own
-      `chore/` branch once T68b merges, before T71. From the repo-wide passes of 2026-11-16;
-      verify each against the code first. No behaviour changes.
-  1. **Code.** `PlayerMapOptions.MaxAge` and the three `BlobStorageOptions` names become
-     constants (nothing configures them). One helper builds both `SeasonSnapshot`s in
-     `SeasonService`. `ToSeasonsPayload` stops re-adding and re-sorting what
-     `GetAvailableSeasonsAsync` already returns.
-  2. **Tests.**
-     - One shared fake Sleeper handler (`CountingSocket`, `RecordingHandler`, `CountingHandler`),
-       and one DbContext factory fake.
-     - The axe `violations` helper shared from one file.
-     - Duplicate tests dropped: the panel-level axe tests the page test covers, the second
-       Enter/Space check, the template-literal test.
-     - The URL reset moved into `tests/setup.ts`.
-  3. **Web.**
-     - `index.css`: merge the two `th[aria-sort]` rules; drop `td { color }` and the orphan
-       `font-variant-numeric: normal` (or restore `tabular-nums`, which §10 promises); fold
-       `.reset-zoom` into `.chip`.
-     - Delete `web/public/icons.svg`.
-     - Inline `computeRowHeight` and `slotDeviations`.
-     - Stop exporting types used only in their own file.
-     - Share the row spring between StandingsPanel and ConsistencyPanel.
-  4. **Standards.**
-     - Reword or delete the C# `<param>` tags that only restate a name (about 15; keep the tags
-       on positional records, reworded).
-     - `capture_fixtures.py` writes CRLF.
-     - Fixtures README: weeks 1–9, `divisions` only when the league has them, and no
-       `previous-season.json` yet.
-     - T72 step 1: only the `metadata.division_N` names are left to capture.
-  5. **Docs.** Ticked T64/T66/T67 move to the Done table; design §14 and §15 trimmed to what
-     is still open.
-  - Not taken: dropping the server's points order (§09 contract, the CLI); removing the
-    always-true `IsFinal` column (a migration for nothing); replacing `FinalizeSchedule.NextRunAfter`
-    (deliberate: the timer's own `Next` reports the run in progress).
+- [ ] **T73 · Repo-wide simplification and standards cleanup.** Built 2026-11-16 on its
+      `chore/` branch, no behaviour change beyond `td` getting the tabular figures §10 promised:
+      unconfigured options became constants, one snapshot builder, one fake Sleeper handler and
+      one DbContext fake, the URL reset in `tests/setup.ts`, duplicate tests and CSS gone, local
+      types unexported, C# doc tags that restated names reworded, fixtures written as CRLF.
+      Not taken, after checking: the server's points order (§09, the CLI); the always-true
+      `IsFinal` column (a migration for nothing); `FinalizeSchedule.NextRunAfter` (the timer's
+      own `Next` reports the run in progress); inlining `slotDeviations` (calculations live in
+      `calculations.ts`); folding `.reset-zoom` into `.chip` (it would restyle the button);
+      trimming design §14–§15 (the Q numbers are cited).
+      Also: the deploy's migrate step signs in with developer credentials only
+      (`AZURE_TOKEN_CREDENTIALS: dev`); a runner's metadata service answering 401 had stopped
+      `Active Directory Default` at managed identity and failed the T67 and T68b deploys.
   - Jack's call: `deploy.yml` pins `dotnet-ef` 10.0.12 against EF 10.0.13.
 
 - [ ] **T74 · The standings rows never slide** — 1 h `±`. Its own `fix/` branch, any time.
@@ -54,16 +33,8 @@ its branch; T73 (cleanup) next; T69–T72 planned. One T61 check left.
 
 - [ ] **T66–T72 · Zoom, head-to-head, matchups, divisions, playoffs, a champion** (A36,
       planned 2026-11-15, revised after design review). Reverses §01's "out of scope:
-      head-to-head, playoffs" for leagues configured that way. Order: T66 → T64 (both merged)
-      → T67 → T68 → T73 (cleanup) → T71 → T72 → T69 → T70.
-  - [x] **T66** Chart zoom and the mobile flash. Merged 2026-11-15 (A36); the flash fix
-       confirmed on a real phone.
-  - [x] **T64** Regular season only. Merged 2026-11-15 (A37).
-  - [x] **T67** `League:Format` = `TotalPoints` (default) | `HeadToHead`, sent as `format`; past
-       seasons cached a day; head-to-head refused at start until T72. Merged 2026-11-15 (A38).
-  - [ ] **T68** Head-to-head record (A39). **T68a** merged 2026-11-15 and verified live: our
-       records match Sleeper's. **T68b** built 2026-11-16 on its branch: the record on the page,
-       gated off until T72. Left for T72: lifting the gate, and the CLI, which still ranks by points.
+      head-to-head, playoffs" for leagues configured that way. T64, T66, T67 and T68 are merged
+      (Done table). Next: T73 (cleanup) → T71 → T72 → T69 → T70.
   - [ ] **T71** This week's matchups, H2H only — 3 h `±`. Current week only (Q13): no week
        picker and no past results beyond the table's W-L.
     1. Payload `matchups`: the current week's games, `[{ matchupId, teams: [{ rosterId, name,
@@ -76,9 +47,9 @@ its branch; T73 (cleanup) next; T69–T72 planned. One T61 check left.
     3. Tests: an invented week with a bye, a game against the placeholder, a live and a final
        week; axe.
   - [ ] **T72** Division standings, H2H only (Q14) — 4 h `±`.
-    1. Capture first, as T64 did: add `divisions` to `SEASON_SETTINGS`, each roster's
-       `settings.division` and the league's `metadata.division_N` names (names only; no ids).
-       No league with divisions has been observed, so the fixture is invented to match.
+    1. Capture first: the script already keeps `divisions` and each roster's `division`; add
+       the league's `metadata.division_N` names (names only; no ids). No league with divisions
+       has been observed, so the fixture is invented to match.
     2. Sleeper: `LeagueSettingsDto.Divisions`, `RosterDto` settings' `Division`, the names
        from metadata, mapped to Core. Read per season like names and slots (A34), so a past
        season shows that year's divisions. Nothing stored.
@@ -90,7 +61,8 @@ its branch; T73 (cleanup) next; T69–T72 planned. One T61 check left.
     6. **Lift the gate (A38)**, only once the logs say "matchups complete" for every season and
        the record check (A39) has run clean: `[AllowedValues(TotalPoints)]` on `LeagueOptions.Format` becomes
        `[EnumDataType(typeof(LeagueFormat))]`, and `Anything_but_total_points_is_refused_until_T72_is_built`
-       becomes a test that `HeadToHead` binds. Then plumb `League__Format` into `infra/` (A38, last bullet)
+       becomes a test that `HeadToHead` binds. The CLI ranks by record in `HeadToHead`, as the page
+       does (it still ranks by points). Then plumb `League__Format` into `infra/` (A38, last bullet)
        and add the format switch to the runbook.
   - [ ] **T69** Playoff bracket, H2H only — 6 h `±`.
     1. Sleeper: `/v1/league/{id}/winners_bracket`, fetched only in H2H once
@@ -140,5 +112,6 @@ its branch; T73 (cleanup) next; T69–T72 planned. One T61 check left.
 | M7 Motion | T51–T55 | Optional; built |
 | Past seasons | T29, T56 | Chain walk, season picker (A34) |
 | Portfolio | T59–T60 | Consistency panel (A33); standards and seven domain reviews (A19–A33) |
+| Formats | T64, T66–T68 | Regular season only (A37), chart zoom (A36), `League:Format` (A38), the head-to-head record, gated until T72 (A39) |
 
 Settled questions: Q1–Q15, in design §14. Fixtures B1–B3, B5 captured.

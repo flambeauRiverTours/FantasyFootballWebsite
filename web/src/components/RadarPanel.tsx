@@ -50,22 +50,12 @@ interface DrawingProps {
 function Drawing({ team, colour, view, slots, ratios, width, label }: DrawingProps) {
   if (!team) return <p className="muted">No teams to plot.</p>;
 
+  // the bars take the radar's height, so the panel keeps its size across the swap
+  const size = Math.min(width, MaxRadarSize);
   return view === 'bars' ? (
-    <SlotBars
-      slots={slots}
-      ratios={ratios}
-      width={width}
-      label={label}
-      height={Math.min(width, MaxRadarSize)}
-    />
+    <SlotBars slots={slots} ratios={ratios} width={width} label={label} height={size} />
   ) : (
-    <Radar
-      slots={slots}
-      ratios={ratios}
-      size={Math.min(width, MaxRadarSize)}
-      label={label}
-      colour={colour}
-    />
+    <Radar slots={slots} ratios={ratios} size={size} label={label} colour={colour} />
   );
 }
 

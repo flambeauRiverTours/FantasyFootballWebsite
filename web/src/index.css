@@ -258,8 +258,9 @@ td {
   white-space: nowrap;
 }
 
+/* tabular figures, so the columns line up digit for digit (§10) */
 td {
-  color: var(--fg);
+  font-variant-numeric: tabular-nums;
 }
 
 /* the team column takes all spare width, keeping the figures together on the right */
@@ -289,12 +290,10 @@ tbody tr:hover {
 /* sorted column */
 th[aria-sort] {
   color: var(--fg);
-}
-td.is-sorted,
-th[aria-sort] {
   background: var(--bg-subtle);
 }
 td.is-sorted {
+  background: var(--bg-subtle);
   font-weight: var(--weight-medium);
 }
 
