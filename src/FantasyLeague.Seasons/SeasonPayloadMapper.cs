@@ -20,13 +20,17 @@ namespace FantasyLeague.Seasons
         /// <remarks>
         /// Only regular-season weeks reach the payload (Q4, A37), less any
         /// unplayed weeks at its end, so the table, sigma, the chart and the radar
-        /// all stop at the same week.
+        /// all stop at the same week. Only counted teams are mapped, so the
+        /// placeholder's record never reaches the page (A1).
         /// </remarks>
         public static SeasonPayload ToSeasonPayload(SeasonSnapshot snapshot, DateTimeOffset asOfUtc)
         {
             var lastWeek = snapshot.LastCountedWeek;
+
+            // shown only in head-to-head; the record check builds them in either format
+            var records = snapshot.Format == LeagueFormat.HeadToHead ? snapshot.Records : null;
             var teams = snapshot.Teams
-                .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }))
+                .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }, records))
                 .OrderByDescending(t => t.Totals.Actual)
                 .ToList();
 
@@ -70,8 +74,9 @@ namespace FantasyLeague.Seasons
         /// Maps one roster's season.
         /// </summary>
         /// <param name="team">The roster.</param>
+        /// <param name="records">Every roster's record, or null when none is shown.</param>
         /// <returns>The team entry.</returns>
-        private static TeamPayload ToTeam(TeamSeason team)
+        private static TeamPayload ToTeam(TeamSeason team, IReadOnlyDictionary<int, TeamRecord>? records)
         {
             var spread = SpreadCalculator.Calculate(
                 [.. team.Weeks.Where(w => w.IsFinal).Select(w => w.ActualPts)]);
@@ -93,8 +98,18 @@ namespace FantasyLeague.Seasons
                     .ToDictionary(kv => Slot.DisplayCode(kv.Key), kv => kv.Value),
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
-                    .Select(w => new WeekPayload(w.Week, w.ActualPts, w.IdealPts, w.IsFinal))]);
+                    .Select(w => new WeekPayload(w.Week, w.ActualPts, w.IdealPts, w.IsFinal))],
+                records is null ? null : ToRecord(records.GetValueOrDefault(team.RosterId)));
         }
 
+        /// <summary>
+        /// Maps a roster's record for the page.
+        /// </summary>
+        /// <param name="record">The record, or null for a roster with no counted week yet.</param>
+        /// <returns>The record, no wins and no losses before a week settles.</returns>
+        private static RecordPayload ToRecord(TeamRecord? record) =>
+            record is null
+                ? new RecordPayload(0, 0, 0, 0m, 0m)
+                : new RecordPayload(record.Wins, record.Losses, record.Ties, record.PointsFor, record.PointsAgainst);
     }
 }

@@ -256,7 +256,11 @@ ETag: W/"2026-wk7-…"
       "weeks": [
         { "week": 1, "actual": 121.44, "ideal": 139.72, "isFinal": true },
         { "week": 7, "actual":  46.20, "ideal":  58.40, "isFinal": false }
-      ]
+      ],
+      "record": {                 // HeadToHead only, once every counted week has its games (A39)
+        "wins": 9, "losses": 3, "ties": 0,
+        "pointsFor": 766.46, "pointsAgainst": 701.12   // settled weeks only
+      }
     }
   ]
 }
@@ -306,11 +310,11 @@ Subtracting the league's weekly median doesn't change any ranking, but it remove
 
 #### The table comes first
 
-The standings table works with no interaction: tabular figures, the sorted column marked, and the gap to first shown. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
+The standings table works with no interaction: tabular figures, the sorted column marked, and, in `TotalPoints`, the gap to first shown. In `HeadToHead` it is Team · Record · PF · PA · Ideal, ranked by win rate (a tie as half a win), then points for, then name, with PF, PA and Ideal over settled weeks only (A39). A record reads "13-5", or "13-5-1" on every row once any team has a tie. Until every record is known, the points table stands in, with a line saying why. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
 
 #### Motion
 
-Optional by rule: the page has to work fine with motion off, and it respects reduced-motion settings. It uses Motion, which is declarative, so D9 holds. The one animation that earns its place is the table re-sorting: rows sliding past each other on a Sunday overtake make the live updates visible. Entrance animations only run on first load, or the 30 s poll would replay them constantly. The loading state changes to "Waking the database…" after 3 s.
+Optional by rule: the page has to work fine with motion off, and it respects reduced-motion settings. It uses Motion, which is declarative, so D9 holds. The one animation that earns its place is the table re-sorting: rows sliding past each other on a Sunday overtake make the live updates visible. In `HeadToHead` the table re-sorts only when a week settles; the chart carries the live week. Entrance animations only run on first load, or the 30 s poll would replay them constantly. The loading state changes to "Waking the database…" after 3 s.
 
 A live week's ideal is provisional. It's the one number that can move both ways during the afternoon: a bench player's late points raise it, and a negative play lowers it.
 

@@ -52,9 +52,10 @@ namespace FantasyLeague.Core.Tests
                 .Should().Be(new TeamRecord(0, 0, 1, 90m, 90m));
 
         [Fact]
-        public void A_bye_is_no_game() =>
+        public void A_bye_is_no_game_but_its_points_count() =>
+            // points for covers every counted week, as Sleeper's fpts and the Ideal column do
             HeadToHead.Records([Week(1, 1, 100m, 1), Week(2, 1, 90m, 1), Week(3, 1, 80m, 0)], 18, hasMedianGame: false)![3]
-                .Should().Be(new TeamRecord(0, 0, 0, 0m, 0m));
+                .Should().Be(new TeamRecord(0, 0, 0, 80m, 0m));
 
         [Fact]
         public void The_median_game_adds_a_result_against_the_week_s_median()

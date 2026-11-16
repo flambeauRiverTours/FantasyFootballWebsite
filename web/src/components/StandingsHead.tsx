@@ -1,26 +1,20 @@
-/**
- * The standings table's columns. The Skeleton draws from the same list, so the
- * loading table cannot drift from the real one and nothing jumps when it swaps.
- */
-export const StandingsColumns = [
-  { label: 'Team' },
-  { label: 'Points', sorted: true },
-  // hidden on narrow screens, where only team, points and ideal fit
-  { label: 'Gap', className: 'col-gap' },
-  { label: 'Ideal' },
-] as const satisfies readonly { label: string; sorted?: boolean; className?: string }[];
+import type { StandingsColumn } from './standingsColumns';
+
+interface StandingsHeadProps {
+  columns: readonly StandingsColumn[];
+}
 
 /** The standings table's header row, with the sorted column marked. */
-export default function StandingsHead() {
+export default function StandingsHead({ columns }: StandingsHeadProps) {
   return (
     <thead>
       <tr>
-        {StandingsColumns.map((column) => (
+        {columns.map((column) => (
           <th
-            key={column.label}
+            key={column.key}
             scope="col"
-            className={'className' in column ? column.className : undefined}
-            aria-sort={'sorted' in column ? 'descending' : undefined}
+            className={column.wide ? 'col-wide' : undefined}
+            aria-sort={column.sorted ? 'descending' : undefined}
           >
             {column.label}
           </th>

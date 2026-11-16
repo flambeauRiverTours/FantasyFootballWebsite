@@ -4,122 +4,66 @@ Reasons live in [`docs/amendments.md`](../docs/amendments.md); finished work's d
 git history.
 `±` marks an estimate that could run double.
 
-**Status (2026-11-15).** M0–M7 built and deployed. T64 and T66 merged; T67 built on its branch;
-T68–T72 planned. One T61 check left.
+**Status (2026-11-16).** M0–M7 built and deployed. T64, T66, T67 and T68a merged; T68b built on
+its branch; T73 (cleanup) next; T69–T72 planned. One T61 check left.
 
 ## Open
+
+- [ ] **T73 · Repo-wide simplification and standards cleanup** — 3 h `±`. **Next**, on its own
+      `chore/` branch once T68b merges, before T71. From the repo-wide passes of 2026-11-16;
+      verify each against the code first. No behaviour changes.
+  1. **Code.** `PlayerMapOptions.MaxAge` and the three `BlobStorageOptions` names become
+     constants (nothing configures them). One helper builds both `SeasonSnapshot`s in
+     `SeasonService`. `ToSeasonsPayload` stops re-adding and re-sorting what
+     `GetAvailableSeasonsAsync` already returns.
+  2. **Tests.**
+     - One shared fake Sleeper handler (`CountingSocket`, `RecordingHandler`, `CountingHandler`),
+       and one DbContext factory fake.
+     - The axe `violations` helper shared from one file.
+     - Duplicate tests dropped: the panel-level axe tests the page test covers, the second
+       Enter/Space check, the template-literal test.
+     - The URL reset moved into `tests/setup.ts`.
+  3. **Web.**
+     - `index.css`: merge the two `th[aria-sort]` rules; drop `td { color }` and the orphan
+       `font-variant-numeric: normal` (or restore `tabular-nums`, which §10 promises); fold
+       `.reset-zoom` into `.chip`.
+     - Delete `web/public/icons.svg`.
+     - Inline `computeRowHeight` and `slotDeviations`.
+     - Stop exporting types used only in their own file.
+     - Share the row spring between StandingsPanel and ConsistencyPanel.
+  4. **Standards.**
+     - Reword or delete the C# `<param>` tags that only restate a name (about 15; keep the tags
+       on positional records, reworded).
+     - `capture_fixtures.py` writes CRLF.
+     - Fixtures README: weeks 1–9, `divisions` only when the league has them, and no
+       `previous-season.json` yet.
+     - T72 step 1: only the `metadata.division_N` names are left to capture.
+  5. **Docs.** Ticked T64/T66/T67 move to the Done table; design §14 and §15 trimmed to what
+     is still open.
+  - Not taken: dropping the server's points order (§09 contract, the CLI); removing the
+    always-true `IsFinal` column (a migration for nothing); replacing `FinalizeSchedule.NextRunAfter`
+    (deliberate: the timer's own `Next` reports the run in progress).
+  - Jack's call: `deploy.yml` pins `dotnet-ef` 10.0.12 against EF 10.0.13.
+
+- [ ] **T74 · The standings rows never slide** — 1 h `±`. Its own `fix/` branch, any time.
+      `App.tsx` loads `LazyMotion features={domAnimation}`, which has no layout feature, so
+      `m.tr layout` in StandingsPanel and ConsistencyPanel is inert and §10's re-sort animation
+      has never run. Confirm in the preview first, then the smallest fix: `domMax` (check the
+      bundle against its budget), `domMax` lazily for the tables only, or drop `layout` and
+      correct §10. Reduced motion is already honoured by `MotionConfig`.
 
 - [ ] **T66–T72 · Zoom, head-to-head, matchups, divisions, playoffs, a champion** (A36,
       planned 2026-11-15, revised after design review). Reverses §01's "out of scope:
       head-to-head, playoffs" for leagues configured that way. Order: T66 → T64 (both merged)
-      → T67 → T68 → T71 → T72 → T69 → T70.
+      → T67 → T68 → T73 (cleanup) → T71 → T72 → T69 → T70.
   - [x] **T66** Chart zoom and the mobile flash. Merged 2026-11-15 (A36); the flash fix
        confirmed on a real phone.
   - [x] **T64** Regular season only. Merged 2026-11-15 (A37).
-  - [ ] **T67** `League:Format` = `TotalPoints` (default) | `HeadToHead`, sent as `format`; past
-       seasons cached a day; head-to-head refused at start until T72. Built 2026-11-15 on its branch,
-       not merged (A38).
-  - [ ] **T68** Head-to-head record — 12–14 h `±`. **T68a built 2026-11-15 on its branch (A39)**;
-       our records match Sleeper's on the nine captured weeks. On T67's branch, as two
-       commits: **T68a** has real effects in production (storage, backfill, a logged check) and
-       is verified in the logs; **T68b** is gated off until T72 and proven by tests. Designed and
-       reviewed 2026-11-15.
-    **T68a · the data**
-    1. **Capture first** (Jack runs it). Add `league_average_match` to `SEASON_SETTINGS`. Write each
-       roster's `settings.wins/losses/ties/fpts/fpts_decimal/fpts_against/fpts_against_decimal`,
-       keyed by roster number only, to `rosters-record.json` beside the weeks, so the check in
-       step 8 is tested on real data. Also capture last season's rosters, to settle whether
-       Sleeper's W-L includes playoff games. Known from the fixtures: every roster has a
-       `matchup_id` in weeks 1–5, three games a week, one against the placeholder (roster 5),
-       who scores 1–12, never zero. Assumed, until a capture shows otherwise: a bye sends a null
-       `matchup_id`; Sleeper's W-L includes median results and excludes playoff games; its median
-       game is "top half wins", which matches above/below the median except when the middle two
-       tie.
-    2. **The week knows its game.** `MatchupDto.MatchupId` (`int?`) → `RosterWeek.MatchupId` →
-       `TeamWeek.MatchupId`, where **0 is a bye and null means "never read"**, so a row stored
-       before T68 is told apart from a bye. `ToTeamWeek` maps Sleeper's null to 0.
-       `league_average_match` joins `LeagueSettingsDto` → `SleeperLeague.HasMedianGame`, per
-       season, like `playoff_week_start`.
-    3. **Store every roster (A1 moves to the read side).** Finalize writes `snapshot.Teams`, which
-       `GroupTeams` has already filtered, so a stored week cannot score a game against the
-       placeholder. `SeasonSnapshot` gains `ExcludedTeams`, a separate list rather than a flag,
-       so nothing that counts can pick it up by accident, and T70/T71 have the placeholder's
-       name. Finalize writes both. Everything that counts reads `Teams` only (checked: totals, σ,
-       the radar, `LastCountedWeek`, the CLI). A1 is corrected to say the placeholder is stored
-       and left out when read.
-    4. **Storage.** An additive nullable `WeekScore.MatchupId` column, migration first. The SQL
-       upsert **never overwrites an id with null** (`row.MatchupId = week.MatchupId ??
-       row.MatchupId`): Finalize rewrites every final week from a snapshot that may predate the
-       backfill, and without this it would null the ids again every Tuesday. The blob `Schema`
-       goes 4 → 5, so an old blob is a cache miss and the next read primes v5 from SQL.
-    5. **Backfill: `ISeasonService.BackfillMatchupsAsync`, in Seasons,** where `ToTeamWeek` lives.
-       Run by its own timer function, daily all year (Finalize only fires September to
-       February), and runnable by hand. Whatever the format: it is invisible in `TotalPoints`,
-       and the data is ready when T72 lifts the gate. Per season the chain reaches, with
-       anything stored: for each **stored** week through `FinalThroughWeek` where a row has a
-       null `MatchupId`, or a roster in that season's league has no row, read that week's
-       matchups once. Set `MatchupId` on the stored rows and leave everything else alone (D2:
-       ideal points are never recomputed against today's map). Add the missing excluded rows
-       from that read; their ideal points use today's map, which is harmless because they count
-       in nothing but the pairing. Write the whole season back (the blob holds a season, and
-       each past season has its own blob, named by its league's hash).
-       - **Budget:** at most 12 Sleeper calls a run, so live requests keep the token bucket
-         (25/min, queue 20); it finishes over a few days. A row in design §07.
-       - **Isolation:** a try/catch per season, rethrowing only cancellation, so one season's
-         failure cannot stop another, and it never touches Finalize.
-       - **Convergence:** if Sleeper returns nothing for a week, or no entry for a roster, that
-         week is skipped for the run with one warning and stays null, and so do that season's
-         records. Logged as counts per season, plus **"matchups complete for season N"**, which
-         T72's gate-lift checklist requires.
-       - The 24 h `past:{season}` cache is not dropped; acceptable while gated.
-    6. **Core: `HeadToHead.Records(weeks, hasMedianGame)`**, a pure function over every roster's
-       final weeks up to the trimmed last regular week (`LastCountedWeek`; trimmed weeks are
-       0-0 matchups and would count as ties). Pairs on (week, matchup id): the higher score wins,
-       equal ties, the opponent's points add to points against. A game against the placeholder
-       counts; a bye (0) is no game. With the median game each final week adds a result against
-       that week's median over every roster that played: above wins, below loses, equal ties.
-       Returns `{ wins, losses, ties, pointsFor, pointsAgainst }`, `pointsFor` over the same
-       weeks, so the tiebreak matches Sleeper's, which counts no live week. **All null** if any
-       counted week has a null matchup id, or a matchup id shared by other than two rosters
-       (reported once): a partial record would rank teams wrongly.
-    7. **The records are computed once, in `SeasonService`**, into `SeasonSnapshot.Records`
-       (by roster, the placeholder included), so the check and the payload read the same
-       answer. Computed in both formats.
-    8. **The third check: the record matches Sleeper's.** `RosterDto` gains `settings.wins`,
-       `losses`, `ties` (already fetched, cached 5 min). A separate `RecordMismatch` type and
-       message, since `InvariantViolation` is per-week points. Checked for every roster when the
-       records are not null and both sides count the same number of games (W + L + T), since
-       Sleeper updates rosters on its own schedule. Reported once per roster and game count.
-       **It runs in `TotalPoints` too, logging only**, so T68 is proven against the real league
-       while the gate is on. A stat correction after Tuesday can make it fire; that is real.
-    **T68b · the record, gated**
-    9. **Payload:** compute `SeasonSnapshot.Records` once per build rather than per read, now that the
-       payload reads it per request, and drop the placeholder's own record (A1).
-       `record: { wins, losses, ties, pointsFor, pointsAgainst }` on each team, only
-       in `HeadToHead` and only when complete, and **left out of the JSON when null**
-       (`JsonIgnore(WhenWritingNull)`), so the `TotalPoints` body and its ETag are byte for byte
-       what they are today. The server keeps ordering teams by points; the page ranks.
-    10. **Web, in `HeadToHead` only** (a missing `format` reads as `TotalPoints`, A38):
-       - Columns follow the format: Team · Record · Points · PA (hidden on narrow screens) ·
-         Ideal. `StandingsColumns` becomes a function of the format; `aria-sort` moves to Record.
-         Design §10's "gap to first" becomes `TotalPoints` only, corrected in place.
-       - The record reads "3-2", or "3-2-1" only when any team has a tie, with text for screen
-         readers ("3 wins, 2 losses").
-       - `rankByRecord` in calculations.ts: win % with ties as half, then points for, then name,
-         so the order never shuffles between polls. The chart's chips (`rankByPoints`) and the
-         radar's (the server's order) both follow it.
-       - While the records are null, the table stays in its `TotalPoints` form with a line
-         saying the record is not available yet. The Skeleton cannot know the format, so it
-         stays points-format and swaps on load (accepted).
-    11. **Tests, red first,** for every step above, and especially: pairing against
-       `rosters-record.json`; **a snapshot with the placeholder's weeks gives a byte-identical
-       `TotalPoints` payload, including a week only the placeholder scored in**; the upsert keeps
-       an id over a null; the backfill stops at 12 calls, survives a season that fails or
-       returns nothing, and calls nothing once complete; a format switch mid-backfill shows
-       null records; the migration round-trips; blob v5; axe.
-    12. **Docs:** A39 (the record, A1 on the read side, the backfill, the check), A1 corrected,
-       design §03, §07, §08, §09, §10. Runbook: nothing to run; watch for "matchups complete"
-       before T72.
+  - [x] **T67** `League:Format` = `TotalPoints` (default) | `HeadToHead`, sent as `format`; past
+       seasons cached a day; head-to-head refused at start until T72. Merged 2026-11-15 (A38).
+  - [ ] **T68** Head-to-head record (A39). **T68a** merged 2026-11-15 and verified live: our
+       records match Sleeper's. **T68b** built 2026-11-16 on its branch: the record on the page,
+       gated off until T72. Left for T72: lifting the gate, and the CLI, which still ranks by points.
   - [ ] **T71** This week's matchups, H2H only — 3 h `±`. Current week only (Q13): no week
        picker and no past results beyond the table's W-L.
     1. Payload `matchups`: the current week's games, `[{ matchupId, teams: [{ rosterId, name,
@@ -144,7 +88,7 @@ T68–T72 planned. One T61 check left.
        division with no name shown as "Division N". An excluded roster's division is not shown.
     5. Tests: two divisions, a league with none, an unnamed division, a past season.
     6. **Lift the gate (A38)**, only once the logs say "matchups complete" for every season and
-       the record check (T68 step 8) has run clean: `[AllowedValues(TotalPoints)]` on `LeagueOptions.Format` becomes
+       the record check (A39) has run clean: `[AllowedValues(TotalPoints)]` on `LeagueOptions.Format` becomes
        `[EnumDataType(typeof(LeagueFormat))]`, and `Anything_but_total_points_is_refused_until_T72_is_built`
        becomes a test that `HeadToHead` binds. Then plumb `League__Format` into `infra/` (A38, last bullet)
        and add the format switch to the runbook.

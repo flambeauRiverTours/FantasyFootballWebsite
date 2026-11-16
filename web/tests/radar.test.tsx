@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import Radar from '../src/components/Radar';
 import SlotBars from '../src/components/SlotBars';
 import RadarPanel from '../src/components/RadarPanel';
 import type { SeasonPayload } from '../src/api/types';
-import { payload as base, teams as baseTeams } from './fixture';
+import { headToHead, payload as base, teams as baseTeams } from './fixture';
 
 const slots = ['QB', 'RB', 'WR'];
 
@@ -130,6 +130,30 @@ describe('RadarPanel', () => {
       .getAllByRole('button')
       .find((b) => b.getAttribute('aria-pressed') === 'true' && b.textContent?.includes('Alpha'));
     expect(pressed).toBeDefined();
+  });
+
+  it('defaults to the record leader in head-to-head, and choosing it clears ?team', () => {
+    const records = new Map(headToHead.teams.map((t) => [t.rosterId, t.record]));
+    const slotted = withSlots();
+    const h2h: SeasonPayload = {
+      ...slotted,
+      format: 'HeadToHead',
+      teams: slotted.teams.map((t) => ({ ...t, record: records.get(t.rosterId) })),
+    };
+    render(<RadarPanel payload={h2h} />);
+
+    const chips = within(screen.getByRole('group', { name: /team/i })).getAllByRole('button');
+    expect(chips.map((c) => c.textContent)).toEqual(['Charlie', 'Bravo', 'Alpha']);
+    expect(screen.getByRole('button', { name: 'Charlie' })).toHaveAttribute('aria-pressed', 'true');
+
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+      expect(window.location.search).toContain('team=1');
+      fireEvent.click(screen.getByRole('button', { name: 'Charlie' }));
+      expect(window.location.search).not.toContain('team=');
+    } finally {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
   });
 
   it('falls back to the leader when ?team names a roster that no longer exists', () => {

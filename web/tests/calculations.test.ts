@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TeamPayload, WeekPayload } from '../src/api/types';
+import type { TeamPayload, TeamRecord, WeekPayload } from '../src/api/types';
 import {
   canPlotMedian,
   canPlotSigma,
@@ -7,6 +7,8 @@ import {
   cumulative,
   formatWeekRange,
   hasMovement,
+  hasRecords,
+  hasTies,
   isZoomed,
   latestExtremes,
   parseWeekRange,
@@ -14,6 +16,11 @@ import {
   pointsIn,
   populationSigma,
   rankByPoints,
+  rankByRecord,
+  rankTeams,
+  recordSpoken,
+  recordText,
+  settledIdeal,
   sigmaSeries,
   slotDeviations,
   slotRatios,
@@ -22,7 +29,7 @@ import {
   vsMedian,
   weeklyMedians,
 } from '../src/api/calculations';
-import { payload } from './fixture';
+import { headToHead, payload } from './fixture';
 
 function weeks(...rows: [number, number, number, boolean][]): WeekPayload[] {
   return rows.map(([week, actual, ideal, isFinal]) => ({ week, actual, ideal, isFinal }));
@@ -181,7 +188,7 @@ describe('sigmaSeries', () => {
 
 describe('standings', () => {
   it('ranks by points with each gap to the leader', () => {
-    const rows = standings([...payload.teams].reverse());
+    const rows = standings({ ...payload, teams: [...payload.teams].reverse() });
     expect(rows.map((r) => r.team.name)).toEqual(['Alpha', 'Bravo', 'Charlie']);
     expect(rows.map((r) => Number(r.gap.toFixed(1)))).toEqual([0, 40.2, 89.5]);
   });
@@ -193,7 +200,101 @@ describe('standings', () => {
   });
 
   it('is empty for no teams', () => {
-    expect(standings([])).toEqual([]);
+    expect(standings({ ...payload, teams: [] })).toEqual([]);
+  });
+
+  it('ranks by record in head-to-head, the gap still from the points leader', () => {
+    const rows = standings(headToHead);
+    expect(rows.map((r) => r.team.name)).toEqual(['Charlie', 'Bravo', 'Alpha']);
+    expect(rows.map((r) => Number(r.gap.toFixed(1)))).toEqual([89.5, 40.2, 0]);
+  });
+});
+
+describe('head-to-head records', () => {
+  const record = (wins: number, losses: number, ties: number, pointsFor = 0): TeamRecord => ({
+    wins,
+    losses,
+    ties,
+    pointsFor,
+    pointsAgainst: 0,
+  });
+  const named = (name: string, r: TeamRecord): TeamPayload => ({
+    ...payload.teams[0],
+    name,
+    record: r,
+  });
+  const names = (teams: TeamPayload[]) => teams.map((t) => t.name);
+
+  it('counts a tie as half a win', () => {
+    // 2-1-1 is 2.5 of 4; 2-2 is 2 of 4
+    expect(
+      names(rankByRecord([named('Even', record(2, 2, 0)), named('Tied', record(2, 1, 1))])),
+    ).toEqual(['Tied', 'Even']);
+  });
+
+  it('breaks an equal win rate on points for, then on name', () => {
+    const ranked = rankByRecord([
+      named('Zulu', record(2, 2, 0, 300)),
+      named('Low', record(1, 1, 0, 100)),
+      named('Alpha', record(2, 2, 0, 300)),
+    ]);
+    expect(names(ranked)).toEqual(['Alpha', 'Zulu', 'Low']);
+  });
+
+  it('ranks every 0-0 team by name before any week settles', () => {
+    const ranked = rankByRecord([named('Bravo', record(0, 0, 0)), named('Alpha', record(0, 0, 0))]);
+    expect(names(ranked)).toEqual(['Alpha', 'Bravo']);
+  });
+
+  it('leaves the input order alone', () => {
+    const input = [...headToHead.teams];
+    rankByRecord(input);
+    expect(input[0]?.name).toBe('Alpha');
+  });
+
+  it('ranks by record only in head-to-head with every record present', () => {
+    expect(hasRecords(headToHead)).toBe(true);
+    expect(names(rankTeams(headToHead))).toEqual(['Charlie', 'Bravo', 'Alpha']);
+
+    const missing = { ...headToHead, teams: [headToHead.teams[0], payload.teams[1]] };
+    expect(hasRecords(missing)).toBe(false);
+    expect(names(rankTeams(missing))).toEqual(['Alpha', 'Bravo']);
+  });
+
+  it('reads a missing format as total points (A38)', () => {
+    const cached = { ...headToHead, format: undefined };
+    expect(hasRecords(cached)).toBe(false);
+    expect(names(rankTeams(cached))).toEqual(['Alpha', 'Bravo', 'Charlie']);
+  });
+
+  it('sums ideal points over settled weeks only', () => {
+    const team: TeamPayload = {
+      ...payload.teams[0],
+      weeks: [
+        { week: 1, actual: 10, ideal: 12, isFinal: true },
+        { week: 2, actual: 20, ideal: 25, isFinal: true },
+        { week: 3, actual: 5, ideal: 40, isFinal: false },
+      ],
+    };
+    expect(settledIdeal(team)).toBe(37);
+  });
+
+  it('shows ties only once a team has one', () => {
+    expect(hasTies(headToHead.teams)).toBe(false);
+    expect(hasTies([named('Tied', record(1, 1, 1))])).toBe(true);
+    expect(hasTies(payload.teams)).toBe(false);
+  });
+
+  it('writes the record short, with ties only when asked', () => {
+    expect(recordText(record(13, 5, 0), false)).toBe('13-5');
+    expect(recordText(record(13, 5, 0), true)).toBe('13-5-0');
+    expect(recordText(record(12, 5, 1), true)).toBe('12-5-1');
+  });
+
+  it('spells the record out for screen readers', () => {
+    expect(recordSpoken(record(13, 5, 0), false)).toBe('13 wins, 5 losses');
+    expect(recordSpoken(record(1, 1, 1), true)).toBe('1 win, 1 loss, 1 tie');
+    expect(recordSpoken(record(0, 2, 2), true)).toBe('0 wins, 2 losses, 2 ties');
   });
 });
 

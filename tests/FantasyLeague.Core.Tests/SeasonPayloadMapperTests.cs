@@ -21,6 +21,10 @@ namespace FantasyLeague.Core.Tests
             new(rosterId, name,
                 [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, 0m, 0m, [], [], [], w.IsFinal, w.Slots, null))]);
 
+        /// <summary>Puts every week of a team in one game.</summary>
+        private static TeamSeason InGame(TeamSeason team, int matchupId) =>
+            team with { Weeks = [.. team.Weeks.Select(w => w with { MatchupId = matchupId })] };
+
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,
             string[]? rosterPositions = null,
@@ -37,20 +41,78 @@ namespace FantasyLeague.Core.Tests
                 (8m, 10m, true), (12m, 14m, true), (8m, 9m, true), (12m, 13m, true));
 
         [Fact]
-        public void The_excluded_rosters_change_nothing_in_the_payload()
+        public void The_excluded_rosters_and_the_records_change_nothing_in_a_total_points_payload()
         {
             // T68: they are stored now, so prove they reach no metric, not even the
-            // trimming of unplayed weeks: in week 3 only the placeholder scored
+            // trimming of unplayed weeks: in week 3 only the placeholder scored. With
+            // the placeholder every game pairs, so the records are known and must stay hidden
             var teams = new List<TeamSeason>
             {
-                Team(1, "One", (10m, 11m, true), (20m, 21m, true), (0m, 0m, true)),
-                Team(2, "Two", (12m, 13m, true), (22m, 23m, true), (0m, 0m, true)),
+                InGame(Team(1, "One", (10m, 11m, true), (20m, 21m, true), (0m, 0m, true)), 1),
+                InGame(Team(2, "Two", (12m, 13m, true), (22m, 23m, true), (0m, 0m, true)), 1),
+                InGame(Team(3, "Three", (14m, 15m, true), (24m, 25m, true), (0m, 0m, true)), 2),
             };
-            var placeholder = Team(9, "Placeholder", (1m, 50m, true), (2m, 50m, true), (5m, 50m, true));
             var without = Snapshot(teams, currentWeek: 4, finalThroughWeek: 3);
+            var stored = without with { ExcludedTeams = [InGame(Team(9, "Placeholder", (1m, 50m, true), (2m, 50m, true), (5m, 50m, true)), 2)] };
+            stored.Records.Should().NotBeNull("the test needs a record that could leak");
 
-            JsonSerializer.Serialize(SeasonPayloadMapper.ToSeasonPayload(without with { ExcludedTeams = [placeholder] }, AsOf), JsonSerializerOptions.Web)
-                .Should().Be(JsonSerializer.Serialize(SeasonPayloadMapper.ToSeasonPayload(without, AsOf), JsonSerializerOptions.Web));
+            var payload = SeasonPayloadMapper.ToSeasonPayload(stored, AsOf);
+            var body = JsonSerializer.Serialize(payload, JsonSerializerOptions.Web);
+            body.Should().Be(JsonSerializer.Serialize(SeasonPayloadMapper.ToSeasonPayload(without, AsOf), JsonSerializerOptions.Web));
+            body.Should().NotContainEquivalentOf("record");
+            JsonSerializer.Serialize(payload).Should().NotContainEquivalentOf("record");
+
+            // the ETag of the total-points body; a record key would change it (A39)
+            SeasonETag.Compute(payload).Should().Be("W/\"2026-wk4-07143DCD8688EFE0\"");
+        }
+
+        [Fact]
+        public void Head_to_head_puts_each_counted_team_s_record_on_it_and_never_the_placeholder_s()
+        {
+            // A1: the placeholder's game counts for its opponent, but its own record is never shown
+            var snapshot = Snapshot([
+                InGame(Team(1, "One", (10m, 11m, true), (20m, 21m, true)), 1),
+                InGame(Team(2, "Two", (12m, 13m, true), (8m, 23m, true)), 1),
+                InGame(Team(3, "Three", (14m, 15m, true), (24m, 25m, true)), 2),
+            ], currentWeek: 3, finalThroughWeek: 2, format: LeagueFormat.HeadToHead) with
+            {
+                ExcludedTeams = [InGame(Team(9, "Placeholder", (1m, 50m, true), (30m, 50m, true)), 2)],
+            };
+
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf);
+
+            payload.Teams.ToDictionary(t => t.RosterId, t => t.Record).Should().BeEquivalentTo(new Dictionary<int, RecordPayload>
+            {
+                [1] = new(1, 1, 0, 30m, 20m),
+                [2] = new(1, 1, 0, 20m, 30m),
+                [3] = new(1, 1, 0, 38m, 31m),
+            });
+            JsonSerializer.Serialize(payload, JsonSerializerOptions.Web).Should().NotContain("Placeholder");
+        }
+
+        [Fact]
+        public void Head_to_head_before_any_week_settles_gives_every_team_no_wins_and_no_losses()
+        {
+            // the records are known but empty: nobody has a counted week yet
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                InGame(Team(1, "One", (10m, 11m, false)), 1),
+                InGame(Team(2, "Two", (12m, 13m, false)), 1),
+            ], currentWeek: 1, finalThroughWeek: 0, format: LeagueFormat.HeadToHead), AsOf);
+
+            payload.Teams.Should().OnlyContain(t => t.Record == new RecordPayload(0, 0, 0, 0m, 0m));
+        }
+
+        [Fact]
+        public void Head_to_head_leaves_the_record_out_while_a_counted_week_lacks_its_games()
+        {
+            // all or nothing: a week stored before matchups were read
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                InGame(Team(1, "One", (10m, 11m, true)), 1),
+                Team(2, "Two", (12m, 13m, true)),
+            ], currentWeek: 2, finalThroughWeek: 1, format: LeagueFormat.HeadToHead), AsOf);
+
+            payload.Teams.Should().OnlyContain(t => t.Record == null);
+            JsonSerializer.Serialize(payload, JsonSerializerOptions.Web).Should().NotContain("\"record\"");
         }
 
         [Fact]

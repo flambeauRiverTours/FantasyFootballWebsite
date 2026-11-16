@@ -1,6 +1,12 @@
 import { median } from 'd3-array';
 import { hasConsistency } from './types';
-import type { ConsistentTotals, SeasonPayload, TeamPayload, WeekPayload } from './types';
+import type {
+  ConsistentTotals,
+  SeasonPayload,
+  TeamPayload,
+  TeamRecord,
+  WeekPayload,
+} from './types';
 
 /** One plotted value at one week. */
 export interface Point {
@@ -153,11 +159,67 @@ export function rankByPoints(teams: TeamPayload[]): TeamPayload[] {
   return [...teams].sort((a, b) => b.totals.actual - a.totals.actual);
 }
 
-/** The standings table: teams ranked by points, each with its gap to the leader. */
-export function standings(teams: TeamPayload[]): Standing[] {
-  const ranked = rankByPoints(teams);
-  const leader = ranked[0]?.totals.actual ?? 0;
-  return ranked.map((team) => ({ team, gap: leader - team.totals.actual }));
+/**
+ * True when the page ranks by record: a head-to-head league whose every team
+ * has one (T68). A missing format reads as total points (A38).
+ */
+export function hasRecords(payload: SeasonPayload): boolean {
+  return payload.format === 'HeadToHead' && payload.teams.every((t) => t.record !== undefined);
+}
+
+const NoRecord: TeamRecord = { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
+
+/** Wins over games, a tie as half a win; zero before any game. */
+function winRate({ wins, losses, ties }: TeamRecord): number {
+  const games = wins + losses + ties;
+  return games === 0 ? 0 : (wins + ties / 2) / games;
+}
+
+/**
+ * Teams ranked by record: win rate, then points for, then name. Records move
+ * only when a week settles, so the order never shuffles during a live poll.
+ */
+export function rankByRecord(teams: TeamPayload[]): TeamPayload[] {
+  return [...teams].sort((a, b) => {
+    const [ra, rb] = [a.record ?? NoRecord, b.record ?? NoRecord];
+    return winRate(rb) - winRate(ra) || rb.pointsFor - ra.pointsFor || a.name.localeCompare(b.name);
+  });
+}
+
+/** Teams in the order the league ranks them: by record in head-to-head, else by points. */
+export function rankTeams(payload: SeasonPayload): TeamPayload[] {
+  return hasRecords(payload) ? rankByRecord(payload.teams) : rankByPoints(payload.teams);
+}
+
+/** Ideal points over the settled weeks, as a record counts them. The payload stops at the last counted week. */
+export function settledIdeal(team: TeamPayload): number {
+  return team.weeks.filter((w) => w.isFinal).reduce((sum, w) => sum + w.ideal, 0);
+}
+
+/** True when any team has a tied game, so every record shows its ties. */
+export function hasTies(teams: TeamPayload[]): boolean {
+  return teams.some((t) => (t.record?.ties ?? 0) > 0);
+}
+
+/** A record as the table shows it: "13-5", or "13-5-0" when the league has a tie. */
+export function recordText({ wins, losses, ties }: TeamRecord, showTies: boolean): string {
+  return showTies ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`;
+}
+
+function counted(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** A record in words, for screen readers: "13 wins, 5 losses". */
+export function recordSpoken({ wins, losses, ties }: TeamRecord, showTies: boolean): string {
+  const parts = [counted(wins, 'win', 'wins'), counted(losses, 'loss', 'losses')];
+  return (showTies ? [...parts, counted(ties, 'tie', 'ties')] : parts).join(', ');
+}
+
+/** The standings table: teams as the league ranks them, each with its gap to the points leader. */
+export function standings(payload: SeasonPayload): Standing[] {
+  const leader = rankByPoints(payload.teams)[0]?.totals.actual ?? 0;
+  return rankTeams(payload).map((team) => ({ team, gap: leader - team.totals.actual }));
 }
 
 /** Final weeks before sigma draws a line: four for its first value (D1), one more for a second. */

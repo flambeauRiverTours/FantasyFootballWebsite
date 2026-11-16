@@ -37,6 +37,11 @@
             }
 
             var tally = counted.Select(w => w.RosterId).Distinct().ToDictionary(id => id, _ => new Tally());
+            foreach (var w in counted)
+            {
+                tally[w.RosterId].Score(w.ActualPts);
+            }
+
             foreach (var game in games)
             {
                 var (a, b) = (game.First(), game.Last());
@@ -83,13 +88,18 @@
             private decimal pointsAgainst;
 
             /// <summary>
-            /// Adds a game: its result and both scores.
+            /// Adds a counted week's points, a bye's included, as Sleeper's points for does.
             /// </summary>
-            /// <param name="scored">This roster's points.</param>
+            /// <param name="scored">This roster's points that week.</param>
+            public void Score(decimal scored) => pointsFor += scored;
+
+            /// <summary>
+            /// Adds a game: its result and the opponent's points.
+            /// </summary>
+            /// <param name="scored">This roster's points, which decide the result.</param>
             /// <param name="conceded">The opponent's points.</param>
             public void Add(decimal scored, decimal conceded)
             {
-                pointsFor += scored;
                 pointsAgainst += conceded;
                 AddResult(scored.CompareTo(conceded));
             }

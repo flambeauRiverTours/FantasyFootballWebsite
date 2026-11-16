@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { SeasonPayload, TeamPayload, WeekPayload } from '../api/types';
+import type { SeasonPayload, WeekPayload } from '../api/types';
 import type { Measure, Point, PointMode, WeekRange } from '../api/calculations';
 import {
   canPlotMedian,
@@ -13,7 +13,7 @@ import {
   parseWeekRange,
   perWeek,
   pointsIn,
-  rankByPoints,
+  rankTeams,
   sigmaSeries,
   startedWeeks,
   vsMedian,
@@ -86,11 +86,11 @@ function modeWords(mode: PointMode, what: string): string {
 // series building
 
 function toSeries(
-  teams: TeamPayload[],
+  payload: SeasonPayload,
   colours: ReadonlyMap<number, string>,
   points: (weeks: WeekPayload[]) => Point[],
 ): Series[] {
-  return rankByPoints(teams).map((team) => ({
+  return rankTeams(payload).map((team) => ({
     rosterId: team.rosterId,
     name: team.name,
     colour: colours.get(team.rosterId) ?? 'currentColor',
@@ -185,7 +185,7 @@ export default function ChartPanel({ payload }: ChartPanelProps) {
   const medians = useMemo(() => weeklyMedians(payload.teams, measure), [payload.teams, measure]);
   const started = useMemo(() => startedWeeks(payload.teams), [payload.teams]);
   const colours = teamColours(payload.teams);
-  const series = toSeries(payload.teams, colours, (all) => {
+  const series = toSeries(payload, colours, (all) => {
     const weeks = all.filter((w) => started.has(w.week));
     return showSigma
       ? sigmaSeries(weeks, sigmaWindow === 'rolling', scale === 'cv')

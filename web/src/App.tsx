@@ -74,7 +74,7 @@ export default function App() {
             {error ? <StaleBanner asOfUtc={payload.asOfUtc} onRetry={refetch} /> : null}
 
             <main className="panels">
-              <StandingsPanel teams={payload.teams} />
+              <StandingsPanel payload={payload} />
               {consistency.length > 0 ? (
                 <ConsistencyPanel payload={payload} rows={consistency} />
               ) : null}

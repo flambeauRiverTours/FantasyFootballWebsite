@@ -34,3 +34,20 @@ export const payload: SeasonPayload = {
   lastRegularWeek: 14,
   format: 'TotalPoints',
 };
+
+/**
+ * A head-to-head season whose records rank the teams in the reverse of their
+ * points, so anything still ordered by points shows (T68).
+ */
+export const headToHead: SeasonPayload = {
+  ...payload,
+  format: 'HeadToHead',
+  teams: [
+    { ...teams[0], record: { wins: 1, losses: 3, ties: 0, pointsFor: 340.2, pointsAgainst: 300 } },
+    { ...teams[1], record: { wins: 2, losses: 2, ties: 0, pointsFor: 300, pointsAgainst: 310 } },
+    {
+      ...teams[2],
+      record: { wins: 3, losses: 1, ties: 0, pointsFor: 250.7, pointsAgainst: 280.9 },
+    },
+  ],
+};

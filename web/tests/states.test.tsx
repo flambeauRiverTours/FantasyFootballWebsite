@@ -6,7 +6,7 @@ import LoadFailed from '../src/components/LoadFailed';
 import StaleBanner from '../src/components/StaleBanner';
 import Masthead from '../src/components/Masthead';
 import StandingsPanel from '../src/components/StandingsPanel';
-import { teams } from './fixture';
+import { payload } from './fixture';
 
 describe('Skeleton', () => {
   it('announces itself as busy rather than reading empty rows', () => {
@@ -29,7 +29,7 @@ describe('Skeleton', () => {
     const loading = header(skeleton.container);
     skeleton.unmount();
 
-    const real = render(<StandingsPanel teams={teams} />);
+    const real = render(<StandingsPanel payload={payload} />);
     expect(loading).toEqual(header(real.container));
   });
 
