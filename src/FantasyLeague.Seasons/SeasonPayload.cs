@@ -1,4 +1,6 @@
-﻿namespace FantasyLeague.Seasons
+﻿using System.Text.Json.Serialization;
+
+namespace FantasyLeague.Seasons
 {
     /// <summary>
     /// The §09 response body for one season. Table and chart derive from this one
@@ -36,12 +38,33 @@
     /// <param name="Totals">Season-to-date figures, computed server-side so the definition lives in one place.</param>
     /// <param name="SlotAverages">Per-slot season means. Empty if no week produced an attribution.</param>
     /// <param name="Weeks">Every week played, in order.</param>
+    /// <param name="Record">
+    /// The head-to-head record, in <see cref="LeagueFormat.HeadToHead"/> once every counted week
+    /// has its games (T68). Left out of the body otherwise, so a total-points body carries no
+    /// <c>record</c> key (A39).
+    /// </param>
     public sealed record TeamPayload(
         int RosterId,
         string Name,
         TotalsPayload Totals,
         IReadOnlyDictionary<string, decimal> SlotAverages,
-        IReadOnlyList<WeekPayload> Weeks);
+        IReadOnlyList<WeekPayload> Weeks,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RecordPayload? Record = null);
+
+    /// <summary>
+    /// One roster's head-to-head record over the settled weeks that count (T68).
+    /// </summary>
+    /// <param name="Wins">Games won, median results included.</param>
+    /// <param name="Losses">Games lost, median results included.</param>
+    /// <param name="Ties">Games tied, median results included.</param>
+    /// <param name="PointsFor">Points over every settled week that counts, a bye included; the tiebreak after win rate.</param>
+    /// <param name="PointsAgainst">Opponents' points over the same weeks.</param>
+    public sealed record RecordPayload(
+        int Wins,
+        int Losses,
+        int Ties,
+        decimal PointsFor,
+        decimal PointsAgainst);
 
     /// <summary>
     /// Season-to-date figures for one roster.

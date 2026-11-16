@@ -38,8 +38,9 @@ cause; everything after it is a symptom.**
   measurement contradicts the source, reload the page before believing it.
 - A rule can appear twice in `index.css`; the later one wins. Check
   `document.styleSheets` for duplicates when a change seems not to apply.
-- The pane is narrow. Below 40rem the Gap column and the masthead's status text
-  are hidden. Resize before concluding something is missing.
+- The pane is narrow. Below 40rem the `.col-wide` columns (Gap, or PA in
+  head-to-head) and the masthead's status text are hidden. Resize before
+  concluding something is missing.
 
 ## Output
 

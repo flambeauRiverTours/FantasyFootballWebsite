@@ -30,6 +30,9 @@ actually returns.
 - `lastRegularWeek` (A37) is required; missing is a finding.
 - `format` (A38) is optional. A past season cached before A38 has none, and the
   page reads it as `TotalPoints`; absent there is expected, not a finding.
+- `record` on a team (A39) is optional. It is absent in `TotalPoints`, and in
+  `HeadToHead` until every counted week has its games; then every team has one.
+  One team with it and another without is a finding.
 
 ## Why this matters
 

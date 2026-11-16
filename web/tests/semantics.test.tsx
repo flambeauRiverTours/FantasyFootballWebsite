@@ -4,7 +4,7 @@ import axe from 'axe-core';
 import StandingsPanel from '../src/components/StandingsPanel';
 import ChartPanel from '../src/components/ChartPanel';
 import Panel from '../src/components/Panel';
-import { payload, teams } from './fixture';
+import { headToHead, payload, teams } from './fixture';
 
 async function violations(container: HTMLElement) {
   const results = await axe.run(container, {
@@ -44,57 +44,144 @@ describe('Panel', () => {
 
 describe('StandingsPanel', () => {
   it('marks the sorted column with aria-sort', () => {
-    render(<StandingsPanel teams={teams} />);
+    render(<StandingsPanel payload={payload} />);
     const sorted = screen.getAllByRole('columnheader').filter((h) => h.hasAttribute('aria-sort'));
     expect(sorted).toHaveLength(1);
     expect(sorted[0]).toHaveTextContent('Points');
     expect(sorted[0]).toHaveAttribute('aria-sort', 'descending');
   });
 
-  it('tags the gap column on the header and every body cell', () => {
-    const { container } = render(<StandingsPanel teams={teams} />);
-    expect(container.querySelectorAll('th.col-gap')).toHaveLength(1);
-    expect(container.querySelectorAll('td.col-gap')).toHaveLength(teams.length);
+  it('hides the gap column on narrow screens, on the header and every body cell', () => {
+    const { container } = render(<StandingsPanel payload={payload} />);
+    expect(container.querySelectorAll('th.col-wide')).toHaveLength(1);
+    expect(container.querySelectorAll('td.col-wide')).toHaveLength(teams.length);
   });
 
-  it('has no sigma column, even once every team has a sigma', () => {
+  it('puts gap next to points, then ideal, with no sigma column even once every team has one', () => {
     const withSigma = teams.map((t) => ({
       ...t,
       totals: { ...t.totals, sigma: 12.5, cv: 0.1, mean: 120, min: 100, max: 140 },
     }));
-    render(<StandingsPanel teams={withSigma} />);
+    render(<StandingsPanel payload={{ ...payload, teams: withSigma }} />);
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
   });
 
-  it('puts gap next to points, then ideal', () => {
-    render(<StandingsPanel teams={teams} />);
-    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
-    expect(headers.slice(0, 4)).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
-  });
-
   it('puts the table in its own scroll container', () => {
-    const { container } = render(<StandingsPanel teams={teams} />);
+    const { container } = render(<StandingsPanel payload={payload} />);
     expect(container.querySelector('.table-wrap > table')).not.toBeNull();
   });
 
-  it('renders an em dash, never a zero, for the leader gap', () => {
-    render(<StandingsPanel teams={teams} />);
+  it('renders an em dash, never a zero, for the leader gap, muted', () => {
+    render(<StandingsPanel payload={payload} />);
     const rows = screen.getAllByRole('row').slice(1);
-    const gap = (row: HTMLElement) => row.querySelector('td.col-gap');
+    const gap = (row: HTMLElement) => row.querySelector('td.col-wide.muted');
     expect(gap(rows[0])).toHaveTextContent('—');
     expect(gap(rows[1])).toHaveTextContent('−');
   });
 
   it('keeps one heading and no table when there is nothing to show', () => {
-    const { container } = render(<StandingsPanel teams={[]} />);
+    const { container } = render(<StandingsPanel payload={{ ...payload, teams: [] }} />);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelector('table')).toBeNull();
     expect(screen.getByRole('region', { name: 'Standings' })).toBeInTheDocument();
   });
 
   it('has no axe violations', async () => {
-    const { container } = render(<StandingsPanel teams={teams} />);
+    const { container } = render(<StandingsPanel payload={payload} />);
+    expect(await violations(container)).toEqual([]);
+  });
+});
+
+describe('StandingsPanel in head-to-head', () => {
+  // the visible labels; PF and PA also carry their full names for screen readers
+  const labels = (c: HTMLElement) =>
+    [...c.querySelectorAll('thead th')].map(
+      (th) => th.querySelector('[aria-hidden="true"]')?.textContent ?? th.textContent,
+    );
+  const bodyRows = () => screen.getAllByRole('row').slice(1);
+  const recordShown = (row: HTMLElement) =>
+    row.querySelectorAll('td')[1].querySelector('[aria-hidden="true"]')?.textContent;
+
+  it('shows the record, points for and against, and ideal, ranked and sorted by record', () => {
+    const { container } = render(<StandingsPanel payload={headToHead} />);
+    expect(labels(container)).toEqual(['Team', 'Record', 'PF', 'PA', 'Ideal']);
+    expect(screen.getByRole('columnheader', { name: 'Points for' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Points against' })).toBeInTheDocument();
+
+    const sorted = screen.getAllByRole('columnheader').filter((h) => h.hasAttribute('aria-sort'));
+    expect(sorted).toHaveLength(1);
+    expect(sorted[0]).toHaveTextContent('Record');
+    expect(container.querySelectorAll('td.is-sorted')).toHaveLength(teams.length);
+    expect(bodyRows().map((r) => r.querySelector('td')?.textContent)).toEqual([
+      'Charlie',
+      'Bravo',
+      'Alpha',
+    ]);
+  });
+
+  it('hides points against on narrow screens, on the header and every body cell', () => {
+    const { container } = render(<StandingsPanel payload={headToHead} />);
+    expect(container.querySelectorAll('th.col-wide')).toHaveLength(1);
+    expect(container.querySelectorAll('td.col-wide')).toHaveLength(teams.length);
+    expect(container.querySelector('th.col-wide')).toHaveAccessibleName('Points against');
+  });
+
+  it('reads the record short on screen and in full to a screen reader', () => {
+    render(<StandingsPanel payload={headToHead} />);
+    const cell = bodyRows()[0].querySelectorAll('td')[1];
+    expect(cell.querySelector('[aria-hidden="true"]')).toHaveTextContent('3-1');
+    expect(cell.querySelector('.visually-hidden')).toHaveTextContent('3 wins, 1 loss');
+  });
+
+  it('shows ties on every row once any team has one', () => {
+    const tied = {
+      ...headToHead,
+      teams: headToHead.teams.map((t, i) =>
+        i === 0 ? { ...t, record: { ...t.record!, losses: 2, ties: 1 } } : t,
+      ),
+    };
+    render(<StandingsPanel payload={tied} />);
+    expect(bodyRows().map(recordShown)).toEqual(['3-1-0', '2-2-0', '1-2-1']);
+  });
+
+  it('counts settled weeks only while a week is live', () => {
+    // Charlie is mid-game in week 3: the record's points and the settled ideal stand
+    const live = {
+      ...headToHead,
+      teams: headToHead.teams.map((t) =>
+        t.name === 'Charlie'
+          ? { ...t, weeks: [...t.weeks, { week: 3, actual: 90, ideal: 99, isFinal: false }] }
+          : t,
+      ),
+    };
+    render(<StandingsPanel payload={live} />);
+    const cells = [...bodyRows()[0].querySelectorAll('td')].map((td) => td.textContent);
+    expect(cells.slice(2)).toEqual(['250.7', '280.9', '310.9']);
+  });
+
+  it('keeps the points table, and says why, until every record is known', () => {
+    const waiting = { ...headToHead, isCurrent: false, teams };
+    const { container } = render(<StandingsPanel payload={waiting} />);
+    expect(labels(container)).toEqual(['Team', 'Points', 'Gap', 'Ideal']);
+    expect(screen.getByText(/records appear once every week's games are in/i)).toBeInTheDocument();
+  });
+
+  it('says nothing about records in total points', () => {
+    render(<StandingsPanel payload={payload} />);
+    expect(screen.queryByText(/records appear/i)).toBeNull();
+  });
+
+  it('takes the records when they arrive between polls', () => {
+    const { container, rerender } = render(<StandingsPanel payload={{ ...headToHead, teams }} />);
+    rerender(<StandingsPanel payload={headToHead} />);
+    expect(labels(container)).toEqual(['Team', 'Record', 'PF', 'PA', 'Ideal']);
+    expect(container.querySelectorAll('tbody tr:first-child td')).toHaveLength(5);
+    expect(screen.queryByText(/records appear/i)).toBeNull();
+  });
+
+  it('has no axe violations', async () => {
+    const { container } = render(<StandingsPanel payload={headToHead} />);
     expect(await violations(container)).toEqual([]);
   });
 });
@@ -114,6 +201,12 @@ describe('ChartPanel', () => {
 
     expect(screen.getByRole('group', { name: /^mode$/i })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /window/i })).toBeNull();
+  });
+
+  it('orders the chips by record in head-to-head', () => {
+    render(<ChartPanel payload={headToHead} />);
+    const chips = within(screen.getByRole('group', { name: /teams/i })).getAllByRole('button');
+    expect(chips.map((c) => c.textContent)).toEqual(['Charlie', 'Bravo', 'Alpha']);
   });
 
   it('hides the sigma metric below five finalized weeks and shows it at five', () => {

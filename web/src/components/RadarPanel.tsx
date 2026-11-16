@@ -1,6 +1,6 @@
 import { flushSync } from 'react-dom';
 import { useReducedMotion } from 'motion/react';
-import { slotRatios } from '../api/calculations';
+import { rankTeams, slotRatios } from '../api/calculations';
 import { teamColours } from '../api/teamColours';
 import type { SeasonPayload, TeamPayload } from '../api/types';
 import { useEnumQuery } from '../hooks/useEnumQuery';
@@ -89,17 +89,18 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
   // chart state
   const [wrapper, width] = useMeasuredWidth<HTMLDivElement>();
 
-  // data. teams arrive ranked by points (§09); the leader is the default
-  const teamId = payload.teams.some((t) => String(t.rosterId) === rawTeam)
+  // data. the league's leader is the default: by record in head-to-head, else by points
+  const ranked = rankTeams(payload);
+  const teamId = ranked.some((t) => String(t.rosterId) === rawTeam)
     ? Number(rawTeam)
-    : (payload.teams[0]?.rosterId ?? null);
+    : (ranked[0]?.rosterId ?? null);
   const colours = teamColours(payload.teams);
   const team = payload.teams.find((t) => t.rosterId === teamId);
   const colour = teamId === null ? undefined : colours.get(teamId);
   const ratios = slotRatios(payload, teamId);
   const label = team ? describe(team.name, payload.slotOrder, ratios) : '';
   const selectTeam = (rosterId: number) =>
-    setTeam(rosterId === payload.teams[0]?.rosterId ? '' : String(rosterId));
+    setTeam(rosterId === ranked[0]?.rosterId ? '' : String(rosterId));
 
   return (
     <Panel id="radar" title="Positional Radar">
@@ -107,7 +108,7 @@ export default function RadarPanel({ payload }: RadarPanelProps) {
       <TeamChips
         name="radar-team"
         label="Team"
-        teams={payload.teams}
+        teams={ranked}
         colours={colours}
         isPressed={(id) => id === teamId}
         onPress={selectTeam}

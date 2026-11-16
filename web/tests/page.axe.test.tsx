@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import App from '../src/App';
 import type { SeasonPayload } from '../src/api/types';
-import { payload } from './fixture';
+import { headToHead, payload } from './fixture';
 import { serveApi } from './api';
 
 // the whole page in each of its states, so a panel added later is checked
@@ -43,6 +43,20 @@ describe('The page', () => {
     await waitFor(() => expect(screen.getAllByRole('table')).toHaveLength(2));
     expect(screen.getAllByRole('region').length).toBeGreaterThanOrEqual(4);
     expect(await violations(container)).toEqual([]);
+  });
+
+  it('has no axe violations in head-to-head, records shown or still waiting', async () => {
+    serveApi(headToHead);
+    const shown = render(<App />);
+    await screen.findByRole('columnheader', { name: 'Record' });
+    expect(await violations(shown.container)).toEqual([]);
+    shown.unmount();
+    vi.restoreAllMocks();
+
+    serveApi({ ...headToHead, teams: payload.teams });
+    const waiting = render(<App />);
+    await screen.findByText(/records appear/i);
+    expect(await violations(waiting.container)).toEqual([]);
   });
 
   it('has no axe violations while the season is loading', async () => {

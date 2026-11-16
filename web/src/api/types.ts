@@ -43,6 +43,21 @@ export interface TeamPayload {
   /** Season average per slot code. Empty when no finalized week produced an attribution. */
   slotAverages: Record<string, number>;
   weeks: WeekPayload[];
+  /**
+   * The head-to-head record (T68). Only in `HeadToHead`, and only once every
+   * counted week has its games; every team has one or none does.
+   */
+  record?: TeamRecord;
+}
+
+/** Results and points over the settled weeks that count; median results included (Q12). */
+export interface TeamRecord {
+  wins: number;
+  losses: number;
+  ties: number;
+  /** Every settled week's points, a bye included: the tiebreak after win rate. */
+  pointsFor: number;
+  pointsAgainst: number;
 }
 
 /**
