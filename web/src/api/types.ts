@@ -20,6 +20,32 @@ export interface SeasonPayload {
    * browser cached before A38 has none, so read a missing one as `TotalPoints`.
    */
   format?: LeagueFormat;
+  /**
+   * One week's games (T71, A41): the current week, held to the last that counts.
+   * Only in `HeadToHead`, and only when that week has games; a missing one means no panel.
+   */
+  matchups?: MatchupsPayload;
+}
+
+/** One week's games, in matchup id order. */
+export interface MatchupsPayload {
+  week: number;
+  /** Whether the week is settled; until then the points are live. */
+  isFinal: boolean;
+  games: GamePayload[];
+}
+
+/** One game. Its sides are in roster id order, so they never swap between polls. */
+export interface GamePayload {
+  matchupId: number;
+  teams: [MatchupTeamPayload, MatchupTeamPayload];
+}
+
+/** One side of a game. The placeholder's side carries its name, as it has no table row (A1). */
+export interface MatchupTeamPayload {
+  rosterId: number;
+  name: string;
+  actual: number;
 }
 
 /** The deployment's `League:Format`, spelled as the setting is (A38). */

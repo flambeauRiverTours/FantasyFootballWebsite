@@ -26,9 +26,10 @@ namespace FantasyLeague.Seasons
         public static SeasonPayload ToSeasonPayload(SeasonSnapshot snapshot, DateTimeOffset asOfUtc)
         {
             var lastWeek = snapshot.LastCountedWeek;
+            var headToHead = snapshot.Format == LeagueFormat.HeadToHead;
 
             // shown only in head-to-head; the record check builds them in either format
-            var records = snapshot.Format == LeagueFormat.HeadToHead ? snapshot.Records : null;
+            var records = headToHead ? snapshot.Records : null;
             var teams = snapshot.Teams
                 .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }, records))
                 .OrderByDescending(t => t.Totals.Actual)
@@ -46,7 +47,8 @@ namespace FantasyLeague.Seasons
                 leagueSlotAverages,
                 teams,
                 lastWeek,
-                snapshot.Format);
+                snapshot.Format,
+                headToHead ? ToMatchups(snapshot) : null);
         }
 
         /// <summary>
@@ -100,6 +102,31 @@ namespace FantasyLeague.Seasons
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.ActualPts, w.IdealPts, w.IsFinal))],
                 records is null ? null : ToRecord(records.GetValueOrDefault(team.RosterId)));
+        }
+
+        /// <summary>
+        /// Maps the matchup week's games, the placeholder's included (T71).
+        /// </summary>
+        /// <param name="snapshot">The assembled season.</param>
+        /// <returns>
+        /// The games, or null when there are none to show: the preseason, a week stored before
+        /// matchups were read, or a week Sleeper has not scheduled, which is stored as all byes (A41).
+        /// </returns>
+        private static MatchupsPayload? ToMatchups(SeasonSnapshot snapshot)
+        {
+            var week = snapshot.MatchupWeek;
+            var rosters = snapshot.Teams.Concat(snapshot.ExcludedTeams).ToList();
+            var names = rosters.ToDictionary(t => t.RosterId, t => t.Name);
+            var games = HeadToHead.Games(rosters.SelectMany(t => t.Weeks).Where(w => w.Week == week));
+            MatchupTeamPayload Side(TeamWeek w) => new(w.RosterId, names[w.RosterId], w.ActualPts);
+
+            // Games is null when any id is null, so every paired side has one
+            return games is null or []
+                ? null
+                : new MatchupsPayload(
+                    week,
+                    week <= snapshot.FinalThroughWeek,
+                    [.. games.Select(g => new GamePayload(g.First.MatchupId!.Value, [Side(g.First), Side(g.Second)]))]);
         }
 
         /// <summary>

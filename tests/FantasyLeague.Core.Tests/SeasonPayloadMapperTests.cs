@@ -25,6 +25,11 @@ namespace FantasyLeague.Core.Tests
         private static TeamSeason InGame(TeamSeason team, int matchupId) =>
             team with { Weeks = [.. team.Weeks.Select(w => w with { MatchupId = matchupId })] };
 
+        /// <summary>A team's weeks, each in the given game, for T71.</summary>
+        private static TeamSeason TeamInGames(int rosterId, string name, params (decimal Actual, int MatchupId, bool IsFinal)[] weeks) =>
+            new(rosterId, name,
+                [.. weeks.Select((w, i) => new TeamWeek(rosterId, i + 1, w.Actual, w.Actual, [], [], [], w.IsFinal, NoAttribution, w.MatchupId))]);
+
         private static SeasonSnapshot Snapshot(
             IReadOnlyList<TeamSeason>? teams = null,
             string[]? rosterPositions = null,
@@ -113,6 +118,116 @@ namespace FantasyLeague.Core.Tests
 
             payload.Teams.Should().OnlyContain(t => t.Record == null);
             JsonSerializer.Serialize(payload, JsonSerializerOptions.Web).Should().NotContain("\"record\"");
+        }
+
+        [Theory]
+        [InlineData(true, 5, 4, 18, 5)] // mid-season: the live week
+        [InlineData(true, 6, 5, 4, 4)] // a playoff week before T69: the last counted week, final
+        [InlineData(false, 6, 6, 4, 4)] // a past season, stored into its playoffs
+        [InlineData(true, 19, 18, 18, 18)] // the NFL state moves past the season
+        [InlineData(true, 0, 0, 18, 0)] // preseason: no week
+        public void The_matchup_week_is_the_current_week_held_to_the_last_counted_week(
+            bool isCurrent, int currentWeek, int finalThroughWeek, int cutoff, int expected)
+        {
+            var weeks = Enumerable.Range(1, Math.Max(currentWeek, 1)).Select(_ => (10m, 11m, true)).ToArray();
+            var current = Snapshot([Team(1, "One", weeks)], currentWeek: currentWeek, finalThroughWeek: finalThroughWeek, cutoff: cutoff);
+            var snapshot = current with { IsCurrent = isCurrent };
+
+            snapshot.MatchupWeek.Should().Be(expected);
+        }
+
+        [Fact]
+        public void Head_to_head_carries_the_live_week_s_games_with_their_live_points()
+        {
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                TeamInGames(1, "One", (100m, 1, true), (41.2m, 2, false)),
+                TeamInGames(2, "Two", (90m, 1, true), (96.4m, 2, false)),
+                TeamInGames(3, "Three", (80m, 2, true), (12m, 1, false)),
+                TeamInGames(4, "Four", (70m, 2, true), (0m, 1, false)),
+            ], currentWeek: 2, finalThroughWeek: 1, format: LeagueFormat.HeadToHead), AsOf);
+
+            payload.Matchups.Should().BeEquivalentTo(
+                new MatchupsPayload(2, false, [
+                    new GamePayload(1, [new(3, "Three", 12m), new(4, "Four", 0m)]),
+                    new GamePayload(2, [new(1, "One", 41.2m), new(2, "Two", 96.4m)]),
+                ]),
+                o => o.WithStrictOrdering());
+        }
+
+        [Fact]
+        public void Head_to_head_carries_a_settled_week_as_final()
+        {
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                TeamInGames(1, "One", (100m, 1, true)),
+                TeamInGames(2, "Two", (90m, 1, true)),
+            ], currentWeek: 2, finalThroughWeek: 1, cutoff: 1, format: LeagueFormat.HeadToHead), AsOf);
+
+            payload.Matchups!.Week.Should().Be(1);
+            payload.Matchups.IsFinal.Should().BeTrue();
+        }
+
+        [Fact]
+        public void A_game_against_the_placeholder_carries_its_name()
+        {
+            // A1: the placeholder has no table row, so its side of the card needs a name of its own
+            var placeholder = TeamInGames(9, "Placeholder", (60m, 1, false));
+            var snapshot = Snapshot([TeamInGames(1, "One", (50m, 1, false))], currentWeek: 1, finalThroughWeek: 0, format: LeagueFormat.HeadToHead);
+            snapshot = snapshot with { ExcludedTeams = [placeholder] };
+
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Matchups!.Games.Should().ContainSingle()
+                .Which.Teams.Should().Equal(new MatchupTeamPayload(1, "One", 50m), new MatchupTeamPayload(9, "Placeholder", 60m));
+        }
+
+        [Fact]
+        public void A_week_of_byes_has_no_matchups()
+        {
+            // an unscheduled week is stored as all byes (A41): no panel, never an empty one
+            var payload = SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                TeamInGames(1, "One", (10m, 0, false)),
+                TeamInGames(2, "Two", (12m, 0, false)),
+            ], currentWeek: 1, finalThroughWeek: 0, format: LeagueFormat.HeadToHead), AsOf);
+
+            payload.Matchups.Should().BeNull();
+        }
+
+        [Fact]
+        public void The_preseason_has_no_matchups() =>
+            // week 1's games are already scheduled, but week 0 is chosen
+            SeasonPayloadMapper.ToSeasonPayload(Snapshot([
+                TeamInGames(1, "One", (0m, 1, false)),
+                TeamInGames(2, "Two", (0m, 1, false)),
+            ], currentWeek: 0, finalThroughWeek: 0, format: LeagueFormat.HeadToHead), AsOf).Matchups.Should().BeNull();
+
+        [Fact]
+        public void A_past_season_stored_before_matchups_were_read_has_no_matchups_but_keeps_its_table()
+        {
+            var payload = SeasonPayloadMapper.ToSeasonPayload(
+                Snapshot([
+                    Team(1, "One", (10m, 11m, true), (20m, 21m, true)),
+                    Team(2, "Two", (12m, 13m, true), (22m, 23m, true)),
+                ], currentWeek: 2, finalThroughWeek: 2, format: LeagueFormat.HeadToHead) with
+                { IsCurrent = false },
+                AsOf);
+
+            payload.Matchups.Should().BeNull();
+            payload.Teams.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public void A_total_points_payload_never_carries_matchups()
+        {
+            // A38, A41: the chosen week pairs, so only the format keeps the games out
+            var snapshot = Snapshot([
+                TeamInGames(1, "One", (10m, 1, true), (20m, 1, false)),
+                TeamInGames(2, "Two", (12m, 1, true), (22m, 1, false)),
+            ], currentWeek: 2, finalThroughWeek: 1);
+            SeasonPayloadMapper.ToSeasonPayload(snapshot with { Format = LeagueFormat.HeadToHead }, AsOf).Matchups
+                .Should().NotBeNull("the test needs games that could leak");
+
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf);
+
+            payload.Matchups.Should().BeNull();
+            JsonSerializer.Serialize(payload, JsonSerializerOptions.Web).Should().NotContainEquivalentOf("matchups");
         }
 
         [Fact]

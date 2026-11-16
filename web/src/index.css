@@ -297,6 +297,63 @@ td.is-sorted {
   font-weight: var(--weight-medium);
 }
 
+/* matchups */
+.matchups {
+  list-style: none;
+  margin: var(--space-6) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-4);
+}
+
+.matchup {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* swatch, name, points, status: the name wraps rather than pushing the points off a phone */
+.matchup-side {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 4.5rem;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.matchup-side + .matchup-side {
+  border-top: 1px solid var(--rule-soft);
+}
+
+/* a roster with no table row has no colour: the empty swatch keeps the names aligned */
+.matchup-side .swatch {
+  background: var(--swatch, transparent);
+}
+
+.matchup-points {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.matchup-status {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* the winner in weight as well as words, never in colour alone */
+.matchup-side.is-winner {
+  font-weight: var(--weight-medium);
+}
+
+.matchup-side.is-winner .matchup-status {
+  color: var(--fg);
+}
+
 /* consistency: the range mark takes the spare width, not the team name */
 .consistency th:first-child,
 .consistency td:first-child {
@@ -387,10 +444,13 @@ td.is-sorted {
   background: var(--bg-subtle);
 }
 
-.chip .swatch {
+.swatch {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+}
+
+.chip .swatch {
   border: 2px solid var(--chip);
   background: transparent;
 }

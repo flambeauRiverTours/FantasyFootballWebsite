@@ -11,6 +11,7 @@ import {
   hasTies,
   isZoomed,
   latestExtremes,
+  matchupStatus,
   parseWeekRange,
   perWeek,
   pointsIn,
@@ -30,6 +31,7 @@ import {
   weeklyMedians,
 } from '../src/api/calculations';
 import { headToHead, payload } from './fixture';
+import type { GamePayload } from '../src/api/types';
 
 function weeks(...rows: [number, number, number, boolean][]): WeekPayload[] {
   return rows.map(([week, actual, ideal, isFinal]) => ({ week, actual, ideal, isFinal }));
@@ -416,5 +418,35 @@ describe('week ranges (T66)', () => {
   it('keeps the points inside a range', () => {
     const points = [1, 2, 3, 4].map((week) => ({ week, value: week }));
     expect(pointsIn(points, [2, 3]).map((p) => p.week)).toEqual([2, 3]);
+  });
+});
+
+describe('matchupStatus', () => {
+  const game = (a: number, b: number): GamePayload => ({
+    matchupId: 1,
+    teams: [
+      { rosterId: 1, name: 'Alpha', actual: a },
+      { rosterId: 2, name: 'Bravo', actual: b },
+    ],
+  });
+
+  it('marks the side ahead as leading while the week plays', () => {
+    expect(matchupStatus(game(41.2, 96.4), false)).toEqual([null, 'Leading']);
+  });
+
+  it('marks both sides level on equal live scores', () => {
+    expect(matchupStatus(game(50, 50), false)).toEqual(['Level', 'Level']);
+  });
+
+  it('says nothing before kick-off', () => {
+    expect(matchupStatus(game(0, 0), false)).toEqual([null, null]);
+  });
+
+  it('marks the winner only once the week is final', () => {
+    expect(matchupStatus(game(96.4, 41.2), true)).toEqual(['Won', null]);
+  });
+
+  it('marks both sides of a settled tie', () => {
+    expect(matchupStatus(game(0, 0), true)).toEqual(['Tied', 'Tied']);
   });
 });

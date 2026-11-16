@@ -25,13 +25,8 @@
         public static IReadOnlyDictionary<int, TeamRecord>? Records(IEnumerable<TeamWeek> weeks, int lastWeek, bool hasMedianGame)
         {
             var counted = weeks.Where(w => w.IsFinal && w.Week <= lastWeek).ToList();
-            if (counted.Any(w => w.MatchupId is null))
-            {
-                return null;
-            }
-
-            var games = counted.Where(w => w.MatchupId > 0).GroupBy(w => (w.Week, w.MatchupId)).ToList();
-            if (games.Any(g => g.Count() != 2))
+            var games = Games(counted);
+            if (games is null)
             {
                 return null;
             }
@@ -42,9 +37,8 @@
                 tally[w.RosterId].Score(w.ActualPts);
             }
 
-            foreach (var game in games)
+            foreach (var (a, b) in games)
             {
-                var (a, b) = (game.First(), game.Last());
                 tally[a.RosterId].Add(a.ActualPts, b.ActualPts);
                 tally[b.RosterId].Add(b.ActualPts, a.ActualPts);
             }
@@ -62,6 +56,31 @@
             }
 
             return tally.ToDictionary(t => t.Key, t => t.Value.ToRecord());
+        }
+
+        /// <summary>
+        /// Pairs the weeks into games: the one rule both the records and the matchups panel use (T71).
+        /// </summary>
+        /// <param name="weeks">The weeks to pair, the excluded rosters' included.</param>
+        /// <returns>
+        /// Each game's two sides, by week then matchup id, sides in roster id order so a
+        /// change of lead never reorders them; or null when a week has no matchup id, or
+        /// a game does not pair exactly two rosters. A bye (matchup 0) is no game.
+        /// </returns>
+        public static IReadOnlyList<(TeamWeek First, TeamWeek Second)>? Games(IEnumerable<TeamWeek> weeks)
+        {
+            var list = weeks.ToList();
+            if (list.Any(w => w.MatchupId is null))
+            {
+                return null;
+            }
+
+            var games = list.Where(w => w.MatchupId > 0)
+                .GroupBy(w => (w.Week, w.MatchupId))
+                .OrderBy(g => g.Key)
+                .Select(g => g.OrderBy(w => w.RosterId).ToList())
+                .ToList();
+            return games.Any(g => g.Count != 2) ? null : [.. games.Select(g => (g[0], g[1]))];
         }
 
         /// <summary>

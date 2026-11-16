@@ -17,6 +17,10 @@ namespace FantasyLeague.Seasons
     /// <param name="Teams">One entry per scoring roster.</param>
     /// <param name="LastRegularWeek">The last week that counts (A37). Once <paramref name="FinalThroughWeek"/> reaches it the season is complete.</param>
     /// <param name="Format">How the league decides its winner (A38).</param>
+    /// <param name="Matchups">
+    /// The games of <see cref="SeasonSnapshot.MatchupWeek"/>, in <see cref="LeagueFormat.HeadToHead"/>
+    /// only and only when that week has games (T71, A41). Left out of the body otherwise.
+    /// </param>
     public sealed record SeasonPayload(
         string LeagueName,
         int Season,
@@ -28,7 +32,39 @@ namespace FantasyLeague.Seasons
         IReadOnlyDictionary<string, decimal> LeagueSlotAverages,
         IReadOnlyList<TeamPayload> Teams,
         int LastRegularWeek,
-        LeagueFormat Format);
+        LeagueFormat Format,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MatchupsPayload? Matchups = null);
+
+    /// <summary>
+    /// One week's games (T71).
+    /// </summary>
+    /// <param name="Week">The current week, held to the last counted week (A41).</param>
+    /// <param name="IsFinal">Whether that week is settled; until then the points are live.</param>
+    /// <param name="Games">Each game, in matchup id order.</param>
+    public sealed record MatchupsPayload(
+        int Week,
+        bool IsFinal,
+        IReadOnlyList<GamePayload> Games);
+
+    /// <summary>
+    /// One game, never a bye: a game always has two sides.
+    /// </summary>
+    /// <param name="MatchupId">Sleeper's id for the game, unique within the week.</param>
+    /// <param name="Teams">Its two sides, in roster id order, so they never swap between polls.</param>
+    public sealed record GamePayload(
+        int MatchupId,
+        IReadOnlyList<MatchupTeamPayload> Teams);
+
+    /// <summary>
+    /// One side of a game. The placeholder's side carries its name, since it has no table row (A1).
+    /// </summary>
+    /// <param name="RosterId">Matches a team's <see cref="TeamPayload.RosterId"/>; the placeholder's matches none (A1).</param>
+    /// <param name="Name">The team name, carried because the placeholder has no table row.</param>
+    /// <param name="Actual">What it has scored that week so far.</param>
+    public sealed record MatchupTeamPayload(
+        int RosterId,
+        string Name,
+        decimal Actual);
 
     /// <summary>
     /// One roster's season.

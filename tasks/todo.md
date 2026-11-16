@@ -37,16 +37,88 @@ branch; T69–T72 planned. One T61 check left.
       head-to-head, playoffs" for leagues configured that way. T64, T66, T67 and T68 are merged
       (Done table). Next: T73 (cleanup) → T71 → T72 → T69 → T70.
   - [ ] **T71** This week's matchups, H2H only — 3 h `±`. Current week only (Q13): no week
-       picker and no past results beyond the table's W-L.
-    1. Payload `matchups`: the current week's games, `[{ matchupId, teams: [{ rosterId, name,
-       points, isFinal }] }]`, paired on T68's matchup id. The current week is the live one, or
-       the last counted week once the season is complete. A game against an excluded roster is
-       shown with its name (it has no table row). A bye has no game. Null in `TotalPoints`.
-    2. A Matchups panel under the table: one card per game, the two scores, the leader marked
-       once the week is final and "leading" before then, polling with the rest of the page.
-       In the playoffs it gives way to the bracket (T69), which shows the same games.
-    3. Tests: an invented week with a bye, a game against the placeholder, a live and a final
-       week; axe.
+       picker and no past results beyond the table's W-L. Designed and reviewed 2026-11-16.
+       Gated like T68b: nothing shows until T72 lifts `League:Format`, and the `TotalPoints` body
+       and ETag stay byte for byte as they are.
+    1. **Which week: `SeasonSnapshot.MatchupWeek => Math.Min(CurrentWeek, LastCountedWeek)`.**
+       - Regular season: `LastCountedWeek` is the cut-off until the season is complete, so the
+         live week is chosen.
+       - Complete, or in the playoffs before T69: the last counted week, final.
+       - Past season: `CurrentWeek` is the last stored week, possibly a playoff week, so the
+         trimmed last counted week is chosen.
+       - The NFL state going back (`CurrentWeek` ≥ 19): the last counted week.
+       - Preseason (`CurrentWeek` 0) gives no week, so no matchups.
+    2. **One pairing rule, in Core: `HeadToHead.Games(weeks)`** returns each game as its two
+       `TeamWeek`s, ordered by week, then matchup id, sides in roster id order (stable between
+       polls, so a change of lead never swaps the rows). Byes (0) are not games. **Null when a
+       week has a null id or a game that does not pair two rosters.** `Records` calls it, so a
+       game can never count in the record yet be missing from the panel, or the reverse.
+       Refactored under the existing HeadToHead tests, run before and after.
+    3. **Payload (Seasons).** `SeasonPayload` gains a last parameter
+       `[property: JsonIgnore(Condition = WhenWritingNull)] MatchupsPayload? Matchups = null`:
+       ```jsonc
+       "matchups": {                  // HeadToHead only; absent otherwise
+         "week": 11, "isFinal": false,
+         "games": [{ "matchupId": 1, "teams": [
+           { "rosterId": 3, "name": "…", "actual": 96.4 },
+           { "rosterId": 5, "name": "…", "actual": 41.2 } ] }]
+       }
+       ```
+       - The mapper takes `MatchupWeek`'s rows from `Teams` and `ExcludedTeams`, calls
+         `HeadToHead.Games`, and adds names. The placeholder's side carries its name, since it has
+         no table row (A1); its points are shown as scored and count in nothing new.
+       - `actual`, as every score in the payload is named. `isFinal` is the week's:
+         `week <= FinalThroughWeek`. Points are the live score while the week plays (R1 governs
+         what counts, not what shows).
+       - **Null, so absent, when there is no week, `Games` is null, or the week has no game.**
+         `SeasonService` stores a missing id as 0, a bye (`MatchupId ?? 0`), so a week Sleeper has
+         not scheduled reads as all byes; no game means no panel, never an empty one. This also
+         covers a league with no playoffs whose cut-off (18) is past its last scheduled week. If
+         Sleeper does schedule that week, it shows as a real week (accepted; the chart shows it too).
+    4. **The median game is not a card.** The record counts it (A39) and the table shows the
+       result. A median line on the panel is left for later.
+    5. **Web.**
+       - `types.ts`: `matchups?: MatchupsPayload`. A missing field means no panel.
+       - **A Matchups panel** right under Standings: "Week 11 matchups" while live, "Week 14
+         results" once final, so a playoff week's masthead ("Week 15") does not look wrong.
+       - **One card per game** in a `<ul role="list">` (Safari drops list semantics on
+         `list-style: none`), stacked on phones, two or three across when wide. Each card holds
+         two lines, read as written: swatch (`aria-hidden`), name, points, status.
+         - **Status as text** from `matchupStatus(game, isFinal)` in calculations.ts: final
+           "Won" or "Tied" on the winner's line; live "Leading" or "Level"; nothing while both are
+           0.0 before kick-off. The winner's line is also emphasised, never by colour alone.
+         - The placeholder has no swatch (`teamColours` is keyed by `payload.teams`); an empty
+           spacer of the same width keeps the names aligned.
+         - Points in one decimal with tabular figures (the `td` rule does not reach cards). Long
+           names wrap at 375 px; nothing scrolls sideways.
+         - No `aria-live`: the 30 s poll must announce nothing.
+       - Polls with the page; nothing new to fetch; no motion. Panels are a screen tall (`.panel`
+         `min-height: 100svh`), so two or three cards fill one: accepted, said in §10.
+       - The Skeleton is unchanged (it cannot know the format).
+    6. **T69 interplay.** The bracket replaces this panel from `playoff_week_start` on; until then
+       a playoff week shows the last regular week, final. Recorded in T69.
+    7. **Tests, red first.**
+       - Core: `HeadToHead.Games`: order, sides, a bye left out, a null id and a game of three
+         (null); `Records` unchanged on the captured season.
+       - Seasons: `MatchupWeek` mid-season, after the cut-off in a current-season playoff week
+         (cut-off, final), a past season, the state going back, preseason (none).
+       - Mapper: a game against the placeholder (name carried); a live week (`isFinal` false,
+         live points); a final week; every id 0 (absent); week 0 (absent); a past season whose
+         week has a null id (absent, the table still there). **`TotalPoints`: a new test whose
+         chosen week does pair** (asserted, as the A1 test does for `Records`), with no
+         `matchups` key in either serializer; the pinned-ETag test is left as it is.
+       - Web: `matchupStatus` (leading, level, before kick-off, won, tied); the panel: one card
+         per game, titles live and final, no swatch for an unlisted roster, "Won" only once final,
+         new games between polls; absent in `TotalPoints`; axe on the `HeadToHead` page, whose
+         fixture gains a game against an unlisted roster.
+       - The layout verifier at 375 px, 360 px and desktop against the invented season, which
+         gains a week of games.
+    8. **Docs.** A41: the week chosen, one pairing rule, the placeholder's side, null rather than
+       empty or partial, no median card, the no-playoffs week. A1–A41 in CLAUDE.md, design.md and
+       amendments.md. Design §09 the field and its example body, §10 the panel.
+       `.claude/agents/api-contract.md`: `matchups` optional, absent in `TotalPoints`. Runbook:
+       nothing. New `.cs` files CRLF with a BOM; the `Matchups` mapping private, tested
+       through `ToSeasonPayload`.
   - [ ] **T72** Division standings, H2H only (Q14) — 4 h `±`.
     1. Capture first: the script already keeps `divisions` and each roster's `division`; add
        the league's `metadata.division_N` names (names only; no ids). No league with divisions
@@ -75,6 +147,8 @@ branch; T69–T72 planned. One T61 check left.
        over the round's weeks and a winner shown only when all of them are final (R1). No
        seeds (Sleeper's bracket has none; Q11). The losers bracket is out of scope.
     3. A Playoffs panel, a round per column, connected by `from`; a stacked list on phones.
+       From `playoff_week_start` on it replaces T71's matchups panel, which until then shows the
+       last regular week.
     4. Tests: an invented bracket for each `playoff_round_type`, placement games and a bye.
   - [ ] **T70** The champion — 2 h `±`. A server-side `champion` (roster id or null):
        `TotalPoints`: the points leader once every regular-season week is final (ties crown
