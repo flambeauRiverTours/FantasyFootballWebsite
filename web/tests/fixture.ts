@@ -50,4 +50,25 @@ export const headToHead: SeasonPayload = {
       record: { wins: 3, losses: 1, ties: 0, pointsFor: 250.7, pointsAgainst: 280.9 },
     },
   ],
+  // week 3 is live; Charlie plays roster 9, which has no table row (A1)
+  matchups: {
+    week: 3,
+    isFinal: false,
+    games: [
+      {
+        matchupId: 1,
+        teams: [
+          { rosterId: 1, name: 'Alpha', actual: 96.4 },
+          { rosterId: 2, name: 'Bravo', actual: 41.2 },
+        ],
+      },
+      {
+        matchupId: 2,
+        teams: [
+          { rosterId: 3, name: 'Charlie', actual: 50 },
+          { rosterId: 9, name: 'Placeholder', actual: 50 },
+        ],
+      },
+    ],
+  },
 };

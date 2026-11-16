@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A40. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A41. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
@@ -262,7 +262,13 @@ ETag: W/"2026-wk7-…"
         "pointsFor": 766.46, "pointsAgainst": 701.12   // settled weeks only
       }
     }
-  ]
+  ],
+  "matchups": {                   // HeadToHead only, when the week has games (A41)
+    "week": 7, "isFinal": false,  // the current week, held to the last counted week
+    "games": [{ "matchupId": 1, "teams": [
+      { "rosterId": 3, "name": "Bijan Mustard", "actual": 46.20 },
+      { "rosterId": 5, "name": "…", "actual": 38.10 } ] }]
+  }
 }
 
 GET /api/seasons          (cached a day, with an ETag)
@@ -311,6 +317,10 @@ Subtracting the league's weekly median doesn't change any ranking, but it remove
 #### The table comes first
 
 The standings table works with no interaction: tabular figures, the sorted column marked, and, in `TotalPoints`, the gap to first shown. In `HeadToHead` it is Team · Record · PF · PA · Ideal, ranked by win rate (a tie as half a win), then points for, then name, with PF, PA and Ideal over settled weeks only (A39). A record reads "13-5", or "13-5-1" on every row once any team has a tie. Until every record is known, the points table stands in, with a line saying why. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
+
+#### This week's matchups
+
+Under the table, a head-to-head league gets one week's games, a card per game: "Week 7 matchups" while live, "Week 7 results" once final. Each side is a line of text, name, points and status ("Leading", "Won"), with the winner also in a heavier weight. Panels are a screen tall, so a few cards fill one; accepted (A41).
 
 #### Motion
 

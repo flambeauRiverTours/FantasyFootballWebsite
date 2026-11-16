@@ -89,5 +89,29 @@ namespace FantasyLeague.Core.Tests
         public void A_game_that_does_not_pair_two_rosters_leaves_every_record_unknown() =>
             HeadToHead.Records([Week(1, 1, 100m, 1), Week(2, 1, 90m, 1), Week(3, 1, 80m, 1)], 18, hasMedianGame: false)
                 .Should().BeNull();
+
+        [Fact]
+        public void Games_come_by_week_then_matchup_with_each_game_s_sides_in_roster_order()
+        {
+            // stable between polls, so a change of lead never swaps a card's rows (T71)
+            var games = HeadToHead.Games([
+                Week(4, 2, 10m, 1), Week(2, 2, 20m, 1),
+                Week(3, 1, 30m, 2), Week(1, 1, 40m, 2),
+                Week(4, 1, 50m, 1), Week(2, 1, 60m, 1),
+            ])!;
+
+            games.Select(g => (g.First.Week, g.First.MatchupId, g.First.RosterId, g.Second.RosterId))
+                .Should().Equal((1, 1, 2, 4), (1, 2, 1, 3), (2, 1, 2, 4));
+        }
+
+        [Fact]
+        public void A_bye_is_not_a_game() =>
+            HeadToHead.Games([Week(1, 1, 100m, 1), Week(2, 1, 90m, 1), Week(3, 1, 80m, 0)])!
+                .Select(g => (g.First.RosterId, g.Second.RosterId)).Should().Equal((1, 2));
+
+        [Fact]
+        public void A_week_with_no_game_has_none() =>
+            // an unscheduled week is stored as all byes: no games, never an error
+            HeadToHead.Games([Week(1, 18, 0m, 0), Week(2, 18, 0m, 0)]).Should().NotBeNull().And.BeEmpty();
     }
 }

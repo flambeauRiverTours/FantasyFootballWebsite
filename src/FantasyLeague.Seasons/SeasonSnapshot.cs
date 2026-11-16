@@ -56,6 +56,13 @@ namespace FantasyLeague.Seasons
             Teams.SelectMany(t => t.Weeks));
 
         /// <summary>
+        /// Gets the week the matchups panel shows (T71, A41): the current week, held to the last
+        /// week that counts, so a playoff week or a past season shows its last regular week.
+        /// Zero in the preseason, which has no games.
+        /// </summary>
+        public int MatchupWeek => Math.Min(CurrentWeek, LastCountedWeek);
+
+        /// <summary>
         /// Gets every roster's head-to-head record, the placeholder's included, or null while a
         /// counted week lacks its games (T68). Built in both formats, so the check runs on every league.
         /// The placeholder's own record is here for the check; nothing may show it (A1).

@@ -2,6 +2,7 @@ import { median } from 'd3-array';
 import { hasConsistency } from './types';
 import type {
   ConsistentTotals,
+  GamePayload,
   SeasonPayload,
   TeamPayload,
   TeamRecord,
@@ -214,6 +215,27 @@ function counted(n: number, one: string, many: string): string {
 export function recordSpoken({ wins, losses, ties }: TeamRecord, showTies: boolean): string {
   const parts = [counted(wins, 'win', 'wins'), counted(losses, 'loss', 'losses')];
   return (showTies ? [...parts, counted(ties, 'tie', 'ties')] : parts).join(', ');
+}
+
+/** What a matchup card says beside a side's points: a result once final, the state of play before. */
+export type MatchupStatus = 'Won' | 'Tied' | 'Leading' | 'Level' | null;
+
+/**
+ * Each side's status, in the game's side order (T71). Live: "Leading" or "Level",
+ * but nothing before kick-off, while both are 0. Final: "Won", or "Tied" on both.
+ */
+export function matchupStatus(
+  { teams: [a, b] }: GamePayload,
+  isFinal: boolean,
+): [MatchupStatus, MatchupStatus] {
+  if (!isFinal && a.actual === 0 && b.actual === 0) {
+    return [null, null];
+  }
+  const [ahead, level] = isFinal ? (['Won', 'Tied'] as const) : (['Leading', 'Level'] as const);
+  if (a.actual === b.actual) {
+    return [level, level];
+  }
+  return a.actual > b.actual ? [ahead, null] : [null, ahead];
 }
 
 /** The standings table: teams as the league ranks them, each with its gap to the points leader. */

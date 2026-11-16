@@ -33,6 +33,9 @@ actually returns.
 - `record` on a team (A39) is optional. It is absent in `TotalPoints`, and in
   `HeadToHead` until every counted week has its games; then every team has one.
   One team with it and another without is a finding.
+- `matchups` (A41) is optional. It is absent in `TotalPoints`, in the preseason, and
+  for a week with no games; when present, `games` is never empty and every game
+  has exactly two teams.
 
 ## Why this matters
 

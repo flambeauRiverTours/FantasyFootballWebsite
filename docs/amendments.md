@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A40 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A41 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -310,6 +310,18 @@ Found in the same logs:
   - **Sign-in:** `Active Directory Default` probes managed identity before the Azure CLI. On AWS the metadata service answers 401 rather than not answering, which ends the chain before the `azure/login` session is tried. `AZURE_TOKEN_CREDENTIALS: dev` restricts it to developer credentials, so managed identity is never tried (T73).
   - **Firewall:** the SQL server admits Azure-hosted clients only (`AllowAllWindowsAzureIps`), so an AWS address is refused (error 40615). This reverses A31's third bullet: the migrate job opens a rule for the runner's own IPv4 address, named for the run and attempt, and removes it afterwards, even when the migration fails.
 - **The rule needs no new permission.** The deploy identity's Contributor role on the resource group covers firewall rules. A rule left behind by a cancelled run is harmless and named for the run that made it.
+
+## A41 · This week's matchups
+
+2026-11-16. T71: a head-to-head league's games for one week, under the standings. Gated with T68b until T72 lifts `League:Format`.
+
+- **One week, chosen by the server.** `MatchupWeek` is the current week, held to the last counted week (A37): the live week in the regular season, the last regular week once the season is complete, during the playoffs, or for a past season. The preseason (week 0) has none. No week picker (Q13): past weeks show only in the table's W-L.
+- **One pairing rule.** `HeadToHead.Games` pairs both the records and the panel, so a game cannot count in a record yet be missing from the panel, or the reverse. Games come by week then matchup id, each game's sides by roster id, so a change of lead never swaps a card's lines between polls.
+- **The placeholder's side carries its name,** because it has no table row to take one from (A1). Its points show as scored and count in nothing new; it has no team colour, so its card has an empty swatch.
+- **Null rather than empty or partial.** `matchups` is absent in `TotalPoints`, in the preseason, for a week stored before matchups were read, and for a week with no game. The last case matters because a missing `matchup_id` is stored as 0, a bye, so a week Sleeper has not scheduled reads as all byes. For a league with no playoffs this covers a cut-off (18) past its last scheduled week; a week Sleeper does schedule shows as a real one, as the chart shows it. A test pins that a `TotalPoints` body with games in its chosen week still carries no `matchups` key.
+- **Live points while the week plays.** R1 governs what counts, not what shows; the title says "matchups" while live and "results" once final, so a final week is never shown as current.
+- **Readable without colour or announcements.** Each side is one line of text, name, points and status: "Leading" or "Level" live, "Won" or "Tied" once final, nothing before kick-off. The winner is also in a heavier weight. No `aria-live`, so the 30 s poll announces nothing, and no motion.
+- **The median game is not a card.** The record counts it (A39) and the table shows the result; a median line on the panel is left for later.
 
 ## What the original design got wrong
 

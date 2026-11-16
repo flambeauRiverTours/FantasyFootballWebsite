@@ -49,6 +49,7 @@ describe('The page', () => {
     serveApi(headToHead);
     const shown = render(<App />);
     await screen.findByRole('columnheader', { name: 'Record' });
+    await screen.findByRole('region', { name: 'Week 3 matchups' });
     expect(await violations(shown.container)).toEqual([]);
     shown.unmount();
     vi.restoreAllMocks();

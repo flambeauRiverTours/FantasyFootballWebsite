@@ -5,6 +5,7 @@ import StandingsPanel from './components/StandingsPanel';
 import ChartPanel from './components/ChartPanel';
 import RadarPanel from './components/RadarPanel';
 import ConsistencyPanel from './components/ConsistencyPanel';
+import MatchupsPanel from './components/MatchupsPanel';
 import { consistencyRows } from './api/calculations';
 import { useRelativeTime } from './hooks/useRelativeTime';
 import { useElapsedSince } from './hooks/useElapsedSince';
@@ -75,6 +76,9 @@ export default function App() {
 
             <main className="panels">
               <StandingsPanel payload={payload} />
+              {payload.matchups ? (
+                <MatchupsPanel payload={payload} matchups={payload.matchups} />
+              ) : null}
               {consistency.length > 0 ? (
                 <ConsistencyPanel payload={payload} rows={consistency} />
               ) : null}
