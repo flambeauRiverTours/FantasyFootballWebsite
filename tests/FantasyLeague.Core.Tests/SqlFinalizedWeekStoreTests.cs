@@ -1,34 +1,17 @@
 ﻿using FantasyLeague.Data;
 using FantasyLeague.Data.Model;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FantasyLeague.Core.Tests
 {
-    internal sealed class InMemoryContextFactory(string name) : IDbContextFactory<FantasyDataContext>
-    {
-        public FantasyDataContext CreateDbContext() =>
-            new(new DbContextOptionsBuilder<FantasyDataContext>()
-                .UseInMemoryDatabase(name)
-                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                .Options);
-    }
-
-    internal sealed class BrokenContextFactory(Exception? error = null) : IDbContextFactory<FantasyDataContext>
-    {
-        public FantasyDataContext CreateDbContext() =>
-            throw error ?? new InvalidOperationException("no database");
-    }
-
     public class SqlFinalizedWeekStoreTests
     {
         private const string League = "L1";
 
         private static SqlFinalizedWeekStore Store() =>
-            new(new InMemoryContextFactory(Guid.NewGuid().ToString()), TimeProvider.System,
+            new(new InMemoryContextFactory(), TimeProvider.System,
                 NullLogger<SqlFinalizedWeekStore>.Instance);
 
         private static TeamWeek Week(
@@ -136,7 +119,7 @@ namespace FantasyLeague.Core.Tests
 
         private static async Task<SqlFinalizedWeekStore> StoreHoldingAsync(WeekScore row)
         {
-            var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());
+            var factory = new InMemoryContextFactory();
             await using (var db = factory.CreateDbContext())
             {
                 db.WeekScores.Add(row);
@@ -283,7 +266,7 @@ namespace FantasyLeague.Core.Tests
             // an empty answer here would be cached as if the season had no weeks;
             // the cached store decides what a failure means
             var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(new RetryLimitExceededException("still paused", new TimeoutException())),
+                new InMemoryContextFactory { Failure = new RetryLimitExceededException("still paused", new TimeoutException()) },
                 TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
             await store.Invoking(s => s.ReadAsync(League, 2026, default))
@@ -294,7 +277,7 @@ namespace FantasyLeague.Core.Tests
         public async Task A_non_transient_read_failure_throws_rather_than_falling_back()
         {
             var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(new InvalidOperationException("Invalid column name")),
+                new InMemoryContextFactory { Failure = new InvalidOperationException("Invalid column name") },
                 TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
             await store.Invoking(s => s.ReadAsync(League, 2026, default))
@@ -306,7 +289,7 @@ namespace FantasyLeague.Core.Tests
         {
             // a swallowed write means a finalized week is absent forever
             var store = new SqlFinalizedWeekStore(
-                new BrokenContextFactory(), TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
+                new InMemoryContextFactory { Failure = new InvalidOperationException("no database") }, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
 
             await store.Invoking(s => s.WriteAsync(League, 2026, [Week()], default))
                 .Should().ThrowAsync<InvalidOperationException>();

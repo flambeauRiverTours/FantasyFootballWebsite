@@ -1,6 +1,7 @@
 import { m } from 'motion/react';
 import { hasRecords, hasTies, standings } from '../api/calculations';
 import type { SeasonPayload } from '../api/types';
+import { RowSlide } from './motion';
 import Panel from './Panel';
 import StandingsHead from './StandingsHead';
 import { columnClass, standingsColumns } from './standingsColumns';
@@ -32,11 +33,7 @@ export default function StandingsPanel({ payload }: StandingsPanelProps) {
               <StandingsHead columns={columns} />
               <tbody>
                 {rows.map((row) => (
-                  <m.tr
-                    layout
-                    key={row.team.rosterId}
-                    transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-                  >
+                  <m.tr layout key={row.team.rosterId} transition={RowSlide}>
                     {columns.map((column) => (
                       <td key={column.key} className={columnClass(column)}>
                         {column.cell(row)}

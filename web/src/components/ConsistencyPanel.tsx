@@ -5,6 +5,7 @@ import type { ConsistencyRow } from '../api/calculations';
 import { teamColours } from '../api/teamColours';
 import type { ConsistentTotals, SeasonPayload } from '../api/types';
 import type { LinearScale } from './drawing';
+import { RowSlide } from './motion';
 import Panel from './Panel';
 
 interface ConsistencyPanelProps {
@@ -39,11 +40,7 @@ export default function ConsistencyPanel({ payload, rows }: ConsistencyPanelProp
           </thead>
           <tbody>
             {rows.map(({ team, totals }) => (
-              <m.tr
-                layout
-                key={team.rosterId}
-                transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-              >
+              <m.tr layout key={team.rosterId} transition={RowSlide}>
                 <td>{team.name}</td>
                 <td className="col-mark">
                   <RangeMark

@@ -6,7 +6,7 @@ import type { SeasonPayload } from '../api/types';
 
 const PollIntervalMs = 30_000;
 
-export interface SeasonState {
+interface SeasonState {
   payload: SeasonPayload | null;
   error: Error | null;
   /** True only until the first response; a poll never returns the page to a spinner. */

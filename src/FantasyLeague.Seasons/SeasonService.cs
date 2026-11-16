@@ -177,21 +177,7 @@ namespace FantasyLeague.Seasons
             var excluded = ResolveExclusions(league, configured, season);
             var lastWeek = weeks.Max(w => w.Week);
 
-            return new SeasonSnapshot(
-                string.IsNullOrWhiteSpace(configured.OverrideLeagueName) ? league.Name : configured.OverrideLeagueName,
-                season,
-                lastWeek,
-                lastWeek,
-                league.Slots,
-                GroupTeams(weeks, league.Teams, id => !excluded.Contains(id)),
-                [],
-                [],
-                IsCurrent: false,
-                RegularSeason.LastWeek(league.PlayoffWeekStart),
-                configured.Format,
-                GroupTeams(weeks, league.Teams, excluded.Contains),
-                league.HasMedianGame,
-                []);
+            return Assemble(league, configured, excluded, weeks, season, lastWeek, lastWeek, isCurrent: false);
         }
 
         /// <summary>
@@ -219,24 +205,53 @@ namespace FantasyLeague.Seasons
             // debug: under load this runs every 5 s, and App Insights already times each request
             logger.LogDebug("Built season snapshot in {ElapsedMilliseconds}ms.", (long)time.GetElapsedTime(started).TotalMilliseconds);
 
-            var snapshot = new SeasonSnapshot(
-                string.IsNullOrWhiteSpace(configured.OverrideLeagueName) ? league.Name : configured.OverrideLeagueName,
-                state.Season,
-                weeks.CurrentWeek,
-                WeekFinality.FinalThroughWeek(weeks.CurrentWeek),
-                league.Slots,
-                GroupTeams(weeks.TeamWeeks, league.Teams, id => !excluded.Contains(id)),
-                [.. weeks.Unresolved.Distinct()],
-                weeks.Violations,
-                IsCurrent: true,
-                RegularSeason.LastWeek(league.PlayoffWeekStart),
-                configured.Format,
-                GroupTeams(weeks.TeamWeeks, league.Teams, excluded.Contains),
-                league.HasMedianGame,
-                []);
+            var snapshot = Assemble(
+                league, configured, excluded, weeks.TeamWeeks, state.Season,
+                weeks.CurrentWeek, WeekFinality.FinalThroughWeek(weeks.CurrentWeek), isCurrent: true) with
+            {
+                UnresolvedPlayerIds = [.. weeks.Unresolved.Distinct()],
+                Violations = weeks.Violations,
+            };
 
             return snapshot with { RecordMismatches = RecordMismatch.Find(snapshot.Records, league.Teams) };
         }
+
+        /// <summary>
+        /// Builds a season's snapshot, the excluded rosters kept apart (A1), with nothing yet to report.
+        /// </summary>
+        /// <param name="league">That season's league: its name, slots, rosters and rules.</param>
+        /// <param name="configured">The name override and the format.</param>
+        /// <param name="excluded">The rosters A1 leaves out of every metric.</param>
+        /// <param name="weeks">Every roster's weeks.</param>
+        /// <param name="season">The year.</param>
+        /// <param name="currentWeek">The week Sleeper considers current, or a past season's last.</param>
+        /// <param name="finalThroughWeek">The last settled week.</param>
+        /// <param name="isCurrent">Whether this is the live season (A34).</param>
+        /// <returns>The snapshot.</returns>
+        private static SeasonSnapshot Assemble(
+            SleeperLeague league,
+            LeagueOptions configured,
+            IReadOnlySet<int> excluded,
+            IReadOnlyList<TeamWeek> weeks,
+            int season,
+            int currentWeek,
+            int finalThroughWeek,
+            bool isCurrent) =>
+            new(
+                string.IsNullOrWhiteSpace(configured.OverrideLeagueName) ? league.Name : configured.OverrideLeagueName,
+                season,
+                currentWeek,
+                finalThroughWeek,
+                league.Slots,
+                GroupTeams(weeks, league.Teams, id => !excluded.Contains(id)),
+                [],
+                [],
+                isCurrent,
+                RegularSeason.LastWeek(league.PlayoffWeekStart),
+                configured.Format,
+                GroupTeams(weeks, league.Teams, excluded.Contains),
+                league.HasMedianGame,
+                []);
 
         /// <summary>
         /// Resolves the configured owner ids to this season's rosters (A1).

@@ -69,7 +69,6 @@ namespace FantasyLeague.Data
         /// <summary>
         /// Reads the blob, falling back to SQL and priming the blob with what SQL held.
         /// </summary>
-        /// <param name="season">The season.</param>
         /// <returns>The season's finalized weeks, empty when none are stored.</returns>
         private async Task<IReadOnlyList<TeamWeek>> ReadThroughAsync(string leagueId, int season, CancellationToken cancellationToken)
         {

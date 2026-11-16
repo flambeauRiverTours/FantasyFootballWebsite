@@ -1,6 +1,5 @@
 ﻿using FantasyLeague.Data;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,11 +19,11 @@ namespace FantasyLeague.Core.Tests
             SqlFinalizedWeekStore Sql,
             BlobFinalizedWeekStore Blob,
             MemoryContainer Container,
-            CountingContextFactory Factory);
+            InMemoryContextFactory Factory);
 
         private static Parts Build()
         {
-            var factory = new CountingContextFactory(Guid.NewGuid().ToString());
+            var factory = new InMemoryContextFactory();
             var container = new MemoryContainer();
             var sql = new SqlFinalizedWeekStore(factory, TimeProvider.System, NullLogger<SqlFinalizedWeekStore>.Instance);
             var blob = new BlobFinalizedWeekStore(container, TimeProvider.System, NullLogger<BlobFinalizedWeekStore>.Instance);
@@ -184,27 +183,6 @@ namespace FantasyLeague.Core.Tests
 
             await parts.Store.Invoking(s => s.ReadAsync(League, 2026, default))
                 .Should().ThrowAsync<InvalidOperationException>();
-        }
-    }
-
-    internal sealed class CountingContextFactory(string name) : IDbContextFactory<FantasyDataContext>
-    {
-        public int Created { get; private set; }
-
-        public Exception? Failure { get; set; }
-
-        public FantasyDataContext CreateDbContext()
-        {
-            Created++;
-            if (Failure is not null)
-            {
-                throw Failure;
-            }
-
-            return new FantasyDataContext(
-                new DbContextOptionsBuilder<FantasyDataContext>()
-                    .UseInMemoryDatabase(name)
-                    .Options);
         }
     }
 }

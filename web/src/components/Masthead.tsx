@@ -1,7 +1,7 @@
 import { isSeasonComplete } from '../api/types';
 import type { SeasonPayload } from '../api/types';
 
-export interface MastheadProps {
+interface MastheadProps {
   payload: SeasonPayload | null;
   updatedAgo: string;
   /** Seasons that can be shown, newest first. The picker appears only with two or more. */

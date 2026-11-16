@@ -16,7 +16,6 @@ const past: SeasonPayload = {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  window.history.replaceState(null, '', '/');
 });
 
 describe('Masthead', () => {

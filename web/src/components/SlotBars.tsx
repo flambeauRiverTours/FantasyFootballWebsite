@@ -2,7 +2,7 @@ import { scaleLinear } from 'd3-scale';
 import type { LinearScale } from './drawing';
 import { slotDeviations } from '../api/calculations';
 
-export interface SlotBarsProps {
+interface SlotBarsProps {
   slots: string[];
   ratios: (number | null)[];
   width: number;
@@ -18,10 +18,6 @@ interface Row {
 
 const MinDomain = 0.1; // a flat week must not divide by a near-zero domain
 const Margin = { top: 8, right: 56, bottom: 8, left: 96 };
-
-function computeRowHeight(slots: string[], height: number): number {
-  return height / slots.length;
-}
 
 /** One row per slot, mid-height for vertical centring. */
 function computeRows(slots: string[], rowHeight: number, deviations: (number | null)[]): Row[] {
@@ -96,7 +92,7 @@ export default function SlotBars({ slots, ratios, width, label, height }: SlotBa
     .domain([-maxAbs, maxAbs])
     .range([Margin.left, width - Margin.right]);
   const zero = x(0);
-  const rowHeight = computeRowHeight(slots, height);
+  const rowHeight = height / slots.length;
   const rows = computeRows(slots, rowHeight, deviations);
 
   return (

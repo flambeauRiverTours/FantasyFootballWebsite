@@ -292,13 +292,13 @@ export function slotDeviations(ratios: (number | null)[]): (number | null)[] {
 }
 
 /** One named value, for describing a chart in words. */
-export interface NamedValue {
+interface NamedValue {
   name: string;
   value: number;
 }
 
 /** The highest and lowest line at the latest week any line reaches. */
-export interface Extremes {
+interface Extremes {
   week: number;
   high: NamedValue;
   low: NamedValue;

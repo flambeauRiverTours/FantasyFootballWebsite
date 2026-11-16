@@ -146,14 +146,10 @@ describe('RadarPanel', () => {
     expect(chips.map((c) => c.textContent)).toEqual(['Charlie', 'Bravo', 'Alpha']);
     expect(screen.getByRole('button', { name: 'Charlie' })).toHaveAttribute('aria-pressed', 'true');
 
-    try {
-      fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
-      expect(window.location.search).toContain('team=1');
-      fireEvent.click(screen.getByRole('button', { name: 'Charlie' }));
-      expect(window.location.search).not.toContain('team=');
-    } finally {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha' }));
+    expect(window.location.search).toContain('team=1');
+    fireEvent.click(screen.getByRole('button', { name: 'Charlie' }));
+    expect(window.location.search).not.toContain('team=');
   });
 
   it('falls back to the leader when ?team names a roster that no longer exists', () => {
@@ -180,14 +176,9 @@ describe('RadarPanel', () => {
 
     expect(radarColour()).toBe(chipColour('Alpha'));
 
-    try {
-      fireEvent.click(screen.getByRole('button', { name: 'Bravo' }));
-      expect(radarColour()).toBe(chipColour('Bravo'));
-      expect(radarColour()).not.toBe(chipColour('Alpha'));
-    } finally {
-      // selecting a team writes ?team= into the URL, which the next test would read
-      window.history.replaceState(null, '', window.location.pathname);
-    }
+    fireEvent.click(screen.getByRole('button', { name: 'Bravo' }));
+    expect(radarColour()).toBe(chipColour('Bravo'));
+    expect(radarColour()).not.toBe(chipColour('Alpha'));
   });
 
   it('draws the radar by default and switches to bars on toggle', () => {

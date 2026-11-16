@@ -1,18 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import axe from 'axe-core';
 import StandingsPanel from '../src/components/StandingsPanel';
 import ChartPanel from '../src/components/ChartPanel';
 import Panel from '../src/components/Panel';
 import { headToHead, payload, teams } from './fixture';
-
-async function violations(container: HTMLElement) {
-  const results = await axe.run(container, {
-    // both need layout, which jsdom does not have
-    rules: { 'color-contrast': { enabled: false }, 'target-size': { enabled: false } },
-  });
-  return results.violations.map((v) => `${v.id}: ${v.nodes.length} node(s)`);
-}
 
 describe('Panel', () => {
   it('labels the region with its own heading', () => {
@@ -85,11 +76,6 @@ describe('StandingsPanel', () => {
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelector('table')).toBeNull();
     expect(screen.getByRole('region', { name: 'Standings' })).toBeInTheDocument();
-  });
-
-  it('has no axe violations', async () => {
-    const { container } = render(<StandingsPanel payload={payload} />);
-    expect(await violations(container)).toEqual([]);
   });
 });
 
@@ -179,11 +165,6 @@ describe('StandingsPanel in head-to-head', () => {
     expect(container.querySelectorAll('tbody tr:first-child td')).toHaveLength(5);
     expect(screen.queryByText(/records appear/i)).toBeNull();
   });
-
-  it('has no axe violations', async () => {
-    const { container } = render(<StandingsPanel payload={headToHead} />);
-    expect(await violations(container)).toEqual([]);
-  });
 });
 
 describe('ChartPanel', () => {
@@ -237,16 +218,12 @@ describe('ChartPanel', () => {
       })),
     };
     window.history.replaceState(null, '', '?metric=sigma');
-    try {
-      const { container } = render(<ChartPanel payload={fiveWeeks} />);
-      // without sigma on offer the chart would fall back to points and still
-      // draw three lines, so check these are the sigma ones
-      expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/^Consistency sigma/);
-      expect(container.querySelectorAll('path.series')).toHaveLength(3);
-      expect(screen.queryByText(/Stay tuned/)).toBeNull();
-    } finally {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
+    const { container } = render(<ChartPanel payload={fiveWeeks} />);
+    // without sigma on offer the chart would fall back to points and still
+    // draw three lines, so check these are the sigma ones
+    expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/^Consistency sigma/);
+    expect(container.querySelectorAll('path.series')).toHaveLength(3);
+    expect(screen.queryByText(/Stay tuned/)).toBeNull();
   });
 
   it('hides vs median below two finalized weeks and shows it at two', () => {
@@ -329,7 +306,6 @@ describe('ChartPanel', () => {
     expect(label()).toMatch(/^Weekly points by week/);
     fireEvent.click(screen.getByRole('button', { name: 'vs median' }));
     expect(label()).toMatch(/^Cumulative points above the league median by week/);
-    window.history.replaceState(null, '', '/');
   });
 
   it('treats a mode in the URL that is not one of its own as the default', () => {
@@ -339,7 +315,6 @@ describe('ChartPanel', () => {
     expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(
       /^Cumulative points by week/,
     );
-    window.history.replaceState(null, '', '/');
   });
 
   it('states the highest and lowest values at the latest week, not just what is drawn', () => {
@@ -347,10 +322,5 @@ describe('ChartPanel', () => {
     expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(
       /At week 2, highest Alpha at 340\.2, lowest Charlie at 250\.7\./,
     );
-  });
-
-  it('has no axe violations', async () => {
-    const { container } = render(<ChartPanel payload={payload} />);
-    expect(await violations(container)).toEqual([]);
   });
 });

@@ -1,7 +1,6 @@
 ﻿using FantasyLeague.Core;
 using FantasyLeague.Sleeper;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Seasons
 {
@@ -18,7 +17,7 @@ namespace FantasyLeague.Seasons
         Task RefreshAsync(CancellationToken cancellationToken);
 
         /// <summary>
-        /// Makes sure a map no older than the configured maximum age is loaded,
+        /// Makes sure a map no older than a day is loaded,
         /// reading the store before falling back to Sleeper.
         /// </summary>
         /// <returns>The map of player id to player.</returns>
@@ -31,15 +30,18 @@ namespace FantasyLeague.Seasons
     /// </summary>
     /// <param name="sleeper">Where a fresh map comes from.</param>
     /// <param name="store">Where the map is kept between instances.</param>
-    /// <param name="options">The maximum age.</param>
     /// <param name="time">Clock for the map's age.</param>
     internal sealed class PlayerMapRefresher(
         ISleeperReader sleeper,
         IPlayerMapStore store,
-        IOptions<PlayerMapOptions> options,
         TimeProvider time,
         ILogger<PlayerMapRefresher> logger) : IPlayerMapRefresher
     {
+        /// <summary>
+        /// How old a map may be before it is refetched: Sleeper asks for the dump at most daily (A12).
+        /// </summary>
+        private static readonly TimeSpan MaxAge = TimeSpan.FromHours(24);
+
         private readonly SemaphoreSlim gate = new(1, 1);
 
         /// <summary>
@@ -103,12 +105,12 @@ namespace FantasyLeague.Seasons
         }
 
         /// <summary>
-        /// Decides whether a timestamp is inside the configured maximum age.
+        /// Decides whether a timestamp is inside <see cref="MaxAge"/>.
         /// </summary>
         /// <param name="refreshedUtc">When the map was fetched.</param>
         /// <returns><c>true</c> when the map may still be served.</returns>
         private bool IsWithinMaxAge(DateTimeOffset refreshedUtc) =>
-            time.GetUtcNow() - refreshedUtc < options.Value.MaxAge;
+            time.GetUtcNow() - refreshedUtc < MaxAge;
 
         /// <summary>
         /// Fetches the dump, projects it and stores the result. Callers hold the gate.

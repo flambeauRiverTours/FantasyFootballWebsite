@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 
 namespace FantasyLeague.Data
 {
@@ -21,24 +20,6 @@ namespace FantasyLeague.Data
         /// Functions host names in <c>AzureWebJobsStorage__accountName</c>.
         /// </summary>
         public Uri? ServiceUri { get; set; }
-
-        /// <summary>
-        /// Gets or sets the container the player map blob lives in.
-        /// </summary>
-        [Required(AllowEmptyStrings = false)]
-        public string PlayerMapContainer { get; set; } = "player-map";
-
-        /// <summary>
-        /// Gets or sets the player map blob's name.
-        /// </summary>
-        [Required(AllowEmptyStrings = false)]
-        public string PlayerMapBlob { get; set; } = "players.json";
-
-        /// <summary>
-        /// Gets or sets the container the current season's blob lives in.
-        /// </summary>
-        [Required(AllowEmptyStrings = false)]
-        public string FinalizedWeekContainer { get; set; } = "finalized-week-store";
 
         /// <summary>
         /// Fills whichever of the two the section left unset from the Functions

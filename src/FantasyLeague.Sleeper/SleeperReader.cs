@@ -189,8 +189,6 @@ namespace FantasyLeague.Sleeper
         /// <summary>
         /// Refuses a response Sleeper sent as <c>null</c>.
         /// </summary>
-        /// <typeparam name="T">The response shape.</typeparam>
-        /// <param name="value">The response.</param>
         /// <param name="what">What was asked for, for the message.</param>
         /// <returns>The response, never null.</returns>
         private static T Required<T>(T? value, string what)
@@ -200,8 +198,6 @@ namespace FantasyLeague.Sleeper
         /// <summary>
         /// Refuses a list Sleeper sent as <c>null</c>, or with a <c>null</c> entry.
         /// </summary>
-        /// <typeparam name="T">The entry shape.</typeparam>
-        /// <param name="values">The response.</param>
         /// <param name="what">What was asked for, for the message.</param>
         /// <returns>The entries, none of them null.</returns>
         private static IReadOnlyList<T> RequiredList<T>(IReadOnlyList<T?>? values, string what)
@@ -218,8 +214,8 @@ namespace FantasyLeague.Sleeper
     /// <summary>
     /// A cached response, marked immutable so HybridCache hands back the same instance.
     /// </summary>
-    /// <typeparam name="T">The response shape.</typeparam>
-    /// <param name="Value">The response.</param>
+    /// <typeparam name="T">The deserialized DTO.</typeparam>
+    /// <param name="Value">What Sleeper returned, already checked for null.</param>
     [ImmutableObject(true)]
     internal sealed record Cached<T>(T Value);
 

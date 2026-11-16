@@ -71,7 +71,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/dotnet
-      - run: dotnet tool install --global dotnet-ef --version 10.0.12
+      # dotnet-ef from .config/dotnet-tools.json, which Dependabot bumps with the EF packages
+      - run: dotnet tool restore
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id:       ${{ secrets.AZURE_CLIENT_ID }}
@@ -81,6 +82,10 @@ jobs:
       # the server's "allow Azure services" rule admits them (tested, A31)
       - name: Apply migrations
         env:
+          # Active Directory Default would probe managed identity first, and on some
+          # hosted runners the VM's metadata service answers 401, which ends the chain
+          # before the azure/login session is tried. Developer credentials only.
+          AZURE_TOKEN_CREDENTIALS: dev
           ConnectionStrings__FantasyLeague: "Server=tcp:${{ needs.infra.outputs.sqlServerFqdn }},1433;Database=${{ needs.infra.outputs.sqlDatabaseName }};Authentication=Active Directory Default;Encrypt=True;Connect Timeout=90;"
         run: dotnet ef database update --project src/FantasyLeague.Data --startup-project src/FantasyLeague.Data
 

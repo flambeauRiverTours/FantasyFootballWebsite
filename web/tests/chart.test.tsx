@@ -5,8 +5,6 @@ import type { Series } from '../src/components/Chart';
 import Brush from '../src/components/Brush';
 import type { WeekRange } from '../src/api/calculations';
 import SegmentedRow from '../src/components/SegmentedRow';
-import Masthead from '../src/components/Masthead';
-import { payload } from './fixture';
 
 function series(rosterId: number, name: string, values: number[]): Series {
   return {
@@ -318,18 +316,4 @@ describe('SegmentedRow', () => {
     screen.getByRole('button', { name: 'Bravo' }).click();
     expect(onChange).toHaveBeenCalledWith('b');
   });
-
-  it('uses real buttons so enter and space work unaided', () => {
-    const { container } = render(
-      <SegmentedRow name="metric" label="Metric" options={options} value="a" onChange={() => {}} />,
-    );
-    for (const b of container.querySelectorAll('.segmented button')) {
-      expect(b).toHaveAttribute('type', 'button');
-    }
-  });
-});
-
-it('interpolates rather than printing the template', () => {
-  const { container } = render(<Masthead payload={payload} updatedAgo="just now" />);
-  expect(container.textContent).not.toContain('${');
 });

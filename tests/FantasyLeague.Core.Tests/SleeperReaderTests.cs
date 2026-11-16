@@ -1,48 +1,10 @@
 ﻿using System.Net;
-using System.Text;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FantasyLeague.Core.Tests
 {
-    /// <summary>
-    /// Counts requests that reach the socket, optionally slowly, so concurrent
-    /// callers genuinely overlap.
-    /// </summary>
-    internal sealed class CountingSocket(string? body = null, TimeSpan delay = default) : HttpMessageHandler
-    {
-        private int attempts;
-
-        public int Attempts => Volatile.Read(ref attempts);
-
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Interlocked.Increment(ref attempts);
-            if (delay > TimeSpan.Zero)
-            {
-                await Task.Delay(delay, cancellationToken);
-            }
-
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    body ?? SmallestBodyFor(request.RequestUri!.AbsolutePath),
-                    Encoding.UTF8, "application/json"),
-            };
-        }
-
-        /// <summary>The least JSON that binds for the type each path returns.</summary>
-        private static string SmallestBodyFor(string path) =>
-            path.EndsWith("state/nfl", StringComparison.Ordinal) ? "{\"season\":\"2026\",\"week\":1}" :
-            path.EndsWith("players/nfl", StringComparison.Ordinal) ? "{}" :
-            path.Contains("/users", StringComparison.Ordinal) ||
-            path.Contains("/rosters", StringComparison.Ordinal) ||
-            path.Contains("/matchups/", StringComparison.Ordinal) ? "[]" :
-            "{\"league_id\":\"L1\",\"season\":\"2026\",\"roster_positions\":[\"QB\"]}";
-    }
-
     /// <summary>
     /// The reader and its cache, exercised through the real pipeline so a cache
     /// miss genuinely reaches a socket.
@@ -51,10 +13,10 @@ namespace FantasyLeague.Core.Tests
     {
         private static readonly IReadOnlyDictionary<string, PlayerRef> NoPlayers = new Dictionary<string, PlayerRef>();
 
-        private static (ISleeperReader Reader, CountingSocket Socket, ServiceProvider Provider) Build(
+        private static (ISleeperReader Reader, FakeSleeper Socket, ServiceProvider Provider) Build(
             string? body = null, TimeSpan delay = default)
         {
-            var socket = new CountingSocket(body, delay);
+            var socket = body is null ? new FakeSleeper(delay: delay) : FakeSleeper.Answering(HttpStatusCode.OK, body, delay);
             var services = new ServiceCollection();
             services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero)
                     .ConfigurePrimaryHttpMessageHandler(() => socket);

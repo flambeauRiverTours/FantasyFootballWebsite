@@ -90,7 +90,8 @@ def get(path: str):
 def write(name: str, payload) -> None:
     FIXTURES.mkdir(parents=True, exist_ok=True)
     path = FIXTURES / name
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
+    # CRLF, as .gitattributes checks every text file out
+    with path.open("w", encoding="utf-8", newline="\r\n") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
     print(f"  {name:<26} {path.stat().st_size:>9,} bytes")

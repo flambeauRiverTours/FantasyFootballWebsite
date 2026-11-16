@@ -393,7 +393,7 @@ Core has no Azure dependency, and that's the point of the layout: the bugs that 
 
 ## 14 · Open questions
 
-All but one are answered; the reasoning is in [`amendments.md`](amendments.md). Q9–Q15 were answered on 2026-11-15 for head-to-head; their reasoning arrives with T68–T72's amendments.
+All but one are answered; the reasoning is in [`amendments.md`](amendments.md). Q9–Q15 were answered on 2026-11-15 for head-to-head; their reasoning arrives with T68–T72's amendments (Q12 in A39).
 
 - **Q1 answered:** six rosters, eleven startable slots (`QB, QB, RB, RB, WR, WR, TE, FLEX, SUPER_FLEX, K, DEF`) plus eight bench. The league ID is a secret (A2).
 - **Q2 answered:** SUPER_FLEX yes, IDP no. The eligibility map stays general anyway (A3).

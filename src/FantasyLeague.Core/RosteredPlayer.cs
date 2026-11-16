@@ -19,7 +19,7 @@ namespace FantasyLeague.Core
     /// <summary>
     /// Sleeper's player id: numeric for most players, a team abbreviation such as <c>DEN</c> for a defence.
     /// </summary>
-    /// <param name="Value">The id.</param>
+    /// <param name="Value">The id as Sleeper sends it, never <c>"0"</c>, which marks an empty slot.</param>
     /// <remarks>
     /// Serialized as the bare string, so the blob, the SQL row and the cache all
     /// store a lineup as <c>["4046","BAL"]</c> rather than as wrapped objects.

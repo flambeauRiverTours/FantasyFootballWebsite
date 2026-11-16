@@ -7,7 +7,7 @@ namespace FantasyLeague.Functions.Functions
     /// <summary>
     /// Keeps the stored player map current.
     /// </summary>
-    /// <param name="players">The refresher.</param>
+    /// <param name="players">Fetches the dump from Sleeper and stores the slim map (A12).</param>
     public sealed class PlayerMapFunctions(
         IPlayerMapRefresher players,
         ILogger<PlayerMapFunctions> logger)

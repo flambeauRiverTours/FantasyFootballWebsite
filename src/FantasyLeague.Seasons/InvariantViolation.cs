@@ -3,8 +3,8 @@
     /// <summary>
     /// A team-week where one of the two invariants did not hold.
     /// </summary>
-    /// <param name="Week">The week.</param>
-    /// <param name="RosterId">The roster.</param>
+    /// <param name="Week">The week that failed, settled or live.</param>
+    /// <param name="RosterId">The roster that failed, an excluded one included (A1).</param>
     /// <param name="Invariant">Which check failed.</param>
     /// <param name="SleeperPts">Sleeper's scored points, before any override, which both checks compare against (A9).</param>
     /// <param name="ComparedPts">

@@ -43,7 +43,6 @@ namespace FantasyLeague.Data
             services.AddOptions<BlobStorageOptions>()
                 .BindConfiguration("BlobStorage")
                 .PostConfigure<IConfiguration>((o, configuration) => o.FallBackTo(configuration))
-                .ValidateDataAnnotations()
                 .Validate(
                     o => o.ConnectionString is not null || o.ServiceUri is not null,
                     "No storage account: set BlobStorage:ConnectionString or BlobStorage:ServiceUri, or AzureWebJobsStorage.")
@@ -51,14 +50,14 @@ namespace FantasyLeague.Data
 
             services.AddSingleton(provider =>
                 new BlobFinalizedWeekStore(
-                    Container(provider, o => o.FinalizedWeekContainer),
+                    Container(provider, "finalized-week-store"),
                     provider.GetRequiredService<TimeProvider>(),
                     provider.GetRequiredService<ILogger<BlobFinalizedWeekStore>>()));
 
             services.AddSingleton<IPlayerMapStore>(provider =>
                 new BlobPlayerMapStore(
-                    Container(provider, o => o.PlayerMapContainer),
-                    provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value.PlayerMapBlob,
+                    Container(provider, "player-map"),
+                    "players.json",
                     provider.GetRequiredService<ILogger<BlobPlayerMapStore>>()));
 
             services.AddSingleton<SqlFinalizedWeekStore>();
@@ -71,13 +70,13 @@ namespace FantasyLeague.Data
         /// Opens a container on the configured account.
         /// </summary>
         /// <param name="provider">The service provider.</param>
-        /// <param name="name">Picks the container's name from the options.</param>
+        /// <param name="name">The container, which the store creates on first write.</param>
         /// <returns>The container.</returns>
         /// <remarks>
         /// By connection string locally; by the Function App's own identity in
         /// Azure, where the account has shared keys turned off.
         /// </remarks>
-        private static BlobContainerClient Container(IServiceProvider provider, Func<BlobStorageOptions, string> name)
+        private static BlobContainerClient Container(IServiceProvider provider, string name)
         {
             var options = provider.GetRequiredService<IOptions<BlobStorageOptions>>().Value;
 
@@ -85,7 +84,7 @@ namespace FantasyLeague.Data
                 ? new BlobServiceClient(connectionString)
                 : new BlobServiceClient(options.ServiceUri, new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned));
 
-            return service.GetBlobContainerClient(name(options));
+            return service.GetBlobContainerClient(name);
         }
     }
 }
