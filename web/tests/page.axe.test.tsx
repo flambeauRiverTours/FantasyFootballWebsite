@@ -41,7 +41,8 @@ describe('The page', () => {
 
     // standings and consistency
     await waitFor(() => expect(screen.getAllByRole('table')).toHaveLength(2));
-    expect(screen.getAllByRole('region').length).toBeGreaterThanOrEqual(4);
+    // the radar arrives in its own chunk (T74)
+    await screen.findByRole('region', { name: 'Positional Radar' });
     expect(await violations(container)).toEqual([]);
   });
 

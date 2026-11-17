@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A46 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A47 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -145,7 +145,7 @@ The same pass also stopped logging a Sleeper user ID, switched timing to the inj
 - Calculations moved out of components into `pointCalculation.ts` (now `calculations.ts`).
 - Reduced motion is respected everywhere.
 - Prettier formats the web code, with the style most files already used.
-- The 125 KB gzipped budget for initial JavaScript is enforced in CI. It stood at 112 KB.
+- The 125 KB gzipped budget for initial JavaScript is enforced in CI. It stood at 112 KB. *Raised to 135 KB by A47.*
 - The tab title is the league's name.
 - Below a 600 px chart the line-end names are dropped, since the team chips above it are the legend.
 
@@ -384,6 +384,15 @@ Not done here: the champion. T70 crowns the winner of the final playoff game, bu
 - **The bracket's champion** is the final's winner once settled; an excluded roster that wins is crowned (Q9), on the final's side, and the line under the table takes its name from the bracket.
 - **On the page,** the reasons only (design §10 has what is drawn): placement matches sit in their own round, after its main matches, because Sleeper's six-team bracket plays 5th place in round 2; there are no connector lines, because with byes and placement matches the columns do not line up and the cards' labels say it to everyone; a side still to come is named by its source's label, never Sleeper's match id, which no card shows; each round heading says its week and whether it is live, because a phone hides the masthead's status (A43's rule).
 - **Not here:** logging a disagreement between Sleeper's winner and our summed points (planned, left for later; the CLI line shows both).
+
+## A47 · The JavaScript budget is a tripwire, re-set on purpose
+
+2026-11-17. T74, at Jack's request. CI failed the 125 KB budget at 125,552 B.
+
+- **125 KB had no user-facing basis.** It was about 10% over the 112 KB the bundle weighed when it was set; its job is catching dependency bloat, not a load-time target.
+- **What filled it was growth nobody chose:** Dependabot bumps, mostly motion 13 to 14, took main from about 117 KB to 123,793 B. T74's row slide then needed about 1.7 KB in the entry (motion's projection maths, imported by modules already there), even with `domMax` in its own chunk.
+- **The rule, not the number:** the budget sits about 10% over the bundle's size when it is set, and when it is hit it is raised deliberately, with an amendment saying what grew and why. A generous figure set ahead of time (150 KB was asked about) would let a dependency double unnoticed, which is the bloat the budget exists to catch.
+- **Now 135 KB,** 10% over 124,261 B, the size after the radar panel moved to its own chunk (kept: it is the bottom panel, and its failed load leaves the page whole).
 
 ## What the original design got wrong
 

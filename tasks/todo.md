@@ -53,7 +53,7 @@ head-to-head can be switched on (A44). T74 fixed on its branch; T72b next. One T
 | M4 The page | T32–T40 | Table, chart, controls, polling, accessibility |
 | M5 Modes and ops | T41–T45, T57 | Display modes, σ variants, states, cost guardrails, runbook, custom domain |
 | M6 Radar | T46–T50 | Slot attribution, league reference (D10), radar and bars |
-| M7 Motion | T51–T55, T74 | Optional; built. T74: the row slide's layout feature loads lazily, for the tables alone |
+| M7 Motion | T51–T55, T74 | Optional; built. T74: the row slide's layout feature loads lazily, for the tables alone, and the radar panel loads as its own chunk to pay for it (initial JS 124.3 KB; the budget re-set to 135 KB, A47) |
 | Past seasons | T29, T56 | Chain walk, season picker (A34) |
 | Portfolio | T59–T60 | Consistency panel (A33); standards and seven domain reviews (A19–A33) |
 | Formats | T64, T66–T71, T72a | Regular season only (A37), chart zoom (A36), `League:Format` (A38), the head-to-head record (A39), this week's matchups (A41–A43), the gate lifted, switched by `LEAGUE_FORMAT` (A44); T70 the champion (A45), T69 the playoff bracket (A46) |
