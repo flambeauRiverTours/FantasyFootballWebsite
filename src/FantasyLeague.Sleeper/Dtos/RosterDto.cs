@@ -13,14 +13,14 @@
     /// </remarks>
     /// <param name="RosterId">The roster's id within this league and season.</param>
     /// <param name="OwnerId">The owning user. Null for an orphaned roster with no manager.</param>
-    /// <param name="Settings">The roster's settings, of which only the record is read.</param>
+    /// <param name="Settings">The roster's settings, of which the record and the division are read.</param>
     internal sealed record RosterDto(
         int RosterId,
         string? OwnerId,
         RosterSettingsDto? Settings);
 
     /// <summary>
-    /// The part of a roster's <c>settings</c> object this app reads: Sleeper's record so far.
+    /// The part of a roster's <c>settings</c> object this app reads: Sleeper's record so far, and its division.
     /// </summary>
     /// <param name="Wins">Wins, median results included.</param>
     /// <param name="Losses">Losses, median results included.</param>
@@ -29,6 +29,7 @@
     /// <param name="FptsDecimal">The hundredths of <paramref name="Fpts"/>.</param>
     /// <param name="FptsAgainst">Whole points scored against.</param>
     /// <param name="FptsAgainstDecimal">The hundredths of <paramref name="FptsAgainst"/>.</param>
+    /// <param name="Division">The roster's division, from 1 (T72b). Read only when the league has divisions.</param>
     internal sealed record RosterSettingsDto(
         int? Wins,
         int? Losses,
@@ -36,5 +37,6 @@
         int? Fpts,
         int? FptsDecimal,
         int? FptsAgainst,
-        int? FptsAgainstDecimal);
+        int? FptsAgainstDecimal,
+        int? Division = null);
 }

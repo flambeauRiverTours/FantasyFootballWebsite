@@ -61,6 +61,20 @@ describe('The page', () => {
     expect(await violations(waiting.container)).toEqual([]);
   });
 
+  it('has no axe violations with the standings grouped by division', async () => {
+    serveApi({
+      ...headToHead,
+      divisions: [
+        { number: 1, name: 'North' },
+        { number: 2, name: 'South' },
+      ],
+      teams: headToHead.teams.map((team) => ({ ...team, division: team.rosterId === 2 ? 2 : 1 })),
+    });
+    const { container } = render(<App />);
+    await screen.findByRole('rowheader', { name: 'North' });
+    expect(await violations(container)).toEqual([]);
+  });
+
   it('has no axe violations with a champion crowned', async () => {
     serveApi({ ...payload, finalThroughWeek: 14, champions: [1] });
     const { container } = render(<App />);

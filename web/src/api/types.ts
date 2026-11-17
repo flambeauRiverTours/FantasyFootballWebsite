@@ -33,6 +33,19 @@ export interface SeasonPayload {
   isComplete?: boolean;
   /** The winners bracket (T69); absent without one to show. */
   playoffs?: PlayoffsPayload;
+  /**
+   * The divisions the standings are grouped by (T72b, A48), in number order. Only in
+   * `HeadToHead`, only when every team is placed in one; absent otherwise.
+   */
+  divisions?: DivisionPayload[];
+}
+
+/** One division of the standings (T72b). */
+export interface DivisionPayload {
+  /** Sleeper's division number; each team's `division` names one. */
+  number: number;
+  /** The commissioner's name for it, or "Division N". */
+  name: string;
 }
 
 /** The winners bracket (T69, A46). */
@@ -119,6 +132,8 @@ export interface TeamPayload {
    * counted week has its games; every team has one or none does.
    */
   record?: TeamRecord;
+  /** The team's division's number (T72b); present exactly when the payload has `divisions`. */
+  division?: number;
 }
 
 /** Wins, losses and ties (C#'s `MedianPayload`). */

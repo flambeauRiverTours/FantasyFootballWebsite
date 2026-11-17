@@ -3,6 +3,7 @@ import { hasConsistency } from './types';
 import type {
   ConsistentTotals,
   BracketMatchPayload,
+  DivisionPayload,
   GamePayload,
   MatchupsPayload,
   MatchupTeamPayload,
@@ -326,19 +327,24 @@ function margin({ wins, losses }: Results): number {
   return wins - losses;
 }
 
-/** The standings table: teams as the league ranks them, each with its gap to the points leader. */
-export function standings(payload: SeasonPayload): Standing[] {
-  const leader = rankByPoints(payload.teams)[0]?.totals.actual ?? 0;
-  const ranked = rankTeams(payload);
-  // from the best wins less losses, not the top row: a bye can leave win rate and margin apart
-  const best = hasRecords(payload)
-    ? Math.max(...payload.teams.map((t) => margin(t.record!)))
-    : null;
+/**
+ * The standings table: teams as the league ranks them, each with its gap to the points leader.
+ * `teams` defaults to the league; a division's teams are ranked and measured on their own
+ * (T72b), so its leader is rank 1 and games back count from its own best margin.
+ */
+export function standings(payload: SeasonPayload, teams = payload.teams): Standing[] {
+  const byRecord = hasRecords(payload);
+  const byPoints = rankByPoints(teams);
+  const leader = byPoints[0]?.totals.actual ?? 0;
+  const ranked = byRecord ? rankByRecord(teams) : byPoints;
+  // from the best wins less losses, not the top row: a bye can leave win rate and margin apart.
+  // record! is safe: hasRecords covers every team in the payload, and teams are drawn from it
+  const best = byRecord ? Math.max(...teams.map((t) => margin(t.record!))) : null;
   const champions = new Set(payload.champions);
   const title = champions.size > 1 ? 'Co-champion' : 'Champion';
-  const places = ranked.map((team) => place(team, best !== null));
+  const places = ranked.map((team) => place(team, byRecord));
   return ranked.map((team) => {
-    const key = place(team, best !== null);
+    const key = place(team, byRecord);
     return {
       team,
       gap: leader - team.totals.actual,
@@ -348,6 +354,32 @@ export function standings(payload: SeasonPayload): Standing[] {
       champion: champions.has(team.rosterId) ? title : null,
     };
   });
+}
+
+/** One group of the table: a division, or the whole league. */
+export interface StandingsGroup {
+  /** The division, or null for the league as one table. */
+  division: DivisionPayload | null;
+  rows: Standing[];
+}
+
+/**
+ * The table's groups (T72b, A48): one per division, each ranked and measured within itself,
+ * when the payload has divisions and the records are known; else the league as one group.
+ * The champion is the league's either way: a division leader is not crowned.
+ */
+export function standingsGroups(payload: SeasonPayload): StandingsGroup[] {
+  // records still loading: the points table stands in, ungrouped
+  if (!payload.divisions || !hasRecords(payload)) {
+    return [{ division: null, rows: standings(payload) }];
+  }
+  return payload.divisions.map((division) => ({
+    division,
+    rows: standings(
+      payload,
+      payload.teams.filter((t) => t.division === division.number),
+    ),
+  }));
 }
 
 /** What decides a place, as one comparable string: win rate then points for, else points; never the name. */

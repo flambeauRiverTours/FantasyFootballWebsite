@@ -2,14 +2,14 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A47. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A48. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
 - **Cost:** about $0.25 a month, with an alert at $0.50 (§13)
 - **Sleeper load:** about 4.4 requests a minute per instance, capped at 25 (§07)
 - **League:** six rosters, five of them scoring. One is a placeholder team and is excluded from everything (A1)
-- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Head-to-head and this week's matchups are built and can be switched on (A44), a complete season crowns its champion (A45), and a playoff league shows its bracket, its season ending at the final (A46); divisions are next (T72b)
+- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Head-to-head and this week's matchups are built and can be switched on (A44), a complete season crowns its champion (A45), a playoff league shows its bracket, its season ending at the final (A46), and a league with divisions groups its table by them (A48)
 
 ## 01 · Scope
 
@@ -263,7 +263,8 @@ ETag: W/"2026-wk7-…"
         "wins": 9, "losses": 3, "ties": 0,
         "pointsFor": 766.46, "pointsAgainst": 701.12,  // settled weeks only
         "median": { "wins": 4, "losses": 2, "ties": 0 } // the median game's share, if it plays one (A43)
-      }
+      },
+      "division": 1               // only when the payload has divisions (A48)
     }
   ],
   "matchups": {                   // HeadToHead only, when the week has games (A41)
@@ -280,7 +281,9 @@ ETag: W/"2026-wk7-…"
     "round": 3, "weeks": [17], "name": "Final",
     "matches": [{ "match": 6, "label": "Final", "placement": 1, "isSettled": false, "sides": [
       { "rosterId": 3, "name": "…", "from": { "winnerOf": 3 }, "points": 61.30, "won": false },
-      { "rosterId": null, "name": null, "from": { "winnerOf": 4 }, "points": null, "won": false } ] }] }] }
+      { "rosterId": null, "name": null, "from": { "winnerOf": 4 }, "points": null, "won": false } ] }] }] },
+  "divisions": [                  // head-to-head with every team placed in one (A48)
+    { "number": 1, "name": "North" }, { "number": 2, "name": "Division 2" } ]
 }
 
 GET /api/seasons          (cached a day, with an ETag)
@@ -328,7 +331,7 @@ Subtracting the league's weekly median doesn't change any ranking, but it remove
 
 #### The table comes first
 
-The standings table works with no interaction: tabular figures, the sorted column marked, and, in `TotalPoints`, the gap to first shown. In `HeadToHead` it is # · Team · Record · GB · PF · PA · Ideal, ranked by win rate (a tie as half a win), then points for, then name, with PF, PA and Ideal over settled weeks only (A39); on a phone PA and Ideal give way (A43). A record reads "13-5", or "13-5-1" on every row once any team has a tie; with a median game, "games · median" sits under it, labelled under the Record header (A43). Games back counts from the best wins less losses. Until every record is known, the points table stands in, with a line saying it is ranked by points for now. Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
+The standings table works with no interaction: tabular figures, the sorted column marked, and, in `TotalPoints`, the gap to first shown. In `HeadToHead` it is # · Team · Record · GB · PF · PA · Ideal, ranked by win rate (a tie as half a win), then points for, then name, with PF, PA and Ideal over settled weeks only (A39); on a phone PA and Ideal give way (A43). A record reads "13-5", or "13-5-1" on every row once any team has a tie; with a median game, "games · median" sits under it, labelled under the Record header (A43). Games back counts from the best wins less losses. Until every record is known, the points table stands in, with a line saying it is ranked by points for now. A league with divisions groups the table by them once the records are known: a body per division in number order, opened by a header row with its name ("Division 2" when it has none), the ranks, T1 ties and games back counted within it, so its leader is its rank-1 row. The champion is still the league's (A48). Hovering a team in the chart with a mouse, tapping near its line, or focusing its chip highlights it and mutes the rest. A touch that moves is a scroll, never a hover (A36).
 
 #### This week's matchups
 
@@ -438,7 +441,7 @@ All but one are answered; the reasoning is in [`amendments.md`](amendments.md). 
 - **Q11 answered:** no seeds (A46: Sleeper's bracket has none).
 - **Q12 answered:** a median game counts in W-L, as in Sleeper.
 - **Q13 answered:** the matchups view shows the current week only.
-- **Q14 answered:** division standings are head-to-head only.
+- **Q14 answered:** division standings are head-to-head only; grouped only, no league-wide switch (A48).
 - **Q15 answered:** build order T68 → T71 → T72 → T69 → T70; revised to T72a → T70 → T72b → T69 (A44, A45), what the real league can see first.
 
 ## 15 · Build order

@@ -22,7 +22,7 @@ boilerplate, documentation and task updates, and implements features when asked.
 | Path | What |
 |---|---|
 | [`docs/design.md`](docs/design.md) | Design, decisions D1–D11, corrected in place |
-| [`docs/amendments.md`](docs/amendments.md) | A1–A47: the reasoning behind every later decision and correction |
+| [`docs/amendments.md`](docs/amendments.md) | A1–A48: the reasoning behind every later decision and correction |
 | [`docs/standards.md`](docs/standards.md) | The standards, by domain |
 | [`docs/runbook.md`](docs/runbook.md) | Operations, including the yearly season rollover |
 | [`tasks/todo.md`](tasks/todo.md) · [`tasks/lessons.md`](tasks/lessons.md) | Task list · rules learned from corrections |

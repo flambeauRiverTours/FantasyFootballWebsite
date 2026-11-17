@@ -303,7 +303,8 @@ namespace FantasyLeague.Seasons
                 league.HasMedianGame,
                 null,
                 null,
-                league.PlayoffRoundType ?? 0);
+                league.PlayoffRoundType ?? 0,
+                league.Divisions);
 
         /// <summary>
         /// Resolves the configured owner ids to this season's rosters (A1).
@@ -448,7 +449,8 @@ namespace FantasyLeague.Seasons
                 .Select(g => new TeamSeason(
                     g.Key,
                     teams.TryGetValue(g.Key, out var team) ? team.Name : SleeperTeam.FallbackName(g.Key),
-                    [.. g.OrderBy(w => w.Week)]))];
+                    [.. g.OrderBy(w => w.Week)],
+                    team?.Division))];
 
         /// <summary>
         /// Checks one roster-week against both invariants.
@@ -494,6 +496,14 @@ namespace FantasyLeague.Seasons
                 logger.LogError(
                     "Roster {RosterId}'s head-to-head record after {Games} results is {Ours}, but Sleeper's is {Sleepers}.",
                     mismatch.RosterId, mismatch.OurRecord.Games, mismatch.OurRecord.Format(), mismatch.SleeperRecord.Format());
+            }
+
+            foreach (var rosterId in snapshot.UnplacedRosters.Where(id => reported.IsNew($"division-unplaced:{snapshot.Season}:{id}")))
+            {
+                // T72b: one unplaced roster shows the whole season flat; a half-grouped table misleads
+                logger.LogWarning(
+                    "Roster {RosterId} has no division in season {Season}; the standings are shown ungrouped.",
+                    rosterId, snapshot.Season);
             }
 
             foreach (var playerId in snapshot.UnresolvedPlayerIds.Where(id => reported.IsNew($"player:{id}")))

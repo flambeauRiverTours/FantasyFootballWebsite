@@ -30,8 +30,13 @@ namespace FantasyLeague.Seasons
 
             // shown only in head-to-head; the record check builds them in either format
             var records = headToHead ? snapshot.Records : null;
+            // a team's division is sent only when the standings are grouped (T72b)
+            var divisions = snapshot.ShownDivisions;
             var teams = snapshot.Teams
-                .Select(team => ToTeam(team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)] }, records, snapshot.HasMedianGame))
+                .Select(team => ToTeam(
+                    team with { Weeks = [.. team.Weeks.Where(w => w.Week <= lastWeek)], Division = divisions is null ? null : team.Division },
+                    records,
+                    snapshot.HasMedianGame))
                 .OrderByDescending(t => t.Totals.Actual)
                 .ToList();
 
@@ -52,7 +57,8 @@ namespace FantasyLeague.Seasons
                 Champions(snapshot, teams, records),
                 snapshot.SeasonEndWeek,
                 snapshot.IsComplete,
-                ToPlayoffs(snapshot));
+                ToPlayoffs(snapshot),
+                divisions?.Select(d => new DivisionPayload(d.Number, d.Name)).ToList());
         }
 
         /// <summary>
@@ -202,7 +208,7 @@ namespace FantasyLeague.Seasons
         /// <summary>
         /// Maps one roster's season.
         /// </summary>
-        /// <param name="team">The roster, its weeks already trimmed to the last counted week.</param>
+        /// <param name="team">The roster, its weeks already trimmed to the last counted week and its division cleared unless shown.</param>
         /// <param name="records">Every roster's record, or null when none is shown.</param>
         /// <param name="hasMedianGame">Whether the league plays a median game.</param>
         /// <returns>The team entry.</returns>
@@ -229,7 +235,8 @@ namespace FantasyLeague.Seasons
                 [.. team.Weeks
                     .OrderBy(w => w.Week)
                     .Select(w => new WeekPayload(w.Week, w.ActualPts, w.IdealPts, w.IsFinal))],
-                records is null ? null : ToRecord(records.GetValueOrDefault(team.RosterId), hasMedianGame));
+                records is null ? null : ToRecord(records.GetValueOrDefault(team.RosterId), hasMedianGame),
+                team.Division);
         }
 
         /// <summary>
