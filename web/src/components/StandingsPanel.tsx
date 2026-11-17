@@ -1,7 +1,7 @@
-import { m } from 'motion/react';
+import { LazyMotion, m } from 'motion/react';
 import { championNames, hasMedianGame, hasRecords, hasTies, standings } from '../api/calculations';
 import type { SeasonPayload } from '../api/types';
-import { RowSlide } from './motion';
+import { RowSlide, loadLayout } from './motion';
 import Panel from './Panel';
 import StandingsHead from './StandingsHead';
 import { columnClass, standingsColumns } from './standingsColumns';
@@ -33,22 +33,24 @@ export default function StandingsPanel({ payload }: StandingsPanelProps) {
           <div className="table-wrap">
             <table>
               <StandingsHead columns={columns} />
-              <tbody>
-                {rows.map((row) => (
-                  <m.tr
-                    layout
-                    key={row.team.rosterId}
-                    transition={RowSlide}
-                    className={row.champion ? 'is-champion' : undefined}
-                  >
-                    {columns.map((column) => (
-                      <td key={column.key} className={columnClass(column)}>
-                        {column.cell(row)}
-                      </td>
-                    ))}
-                  </m.tr>
-                ))}
-              </tbody>
+              <LazyMotion features={loadLayout}>
+                <tbody>
+                  {rows.map((row) => (
+                    <m.tr
+                      layout="position"
+                      key={row.team.rosterId}
+                      transition={RowSlide}
+                      className={row.champion ? 'is-champion' : undefined}
+                    >
+                      {columns.map((column) => (
+                        <td key={column.key} className={columnClass(column)}>
+                          {column.cell(row)}
+                        </td>
+                      ))}
+                    </m.tr>
+                  ))}
+                </tbody>
+              </LazyMotion>
             </table>
           </div>
           {champions.length > 0 ? (

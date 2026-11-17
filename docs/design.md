@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A46. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A47. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage

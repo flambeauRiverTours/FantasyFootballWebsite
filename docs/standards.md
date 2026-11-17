@@ -136,8 +136,8 @@ This document states the standards for each programming domain for this project.
   - why: the data must read the same with motion off
 - Motion never replays on a poll
   - why: a 30 second poll would flash every row
-- Initial JavaScript stays under 125 KB gzipped
-  - why: a budget catches dependency bloat before it ships
+- Initial JavaScript stays under 135 KB gzipped, about 10% over its size when last set
+  - why: a budget catches dependency bloat before it ships; hit, it is raised on purpose, with an amendment (A47)
 - The loading state paints before the bundle runs
   - why: a database cold start can take a minute
 

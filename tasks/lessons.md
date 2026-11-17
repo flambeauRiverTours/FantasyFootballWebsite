@@ -51,6 +51,7 @@ incident itself belongs in the commit or the amendment.
 - `! cmd` under `set -e` is not a guard; write `if cmd; then …; exit 1; fi`, and prove a gate fails once.
 - Adding `environment:` or changing a trigger changes the OIDC subject; read the subject from the log first.
 - Branch off a remote ref with `--no-track`: `checkout -B x origin/main` makes origin/main the upstream, and a plain `git push` then lands on main.
+- Run `npm ci` in `web/` before measuring the bundle or trusting local checks: Dependabot bumps leave `node_modules` stale, and a stale install measured 6 KB under CI (T74).
 
 ## Azure
 

@@ -1,11 +1,11 @@
-import { m } from 'motion/react';
+import { LazyMotion, m } from 'motion/react';
 import { scaleLinear } from 'd3-scale';
 import { consistencyDomain } from '../api/calculations';
 import type { ConsistencyRow } from '../api/calculations';
 import { teamColours } from '../api/teamColours';
 import type { ConsistentTotals, SeasonPayload } from '../api/types';
 import type { LinearScale } from './drawing';
-import { RowSlide } from './motion';
+import { RowSlide, loadLayout } from './motion';
 import Panel from './Panel';
 
 interface ConsistencyPanelProps {
@@ -38,22 +38,24 @@ export default function ConsistencyPanel({ payload, rows }: ConsistencyPanelProp
               </th>
             </tr>
           </thead>
-          <tbody>
-            {rows.map(({ team, totals }) => (
-              <m.tr layout key={team.rosterId} transition={RowSlide}>
-                <td>{team.name}</td>
-                <td className="col-mark">
-                  <RangeMark
-                    name={team.name}
-                    totals={totals}
-                    scale={scale}
-                    colour={colours.get(team.rosterId) ?? 'currentColor'}
-                  />
-                </td>
-                <td className="is-sorted">{totals.sigma.toFixed(1)}</td>
-              </m.tr>
-            ))}
-          </tbody>
+          <LazyMotion features={loadLayout}>
+            <tbody>
+              {rows.map(({ team, totals }) => (
+                <m.tr layout="position" key={team.rosterId} transition={RowSlide}>
+                  <td>{team.name}</td>
+                  <td className="col-mark">
+                    <RangeMark
+                      name={team.name}
+                      totals={totals}
+                      scale={scale}
+                      colour={colours.get(team.rosterId) ?? 'currentColor'}
+                    />
+                  </td>
+                  <td className="is-sorted">{totals.sigma.toFixed(1)}</td>
+                </m.tr>
+              ))}
+            </tbody>
+          </LazyMotion>
         </table>
       </div>
     </Panel>

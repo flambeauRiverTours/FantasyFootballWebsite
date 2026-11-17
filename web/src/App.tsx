@@ -1,9 +1,8 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { useSeason } from './hooks/useSeason';
 import { useSeasons } from './hooks/useSeasons';
 import StandingsPanel from './components/StandingsPanel';
 import ChartPanel from './components/ChartPanel';
-import RadarPanel from './components/RadarPanel';
 import ConsistencyPanel from './components/ConsistencyPanel';
 import MatchupsPanel from './components/MatchupsPanel';
 import PlayoffsPanel from './components/PlayoffsPanel';
@@ -16,6 +15,13 @@ import StaleBanner from './components/StaleBanner';
 import Masthead from './components/Masthead';
 import { LazyMotion, MotionConfig, domAnimation } from 'motion/react';
 import { useQueryState } from './hooks/useQueryState';
+import type { SeasonPayload } from './api/types';
+
+// the bottom panel loads as its own chunk to keep the initial JavaScript under its
+// budget (T74, A47); a chunk that fails to load leaves the page without the radar, not broken
+const RadarPanel = lazy<ComponentType<{ payload: SeasonPayload }>>(() =>
+  import('./components/RadarPanel').catch(() => ({ default: () => null })),
+);
 
 /**
  * Owns the fetch and its three states, then orders the panels. A panel may
@@ -87,7 +93,11 @@ export default function App() {
                 <ConsistencyPanel payload={payload} rows={consistency} />
               ) : null}
               <ChartPanel payload={payload} />
-              {hasRadar ? <RadarPanel payload={payload} /> : null}
+              {hasRadar ? (
+                <Suspense fallback={null}>
+                  <RadarPanel payload={payload} />
+                </Suspense>
+              ) : null}
             </main>
           </>
         )}
