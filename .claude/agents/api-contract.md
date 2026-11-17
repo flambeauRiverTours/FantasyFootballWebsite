@@ -47,6 +47,9 @@ actually returns.
 - `playoffs` (A46) is optional: head-to-head with playoffs, once the bracket can be shown.
   When present `rounds` is never empty, every match has exactly two `sides`, and every
   non-null `rosterId` is a roster in the league (not necessarily in `teams`).
+- `divisions` (A48) is optional: head-to-head with every counted team placed in one. When
+  present it is never empty, and every team has a `division` that is one of its `number`s;
+  when absent, no team has a `division`. One without the other is a finding.
 
 ## Why this matters
 

@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A47 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A48 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -393,6 +393,18 @@ Not done here: the champion. T70 crowns the winner of the final playoff game, bu
 - **What filled it was growth nobody chose:** Dependabot bumps, mostly motion 13 to 14, took main from about 117 KB to 123,793 B. T74's row slide then needed about 1.7 KB in the entry (motion's projection maths, imported by modules already there), even with `domMax` in its own chunk.
 - **The rule, not the number:** the budget sits about 10% over the bundle's size when it is set, and when it is hit it is raised deliberately, with an amendment saying what grew and why. A generous figure set ahead of time (150 KB was asked about) would let a dependency double unnoticed, which is the bloat the budget exists to catch.
 - **Now 135 KB,** 10% over 124,261 B, the size after the radar panel moved to its own chunk (kept: it is the bottom panel, and its failed load leaves the page whole).
+
+## A48 · Division standings
+
+2026-11-17. T72b. Design-reviewed green with changes, folded in; Jack chose grouped only.
+
+- **Unobserved shapes.** No league with divisions has been seen: `settings.divisions`, each roster's `settings.division` and the commissioner's `metadata.division_N` are taken from common usage, and the tests' bodies are invented with placeholder names. The capture script now keeps `metadata.division_N` in Sleeper's shape, each name a placeholder ("Named N", or empty when blank): a commissioner's text is personal data like a team name, so the first league captured with divisions pins the shape and the blanks, not the words.
+- **Metadata is read as raw JSON.** It is free-form commissioner and app data; one value that is not a string must not fail the whole league read, so only string `division_N` values are names.
+- **All or nothing.** The table is grouped only in head-to-head (Q14), with two or more divisions, and every counted roster placed in one. One unplaced roster shows the season flat, because a half-grouped table misleads, and is logged once per roster and season. A division with no counted roster (its member excluded, A1) is left out. Each season reads its own divisions (A34); nothing is stored.
+- **Grouped only** (Jack). No league-wide switch: Sleeper's own app groups, the radar keeps the league-wide order, and the champion's crown and line still name the overall winner.
+- **Within the division:** rank, T1 ties and games back, by the league's own rule (A39). Sleeper's division tiebreaks are undocumented and not copied. The leader is the rank-1 row, with no badge: a second mark would compete with the crown. The champion is unchanged (A45, A46).
+- **Omitted, not null.** `divisions` and each team's `division` are left out of a body that is not grouped, as every optional field is, so no existing body or ETag changes.
+- **One table, a body per division,** each opened by a `scope="rowgroup"` header row spanning the columns. Screen readers vary in announcing it; the markup is valid and passes axe. Rows slide within their own body (T74). While records are loading the points table stands in, ungrouped.
 
 ## What the original design got wrong
 

@@ -78,7 +78,8 @@ namespace FantasyLeague.Sleeper
                         ? ResolveTeamName(user, roster.RosterId)
                         : SleeperTeam.FallbackName(roster.RosterId),
                     roster.OwnerId,
-                    ToRecord(roster)));
+                    ToRecord(roster),
+                    roster.Settings?.Division));
         }
 
         /// <summary>
@@ -151,6 +152,31 @@ namespace FantasyLeague.Sleeper
         /// <returns><c>true</c> when <c>league_average_match</c> is set.</returns>
         internal static bool HasMedianGame(LeagueDto league) =>
             league.Settings?.LeagueAverageMatch > 0;
+
+        /// <summary>
+        /// The league's divisions (T72b): one per <c>settings.divisions</c>, each named from
+        /// <c>metadata.division_N</c>, or "Division N" when that is blank, absent or not a string.
+        /// </summary>
+        /// <param name="league">The league as Sleeper returned it.</param>
+        /// <returns>The divisions in number order, or null for fewer than two.</returns>
+        internal static IReadOnlyList<Division>? ToDivisions(LeagueDto league) =>
+            league.Settings?.Divisions is >= 2 and var count
+                ? [.. Enumerable.Range(1, count).Select(n => new Division(n, DivisionName(league.Metadata, n)))]
+                : null;
+
+        /// <summary>
+        /// One division's name: the commissioner's, trimmed, or "Division N".
+        /// </summary>
+        /// <param name="metadata">The league's metadata as sent, or null.</param>
+        /// <param name="number">The division's number.</param>
+        /// <returns>A name that is never blank.</returns>
+        private static string DivisionName(JsonElement? metadata, int number) =>
+            metadata is { ValueKind: JsonValueKind.Object } fields
+                && fields.TryGetProperty($"division_{number}", out var value)
+                && value.ValueKind == JsonValueKind.String
+                && value.GetString()?.Trim() is { Length: > 0 } name
+                ? name
+                : $"Division {number}";
 
         /// <summary>
         /// The league's display name, or a default when the commissioner set none.

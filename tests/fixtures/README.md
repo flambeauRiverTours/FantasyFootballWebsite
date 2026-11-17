@@ -6,7 +6,7 @@ Real Sleeper payloads for offline tests.
 |---|---|
 | `wk{N}-matchups.json` | `/v1/league/{id}/matchups/{N}`, verbatim. Weeks 1–9, all final. 6 rosters, 11 starters, 19–20 players each |
 | `roster-positions.json` | `roster_positions`, lifted out of the league object |
-| `league-settings.json` | `start_week`, the four `playoff_*` settings, `league_average_match`, and `divisions` when the league has them (T64, T68). This league has playoffs disabled (`playoff_week_start: 0`) |
+| `league-settings.json` | `start_week`, the four `playoff_*` settings, `league_average_match`, and `divisions` when the league has them (T64, T68); `metadata.division_N` when the league names any, each name replaced by "Named N" or "" for a blank one, since the commissioner's text is personal data (T72b, A48). This league has playoffs disabled (`playoff_week_start: 0`) and no divisions |
 | `rosters-record.json` | Each roster's number and Sleeper's own W-L-T and points for and against, nothing else (T68) |
 | `previous-season.json` | The same settings and records for the season before, when the league links one (T68). None yet: 2026 is the league's first season |
 | `player-positions.json` | `{ playerId → { name, team, fantasyPositions } }` for the 155 players rostered in any captured week |

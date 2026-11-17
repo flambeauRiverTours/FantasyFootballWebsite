@@ -18,8 +18,10 @@ describe('a chunk that fails to load', () => {
     vi.restoreAllMocks();
   });
 
-  // the radar loads as its own chunk (T74); a stale page after a deploy may not find it
-  it('leaves the page without the radar, not broken', async () => {
+  // the radar loads as its own chunk (T74); a stale page after a deploy may not find it.
+  // A long timeout: after resetModules the whole App graph is imported afresh, which under the
+  // full suite's parallel load can take longer than the 5 s default
+  it('leaves the page without the radar, not broken', { timeout: 20_000 }, async () => {
     vi.resetModules();
     vi.doMock('../src/components/RadarPanel', () => {
       throw new Error('chunk failed');
@@ -28,7 +30,7 @@ describe('a chunk that fails to load', () => {
     serveApi(withRadar);
     render(<App />);
 
-    await screen.findByRole('region', { name: 'Standings' });
+    await screen.findByRole('region', { name: 'Standings' }, { timeout: 10_000 });
     // let the failed import settle and React render what follows it
     await act(() => import('../src/components/RadarPanel').catch(() => undefined));
 

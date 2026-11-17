@@ -4,29 +4,11 @@ Reasons live in [`docs/amendments.md`](../docs/amendments.md); finished work's d
 git history.
 `±` marks an estimate that could run double.
 
-**Status (2026-11-17).** M0–M7 built and deployed. T64, T66–T71, T72a and T73 merged;
-head-to-head can be switched on (A44). T74 fixed on its branch; T72b next. One T61 check left.
+**Status (2026-11-17).** M0–M7 built and deployed. T64, T66–T72a, T73 and T74 merged; T72b
+built on its branch (A48); head-to-head can be switched on (A44). One T61 check left.
 
 ## Open
 
-- [ ] **T66–T72 · Zoom, head-to-head, matchups, divisions, playoffs, a champion** (A36,
-      planned 2026-11-15, revised after design review). Reverses §01's "out of scope:
-      head-to-head, playoffs" for leagues configured that way. T64, T66, T67 and T68 are merged
-      (Done table), and so are T69–T71 and T72a; T72b is left. The real league has no divisions
-      and no playoffs (captured settings), so what it sees went first.
-  - [ ] **T72b** Division standings, H2H only (Q14) — 4 h `±`. After T72a; the rest of the old
-       T72, minus its gate step.
-    1. Capture first: the script already keeps `divisions` and each roster's `division`; add
-       the league's `metadata.division_N` names (names only; no ids). No league with divisions
-       has been observed, so the fixture is invented to match.
-    2. Sleeper: `LeagueSettingsDto.Divisions`, `RosterDto` settings' `Division`, the names
-       from metadata, mapped to Core. Read per season like names and slots (A34), so a past
-       season shows that year's divisions. Nothing stored.
-    3. Payload: `divisions: [{ number, name }] | null` and `division` on each team. Null, and
-       one flat table, for a league without divisions, and always in `TotalPoints`.
-    4. The table grouped by division, each ranked by `rankByRecord`, the leader marked, a
-       division with no name shown as "Division N". An excluded roster's division is not shown.
-    5. Tests: two divisions, a league with none, an unnamed division, a past season.
 - [ ] **T65** `League:SeasonOverrides` (D8, deferred by A34): a year → league ID map merged over
       the chain, for a league recreated from scratch. Not needed while the chain is intact.
 - [ ] **T61** Domain 4b, item 16: try dropping the queue and table storage roles now that identity
@@ -56,7 +38,7 @@ head-to-head can be switched on (A44). T74 fixed on its branch; T72b next. One T
 | M7 Motion | T51–T55, T74 | Optional; built. T74: the row slide's layout feature loads lazily, for the tables alone, and the radar panel loads as its own chunk to pay for it (initial JS 124.3 KB; the budget re-set to 135 KB, A47) |
 | Past seasons | T29, T56 | Chain walk, season picker (A34) |
 | Portfolio | T59–T60 | Consistency panel (A33); standards and seven domain reviews (A19–A33) |
-| Formats | T64, T66–T71, T72a | Regular season only (A37), chart zoom (A36), `League:Format` (A38), the head-to-head record (A39), this week's matchups (A41–A43), the gate lifted, switched by `LEAGUE_FORMAT` (A44); T70 the champion (A45), T69 the playoff bracket (A46) |
+| Formats | T64, T66–T72 | Regular season only (A37), chart zoom (A36), `League:Format` (A38), the head-to-head record (A39), this week's matchups (A41–A43), the gate lifted, switched by `LEAGUE_FORMAT` (A44); T70 the champion (A45), T69 the playoff bracket (A46), T72b division standings, grouped only (A48) |
 | Cleanup | T73 | Repo-wide simplification and standards pass; the deploy's migrate sign-in (A40) |
 
 Settled questions: Q1–Q15, in design §14. Fixtures B1–B3, B5 captured.

@@ -45,8 +45,33 @@ namespace FantasyLeague.Seasons
         bool HasMedianGame,
         RecordCheck? RecordCheck,
         IReadOnlyList<PlayoffMatch>? Bracket = null,
-        int PlayoffRoundType = 0)
+        int PlayoffRoundType = 0,
+        IReadOnlyList<Division>? Divisions = null)
     {
+        /// <summary>
+        /// Gets the divisions the standings are grouped by (T72b, A48): head-to-head only (Q14), and
+        /// only when every counted roster is placed in one, so one unplaced roster shows the season flat.
+        /// A division whose every member is excluded (A1) is left out. Null when not grouped.
+        /// </summary>
+        public IReadOnlyList<Division>? ShownDivisions =>
+            GroupedDivisions is { } divisions && UnplacedRosters.Count == 0
+                ? [.. divisions.Where(d => Teams.Any(t => t.Division == d.Number))]
+                : null;
+
+        /// <summary>
+        /// Gets the counted rosters with no division in range, in a head-to-head league that has divisions (T72b).
+        /// </summary>
+        public IReadOnlyList<int> UnplacedRosters =>
+            GroupedDivisions is { } divisions
+                ? [.. Teams.Where(t => t.Division is not { } n || n < 1 || n > divisions.Count).Select(t => t.RosterId)]
+                : [];
+
+        /// <summary>
+        /// Gets the league's divisions where they can group the table: head-to-head only (Q14).
+        /// </summary>
+        private IReadOnlyList<Division>? GroupedDivisions =>
+            Format == LeagueFormat.HeadToHead ? Divisions : null;
+
         /// <summary>
         /// Gets the first playoff week, or 0 without playoffs.
         /// </summary>

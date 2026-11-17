@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -56,6 +57,18 @@ ROSTER_SETTINGS = (
     "fpts", "fpts_decimal", "fpts_against", "fpts_against_decimal",
     "division",
 )
+
+
+def division_names(metadata: object) -> dict[str, str]:
+    """`metadata.division_N` in Sleeper's shape, each name a placeholder ("Named N", or "" for a
+    blank one): the commissioner's text is personal data and stays out of the repo (A2, A48)."""
+    if not isinstance(metadata, dict):
+        return {}
+    return {
+        key: f"Named {key.removeprefix('division_')}" if value.strip() else ""
+        for key, value in metadata.items()
+        if re.fullmatch(r"division_\d+", key) and isinstance(value, str)
+    }
 
 
 def fail(message: str) -> None:
@@ -137,7 +150,11 @@ def main() -> None:
     # T64
     settings = league.get("settings") or {}
     kept = {k: settings[k] for k in SEASON_SETTINGS if k in settings}
-    write("league-settings.json", {"season": league["season"], "settings": kept})
+    # T72b: which divisions are named, as placeholders; never an avatar URL or anything else
+    names = division_names(league.get("metadata"))
+    write("league-settings.json", {
+        "season": league["season"], "settings": kept, **({"metadata": names} if names else {}),
+    })
     # raw values only; RegularSeason decides what they mean. Every week-like setting is listed,
     # numbers only, so a field not in SEASON_SETTINGS still shows up here
     for key in sorted(k for k in settings if "week" in k or "leg" in k or k in SEASON_SETTINGS):

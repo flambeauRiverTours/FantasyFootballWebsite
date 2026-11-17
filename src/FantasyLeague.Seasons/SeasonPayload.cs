@@ -25,6 +25,7 @@ namespace FantasyLeague.Seasons
     /// <param name="IsComplete">Whether the season is over; the page stops polling on it (A46).</param>
     /// <param name="Playoffs">The winners bracket (T69), in head-to-head with playoffs once it can be shown. Absent otherwise.</param>
     /// <param name="Champions">The table's champions once the season is complete (T70, A45), a tie crowning everyone tied. Absent until then.</param>
+    /// <param name="Divisions">The divisions the standings are grouped by (T72b, A48), in number order: head-to-head with every roster placed. Absent otherwise.</param>
     public sealed record SeasonPayload(
         string LeagueName,
         int Season,
@@ -41,7 +42,15 @@ namespace FantasyLeague.Seasons
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Champions = null,
         int SeasonEndWeek = 0,
         bool IsComplete = false,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PlayoffsPayload? Playoffs = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PlayoffsPayload? Playoffs = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<DivisionPayload>? Divisions = null);
+
+    /// <summary>
+    /// One division of the standings (T72b).
+    /// </summary>
+    /// <param name="Number">Sleeper's division number; each team's <see cref="TeamPayload.Division"/> names one.</param>
+    /// <param name="Name">The commissioner's name for it, or "Division N".</param>
+    public sealed record DivisionPayload(int Number, string Name);
 
     /// <summary>
     /// The winners bracket (T69, A46).
@@ -139,7 +148,8 @@ namespace FantasyLeague.Seasons
         TotalsPayload Totals,
         IReadOnlyDictionary<string, decimal> SlotAverages,
         IReadOnlyList<WeekPayload> Weeks,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RecordPayload? Record = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RecordPayload? Record = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Division = null);
 
     /// <summary>
     /// One roster's head-to-head record over the settled weeks that count (T68).

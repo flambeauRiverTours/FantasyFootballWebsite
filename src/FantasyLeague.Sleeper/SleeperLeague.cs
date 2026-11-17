@@ -11,13 +11,15 @@ namespace FantasyLeague.Sleeper
     /// <param name="PlayoffWeekStart">The first playoff week as Sleeper sends it: zero or null when the league has none. Weeks from here on are not counted (A37).</param>
     /// <param name="HasMedianGame">Whether each week adds a result against the league's median score (Q12, T68).</param>
     /// <param name="PlayoffRoundType">Sleeper's <c>playoff_round_type</c> (T69), or null when it sent none.</param>
+    /// <param name="Divisions">This season's divisions in number order (T72b), or null when the league has none.</param>
     public sealed record SleeperLeague(
         string Name,
         IReadOnlyList<Slot> Slots,
         IReadOnlyDictionary<int, SleeperTeam> Teams,
         int? PlayoffWeekStart,
         bool HasMedianGame,
-        int? PlayoffRoundType = null);
+        int? PlayoffRoundType = null,
+        IReadOnlyList<Division>? Divisions = null);
 
     /// <summary>
     /// One roster as the league shows it.
@@ -25,7 +27,8 @@ namespace FantasyLeague.Sleeper
     /// <param name="Name">The name to show it under, never blank.</param>
     /// <param name="OwnerId">The owning user's id, or null for an orphaned roster. What A1 matches on.</param>
     /// <param name="Record">Sleeper's own record so far, or null when it sent none. Checked against ours (T68).</param>
-    public sealed record SleeperTeam(string Name, string? OwnerId, TeamRecord? Record)
+    /// <param name="Division">The roster's division number as Sleeper sent it (T72b), or null.</param>
+    public sealed record SleeperTeam(string Name, string? OwnerId, TeamRecord? Record, int? Division = null)
     {
         /// <summary>
         /// The name shown for a roster with no manager or no name of its own.

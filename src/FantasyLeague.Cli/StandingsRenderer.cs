@@ -165,15 +165,44 @@ namespace FantasyLeague.Cli
             output.WriteLine($"{"TEAM",-Name}{"RECORD",9}{"GB",6}{"PF",9}{"PA",8}{"IDEAL",8}");
             output.WriteLine(new string('-', Rule));
 
-            foreach (var team in Standings.RankByRecord(payload.Teams, t => records[t.RosterId], t => t.Name))
+            foreach (var (heading, group) in Groups(payload))
             {
-                var record = records[team.RosterId];
-                var back = Standings.GamesBack(record, records.Values);
-                var ideal = team.Weeks.Where(w => w.IsFinal).Sum(w => w.Ideal);
+                if (heading is not null)
+                {
+                    output.WriteLine($"  {heading}");
+                }
 
-                output.WriteLine(
-                    $"{Fit(team.Name, Name),-Name}{record.Format(showTies),9}{(back == 0 ? "-" : F1(back)),6}" +
-                    $"{F1(record.PointsFor),9}{F1(record.PointsAgainst),8}{F1(ideal),8}");
+                // ranked and measured within the division (T72b)
+                var groupRecords = group.Select(t => records[t.RosterId]).ToList();
+                foreach (var team in Standings.RankByRecord(group, t => records[t.RosterId], t => t.Name))
+                {
+                    var record = records[team.RosterId];
+                    var back = Standings.GamesBack(record, groupRecords);
+                    var ideal = team.Weeks.Where(w => w.IsFinal).Sum(w => w.Ideal);
+
+                    output.WriteLine(
+                        $"{Fit(team.Name, Name),-Name}{record.Format(showTies),9}{(back == 0 ? "-" : F1(back)),6}" +
+                        $"{F1(record.PointsFor),9}{F1(record.PointsAgainst),8}{F1(ideal),8}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// The standings' groups: one per division when the payload has them (T72b), else one unnamed group.
+        /// </summary>
+        /// <param name="payload">The season.</param>
+        /// <returns>Each group's heading, or null, and its teams.</returns>
+        private static IEnumerable<(string? Heading, IReadOnlyList<TeamPayload> Teams)> Groups(SeasonPayload payload)
+        {
+            if (payload.Divisions is null)
+            {
+                yield return (null, payload.Teams);
+                yield break;
+            }
+
+            foreach (var division in payload.Divisions)
+            {
+                yield return (division.Name, [.. payload.Teams.Where(t => t.Division == division.Number)]);
             }
         }
 
