@@ -52,6 +52,22 @@ namespace FantasyLeague.Cli
             output.WriteLine(new string('-', Rule));
             output.WriteLine();
 
+            if (payload.Champions is { } champions)
+            {
+                output.WriteLine($"champion     {string.Join(", ", champions.Select(id => NameOf(payload, id)))}");
+            }
+
+            foreach (var round in payload.Playoffs?.Rounds ?? [])
+            {
+                foreach (var match in round.Matches)
+                {
+                    var result = !match.IsSettled ? "live"
+                        : match.Sides.FirstOrDefault(s => s.Won) is { } won ? $"W {won.Name}"
+                        : "settled";
+                    output.WriteLine($"R{round.Round}  {match.Label,-12} {Side(match.Sides[0])} - {Side(match.Sides[1])}   {result}");
+                }
+            }
+
             Footer(snapshot, checkedWeeks, output);
         }
 
@@ -64,6 +80,22 @@ namespace FantasyLeague.Cli
             snapshot.Violations.Count > 0
             || snapshot.UnresolvedPlayerIds.Count > 0
             || (snapshot.RecordCheck?.Mismatches.Count ?? 0) > 0;
+
+        /// <summary>
+        /// Names a roster from the table, or from the bracket for one with no row (Q9).
+        /// </summary>
+        /// <returns>The name.</returns>
+        private static string NameOf(SeasonPayload payload, int rosterId) =>
+            payload.Teams.FirstOrDefault(t => t.RosterId == rosterId)?.Name
+            ?? payload.Playoffs?.Rounds.SelectMany(r => r.Matches).SelectMany(m => m.Sides).FirstOrDefault(s => s.RosterId == rosterId)?.Name
+            ?? $"Roster {rosterId}";
+
+        /// <summary>
+        /// Formats a bracket side: its name and points, or TBD.
+        /// </summary>
+        /// <returns>"Alpha 50.0", "Alpha" before its round, or "TBD".</returns>
+        private static string Side(BracketSidePayload side) =>
+            side.Name is null ? "TBD" : side.Points is { } points ? $"{side.Name} {F1(points)}" : side.Name;
 
         /// <summary>
         /// Writes the verification footer: the invariants, unresolved players, the record check and any breach.

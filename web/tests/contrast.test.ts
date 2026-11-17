@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contrast, tokens } from './colour';
+import { contrast, contrastOn, tokens } from './colour';
 
 const themes = Object.entries(tokens());
 
@@ -17,6 +17,19 @@ describe.each(themes)('%s theme contrast', (_name, t) => {
   it('muted text clears 4.5:1 on both grounds', () => {
     expect(contrast(t['--fg-muted'], t['--bg'])).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t['--fg-muted'], t['--bg-subtle'])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("text on the champion's row clears 4.5:1, the sorted cell included", () => {
+    for (const ground of [t['--bg'], t['--bg-subtle']]) {
+      expect(contrastOn(t['--fg'], t['--gold-weak'], ground)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastOn(t['--fg-muted'], t['--gold-weak'], ground)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastOn(t['--gold'], t['--gold-weak'], ground)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('the crown clears 3:1 as a graphical object, on either ground', () => {
+    expect(contrast(t['--gold'], t['--bg'])).toBeGreaterThanOrEqual(3);
+    expect(contrast(t['--gold'], t['--bg-subtle'])).toBeGreaterThanOrEqual(3);
   });
 
   it('the accent clears 3:1 as a UI colour', () => {

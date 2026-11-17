@@ -106,6 +106,25 @@ describe('StandingsPanel in head-to-head', () => {
     expect(cells(3)).toEqual(['—', '1.0', '2.0']);
   });
 
+  it('shows a shared place as T1 and reads it as tied', () => {
+    const level = {
+      ...headToHead,
+      teams: headToHead.teams.map((t) =>
+        t.name === 'Bravo'
+          ? { ...t, record: { ...t.record!, wins: 3, losses: 1, pointsFor: 250.7 } }
+          : t,
+      ),
+    };
+    render(<StandingsPanel payload={level} />);
+    const rank = (i: number) => bodyRows()[i].querySelectorAll('td')[0];
+    expect(
+      [0, 1, 2].map(
+        (i) => rank(i).querySelector('[aria-hidden="true"]')?.textContent ?? rank(i).textContent,
+      ),
+    ).toEqual(['T1', 'T1', '3']);
+    expect(rank(0).querySelector('.visually-hidden')).toHaveTextContent('tied for 1');
+  });
+
   it('marks the rank as a lead column, so the team column stays the wide one', () => {
     const { container } = render(<StandingsPanel payload={headToHead} />);
     expect(container.querySelector('thead th')).toHaveClass('col-lead');

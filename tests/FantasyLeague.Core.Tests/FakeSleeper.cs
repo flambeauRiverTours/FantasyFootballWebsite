@@ -50,7 +50,8 @@ namespace FantasyLeague.Core.Tests
                 path.EndsWith("players/nfl", StringComparison.Ordinal) ? "{}" :
                 path.Contains("/users", StringComparison.Ordinal) ||
                 path.Contains("/rosters", StringComparison.Ordinal) ||
-                path.Contains("/matchups/", StringComparison.Ordinal) ? "[]" :
+                path.Contains("/matchups/", StringComparison.Ordinal) ||
+                path.EndsWith("/winners_bracket", StringComparison.Ordinal) ? "[]" :
                 """{"league_id":"L1","season":"2026","roster_positions":["QB","BN"]}""";
 
             return Json(HttpStatusCode.OK, body);

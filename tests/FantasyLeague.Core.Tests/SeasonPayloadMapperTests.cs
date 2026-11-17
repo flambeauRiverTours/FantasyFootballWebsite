@@ -67,8 +67,9 @@ namespace FantasyLeague.Core.Tests
             body.Should().NotContainEquivalentOf("record");
             JsonSerializer.Serialize(payload).Should().NotContainEquivalentOf("record");
 
-            // the ETag of the total-points body; a record key would change it (A39)
-            SeasonETag.Compute(payload).Should().Be("W/\"2026-wk4-07143DCD8688EFE0\"");
+            // the ETag of the total-points body; a record key would change it (A39). Re-pinned once
+            // by T69, which gave every body the season's end and whether it is complete (A46)
+            SeasonETag.Compute(payload).Should().Be("W/\"2026-wk4-0880EC761047C6CA\"");
         }
 
         [Fact]
@@ -581,5 +582,90 @@ namespace FantasyLeague.Core.Tests
 
             json.Should().Contain("\"sigma\":null");
         }
+
+        // T70: a past season of two weeks in a league without playoffs (it counts the NFL's 18) is complete
+        private static SeasonSnapshot Complete(LeagueFormat format, params TeamSeason[] teams) =>
+            Snapshot(teams, currentWeek: 2, finalThroughWeek: 2, format: format) with { IsCurrent = false };
+
+        [Fact]
+        public void A_complete_season_crowns_its_points_leader()
+        {
+            var payload = SeasonPayloadMapper.ToSeasonPayload(
+                Complete(LeagueFormat.TotalPoints, Team(1, "One", (10m, 11m, true), (10m, 11m, true)), Team(2, "Two", (30m, 31m, true), (5m, 6m, true))),
+                AsOf);
+
+            payload.Champions.Should().Equal(2);
+        }
+
+        [Theory]
+        [InlineData(17, true)]
+        [InlineData(1, true)]
+        [InlineData(RegularSeason.NFLWeeks, false)]
+        public void A_league_has_playoffs_when_its_season_stops_short_of_the_NFL_s(int cutoff, bool expected) =>
+            Snapshot(cutoff: cutoff).HasPlayoffs.Should().Be(expected);
+
+        [Fact]
+        public void A_season_one_week_short_crowns_nobody_and_sends_no_key()
+        {
+            var snapshot = Snapshot([Team(1, "One", (10m, 11m, true), (10m, 11m, false))], currentWeek: 2, finalThroughWeek: 1, cutoff: 2);
+
+            var payload = SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf);
+
+            payload.Champions.Should().BeNull();
+            JsonSerializer.Serialize(payload, JsonSerializerOptions.Web).Should().NotContain("champions");
+        }
+
+        [Fact]
+        public void A_past_season_is_crowned()
+        {
+            var snapshot = Snapshot([Team(1, "One", (10m, 11m, true)), Team(2, "Two", (20m, 21m, true))], currentWeek: 1, finalThroughWeek: 1, cutoff: 18)
+                with
+            { IsCurrent = false };
+
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Champions.Should().Equal(2);
+        }
+
+        [Fact]
+        public void A_playoff_week_never_decides_the_champion()
+        {
+            // One leads the regular season; Two's huge week 3 is a playoff week (cut-off 2)
+            var snapshot = Snapshot([
+                Team(1, "One", (30m, 31m, true), (30m, 31m, true), (0m, 0m, true)),
+                Team(2, "Two", (20m, 21m, true), (20m, 21m, true), (500m, 501m, true)),
+            ], currentWeek: 3, finalThroughWeek: 3, cutoff: 2);
+
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Champions.Should().Equal(1);
+        }
+
+        [Fact]
+        public void The_placeholder_is_never_crowned_from_the_table()
+        {
+            // A1: its points are the season's best, but it has no row to crown (Q9 is the bracket's, T69)
+            var snapshot = Complete(LeagueFormat.TotalPoints, Team(1, "One", (10m, 11m, true), (10m, 11m, true)))
+                with
+            { ExcludedTeams = [Team(9, "Placeholder", (90m, 91m, true), (90m, 91m, true))] };
+
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Champions.Should().Equal(1);
+        }
+
+        [Fact]
+        public void Head_to_head_without_playoffs_crowns_the_better_record_over_more_points()
+        {
+            var snapshot = Complete(LeagueFormat.HeadToHead,
+                TeamInGames(1, "One", (11m, 1, true), (11m, 1, true)),
+                TeamInGames(2, "Two", (10m, 1, true), (10m, 1, true)),
+                TeamInGames(3, "Three", (90m, 2, true), (5m, 2, true)),
+                TeamInGames(4, "Four", (80m, 2, true), (6m, 2, true)));
+
+            // Three leads on points (95), but is 1-1; One is 2-0
+            SeasonPayloadMapper.ToSeasonPayload(snapshot, AsOf).Champions.Should().Equal(1);
+        }
+
+        [Fact]
+        public void Head_to_head_with_records_unknown_crowns_nobody() =>
+            // weeks stored before matchups were read (A39)
+            SeasonPayloadMapper.ToSeasonPayload(
+                Complete(LeagueFormat.HeadToHead, Team(1, "One", (10m, 11m, true), (10m, 11m, true)), Team(2, "Two", (30m, 31m, true), (5m, 6m, true))),
+                AsOf).Champions.Should().BeNull();
     }
 }

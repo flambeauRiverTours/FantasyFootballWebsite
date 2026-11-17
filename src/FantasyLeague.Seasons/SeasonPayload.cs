@@ -21,6 +21,10 @@ namespace FantasyLeague.Seasons
     /// The games of <see cref="SeasonSnapshot.MatchupWeek"/>, in <see cref="LeagueFormat.HeadToHead"/>
     /// only and only when that week has games (T71, A41). Left out of the body otherwise.
     /// </param>
+    /// <param name="SeasonEndWeek">The week the season ends (A46): the final's last week with playoffs in head-to-head.</param>
+    /// <param name="IsComplete">Whether the season is over; the page stops polling on it (A46).</param>
+    /// <param name="Playoffs">The winners bracket (T69), in head-to-head with playoffs once it can be shown. Absent otherwise.</param>
+    /// <param name="Champions">The table's champions once the season is complete (T70, A45), a tie crowning everyone tied. Absent until then.</param>
     public sealed record SeasonPayload(
         string LeagueName,
         int Season,
@@ -33,7 +37,55 @@ namespace FantasyLeague.Seasons
         IReadOnlyList<TeamPayload> Teams,
         int LastRegularWeek,
         LeagueFormat Format,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MatchupsPayload? Matchups = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MatchupsPayload? Matchups = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Champions = null,
+        int SeasonEndWeek = 0,
+        bool IsComplete = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PlayoffsPayload? Playoffs = null);
+
+    /// <summary>
+    /// The winners bracket (T69, A46).
+    /// </summary>
+    /// <param name="Rounds">In order, never empty.</param>
+    public sealed record PlayoffsPayload(IReadOnlyList<RoundPayload> Rounds);
+
+    /// <summary>
+    /// One round of the bracket.
+    /// </summary>
+    /// <param name="Round">1 for the first.</param>
+    /// <param name="Weeks">The weeks it is played in.</param>
+    /// <param name="Name">"Final" for the round deciding first place, "Semifinals" before it, else "Round N".</param>
+    /// <param name="Matches">Main matches first, then placement matches by place.</param>
+    public sealed record RoundPayload(int Round, IReadOnlyList<int> Weeks, string Name, IReadOnlyList<BracketMatchPayload> Matches);
+
+    /// <summary>
+    /// One match of the bracket.
+    /// </summary>
+    /// <param name="Match">Sleeper's id, which an unknown side refers to.</param>
+    /// <param name="Label">What the card says: "Final", "3rd place", "Semifinal 1", "Round 1, game 2".</param>
+    /// <param name="Placement">1, 3, 5…, or null when it decides no place.</param>
+    /// <param name="IsSettled">Every week final and Sleeper's winner set; until then the points are live.</param>
+    /// <param name="Sides">Two, in Sleeper's order.</param>
+    public sealed record BracketMatchPayload(int Match, string Label, int? Placement, bool IsSettled, IReadOnlyList<BracketSidePayload> Sides);
+
+    /// <summary>
+    /// One side of a bracket match.
+    /// </summary>
+    /// <param name="RosterId">Null until known; may be a roster with no table row (A1, Q9).</param>
+    /// <param name="Name">Carried for every known side, the placeholder's included.</param>
+    /// <param name="From">Where an unknown side comes from; null for a seeded one.</param>
+    /// <param name="Points">Summed over the round's weeks read so far; null before the round starts.</param>
+    /// <param name="Won">Sleeper's winner, once settled.</param>
+    public sealed record BracketSidePayload(int? RosterId, string? Name, BracketFromPayload? From, decimal? Points, bool Won);
+
+    /// <summary>
+    /// The match a side comes from.
+    /// </summary>
+    /// <param name="WinnerOf">That match's id, for its winner.</param>
+    /// <param name="LoserOf">That match's id, for its loser.</param>
+    public sealed record BracketFromPayload(
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? WinnerOf,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LoserOf);
 
     /// <summary>
     /// One week's games (T71).

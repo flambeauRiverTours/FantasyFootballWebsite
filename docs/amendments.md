@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A44 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A46 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -258,7 +258,7 @@ Found in the same logs:
 
 ## A37 · The regular season only, enforced
 
-2026-11-15. Q4 settled on the regular season (A33), and T64 makes the code agree before week 15 goes live.
+2026-11-15. Q4 settled on the regular season (A33), and T64 makes the code agree before week 15 goes live. *A playoff league's season now ends at its final, not here (A46); the standings still count the regular season only.*
 
 - **The cut-off is the week before `settings.playoff_week_start`.** A league with no playoffs sends zero, or no settings at all, and counts the NFL's 18 regular weeks. A start past week 19 is capped at 18. One function, `RegularSeason.LastWeek`, decides it for every caller, and `LastCountedWeek` trims unplayed weeks off its end (below).
 - **Playoff weeks are still read and stored.** The design review caught that stopping the read at the playoffs would starve the bracket and a past season's champion (T69, T70). The snapshot keeps every week, so the finalize job stores them; only the payload stops at the cut-off.
@@ -354,6 +354,36 @@ Not done here: the champion. T70 crowns the winner of the final playoff game, bu
 - **The ranking rule is also in Core** (`Standings.RankByRecord`, `GamesBack`), for the CLI now and T70's no-playoffs champion next. It is the page's rule: win rate in doubles with a tie as half, then points for, then name compared culture-aware (`InvariantCulture`), as `localeCompare` is. At 0-0 the name decides the whole table, and ordinal order would put "Bravo" before "alpha"; both suites test that pair.
 - **The record check is counted** (`RecordCheck`: compared, skipped, mismatches). An empty list could mean a clean check, incomplete records, or every roster skipped because Sleeper's game count lags ours. The CLI prints `OK` only when it compared at least one roster, `not run` otherwise, and exits non-zero on a mismatch.
 - **The switch is a repository variable,** `LEAGUE_FORMAT`, passed to bicep's `leagueFormat` (default `TotalPoints`) and on to `League__Format`, beside `OVERRIDE_LEAGUE_NAME`. Merging changes nothing; setting it and running the deploy switches, deleting it and deploying switches back. The runbook has the steps, the CLI check first.
+
+## A45 · The champion, from the table
+
+2026-11-16. T70, built before the bracket (T69) because the real league has no playoffs: its champion is the table's leader, which it can see; a bracket it would never see. Design-reviewed, green with changes.
+
+- **When:** *(a playoff league's season now ends at its final, A46)* once the season is complete, the server's `FinalThroughWeek ≥ LastCountedWeek`, the rule the page's `isSeasonComplete` uses (A37), for the current season and past ones alike. A current season trims nothing before week 18 is settled, so no mid-season week can pass for the last.
+- **Who:** in `TotalPoints`, the points leader; in `HeadToHead` without playoffs, the record leader by win rate, then points for. A tie on everything that decides crowns everyone tied: the name orders the table but never decides a title. In `HeadToHead` with playoffs, none until T69 crowns the bracket's final; with records unknown (A39), none.
+- **Never from nothing.** The leader must have scored: an empty league rolled over and read in January is complete by the calendar and crowns nobody.
+- **The counted weeks only.** The champion is taken from the table's teams, their weeks trimmed to the counted ones, so a playoff week never decides it and the placeholder, with no row, is never crowned (A1). Q9, an excluded roster crowned for winning the bracket, moves to T69.
+- **`SeasonSnapshot.HasPlayoffs`** names what the cut-off already says: it is short of the NFL's 18 exactly when the playoff start is 2 to 18. Read from the cut-off, never stored beside it, so the two cannot disagree.
+- **`champions`, roster ids, absent until there is one.** A `TotalPoints` body changes only once a season is complete; the pinned live-week ETag test stands. Every past season's body changes once, and a browser may hold the old one for a day (A38).
+- **On the page,** the reasons only (design §10 has what is drawn): the crown keeps to the name's first word so a wrapping name never strands it; the tint is a background image so the sorted and hovered cells keep it; it is light enough (16% in light) that muted text stays at 4.5:1 on it, and a test holds text and crown to their ratios on the tint in both themes. A line under the table says it in words, because a phone hides the masthead's "Season completed" and an icon alone explains nothing.
+- **A shared place shows as T1** (Jack's call, 2026-11-16): teams level on what decides a place, win rate and points for, or points, share it, and the next place is skipped (T1, T1, 3). The name still orders them. A shared title reads "Co-champion" on each crown.
+- **Not yet:** a check that Sleeper's state does not reset in January and empty the current season and its crown; and a current season whose week went backwards is treated as complete (an existing rule, now more visible), which a later task may tighten.
+
+## A46 · The playoff bracket, and when a season ends
+
+2026-11-17. T69, built on T70's branch at Jack's request. Design-reviewed three times: not green, then Jack decided the two questions below, then green with changes.
+
+- **A playoff league's season ends at its final** (Jack). Before, the season was complete once the regular season was final, which stopped the page polling and said "Season completed" just as the bracket began. The snapshot now computes `SeasonEndWeek` and `IsComplete` once, for the mapper, the champion and the CLI, and the payload sends both (every body gains two fields; the pinned `TotalPoints` ETag was re-pinned once). The page reads `isComplete`, falling back to the old rule for a body cached before it, as `format` does (A38). Between the regular season and the final the masthead says "Playoffs · Week N"; a past playoff season says its final's week.
+- **Without a bracket, week 18.** A playoff league whose bracket was not read (failed, empty, or not placeable) ends at week 18, not its last regular week: one failure held for a minute in week 15 must not mark every open page complete and stop it polling for good. Nobody is crowned: a playoff league's title is its bracket's, never its table's.
+- **Sleeper's bracket, read tolerantly.** `winners_bracket` gives each match a round, an id, two sides, a winner and loser once Sleeper settles it, where each side comes from, and the place it decides. A side may be a roster id, a reference standing in for one, or nothing yet; `null` or `[]` is an empty bracket; anything unreadable fails the bracket alone, which the season is then shown without. Kept on the snapshot, cached 5 minutes for the current season and a day for a past one, outside the past season's day-long build so a failure is never kept a day; a failure is held a minute rather than retried on every 5 s build. Read only in head-to-head with playoffs, from the snapshot's own week, so a January reset keeps the bracket and its crown.
+- **Round types are an assumption:** `playoff_round_type` 0 is a week a round, 1 a two-week final, 2 two weeks a round. Sleeper does not document them, and the real league (playoffs off) proves nothing. An unknown value, or a round mapped past week 18, shows no bracket: a partial one misleads.
+- **A match is settled** when every week of its round is final and Sleeper has named its winner. Sleeper's `w` decides, since it applies the league's tiebreaks; a tie decided that way reads "won, on tiebreak". **A round ending in week 18 is settled once Sleeper names its winner** (Jack): Sleeper's state after week 18 has never been observed (A37), and if it resets straight to week 1 the week never becomes final by the state.
+- **Week 18 is read after a reset,** whatever the format, but only once weeks to 17 are stored: Sleeper may reset straight from it, so a league without playoffs lost it too. Never more than week 18: a reading of every week to 18 marked unplayed weeks final, so a mid-season blip in Sleeper's state could have stored them and frozen the season (caught in review). It is read on each rebuild, about 4 a minute through its 15 s cache, until Tuesday's finalize stores it (§07).
+- **The failure hold lives in a singleton** (`BracketFailures`), since the season service is created per request; and a past playoff season served without its bracket is cached in the browser for a minute, not a day.
+- **A past season's match is settled once Sleeper names its winner,** whether or not its last week was stored: the season is over.
+- **The bracket's champion** is the final's winner once settled; an excluded roster that wins is crowned (Q9), on the final's side, and the line under the table takes its name from the bracket.
+- **On the page,** the reasons only (design §10 has what is drawn): placement matches sit in their own round, after its main matches, because Sleeper's six-team bracket plays 5th place in round 2; there are no connector lines, because with byes and placement matches the columns do not line up and the cards' labels say it to everyone; a side still to come is named by its source's label, never Sleeper's match id, which no card shows; each round heading says its week and whether it is live, because a phone hides the masthead's status (A43's rule).
+- **Not here:** logging a disagreement between Sleeper's winner and our summed points (planned, left for later; the CLI line shows both).
 
 ## What the original design got wrong
 

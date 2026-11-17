@@ -1,5 +1,5 @@
 import { m } from 'motion/react';
-import { hasMedianGame, hasRecords, hasTies, standings } from '../api/calculations';
+import { championNames, hasMedianGame, hasRecords, hasTies, standings } from '../api/calculations';
 import type { SeasonPayload } from '../api/types';
 import { RowSlide } from './motion';
 import Panel from './Panel';
@@ -23,6 +23,8 @@ export default function StandingsPanel({ payload }: StandingsPanelProps) {
   const columns = standingsColumns(byRecord, hasTies(payload.teams), hasMedianGame(payload.teams));
   // head-to-head, but a counted week still lacks its games: the points table stands in
   const waiting = payload.format === 'HeadToHead' && !byRecord;
+  // in words as well as the crown: on a phone the masthead's "Season completed" is hidden
+  const champions = championNames(payload);
 
   return (
     <Panel id="standings" title="Standings">
@@ -33,7 +35,12 @@ export default function StandingsPanel({ payload }: StandingsPanelProps) {
               <StandingsHead columns={columns} />
               <tbody>
                 {rows.map((row) => (
-                  <m.tr layout key={row.team.rosterId} transition={RowSlide}>
+                  <m.tr
+                    layout
+                    key={row.team.rosterId}
+                    transition={RowSlide}
+                    className={row.champion ? 'is-champion' : undefined}
+                  >
                     {columns.map((column) => (
                       <td key={column.key} className={columnClass(column)}>
                         {column.cell(row)}
@@ -44,6 +51,12 @@ export default function StandingsPanel({ payload }: StandingsPanelProps) {
               </tbody>
             </table>
           </div>
+          {champions.length > 0 ? (
+            <p className="muted">
+              Season complete. {champions.length > 1 ? 'Co-champions' : 'Champion'}:{' '}
+              {new Intl.ListFormat('en', { type: 'conjunction' }).format(champions)}.
+            </p>
+          ) : null}
           {waiting ? (
             <p className="muted">
               Records are still loading, so the table is ranked by points for now.

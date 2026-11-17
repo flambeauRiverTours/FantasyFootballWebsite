@@ -26,8 +26,40 @@ export function luminance(oklch: string): number {
 }
 
 export function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ratio(luminance(a), luminance(b));
+}
+
+/** Contrast of a colour on a translucent tint laid over a ground, blended in sRGB as browsers do. */
+export function contrastOn(fg: string, tint: string, ground: string): number {
+  return ratio(luminance(fg), luminanceOf(over(tint, ground)));
+}
+
+function ratio(a: number, b: number): number {
+  const [hi, lo] = [a, b].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
+}
+
+const encode = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
+const decode = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+
+function linear(oklch: string): [number, number, number] {
+  const m = oklch.match(/oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)/);
+  if (!m) throw new Error(`not an oklch colour: ${oklch}`);
+  return toLinearRgb(Number(m[1]) / 100, Number(m[2]), Number(m[3]));
+}
+
+function over(tint: string, ground: string): [number, number, number] {
+  const alpha = Number(tint.match(/\/\s*([\d.]+)\s*\)/)?.[1] ?? 1);
+  const [t, g] = [linear(tint), linear(ground)];
+  return t.map((v, i) => decode(encode(v) * alpha + encode(g[i]) * (1 - alpha))) as [
+    number,
+    number,
+    number,
+  ];
+}
+
+function luminanceOf([r, g, b]: [number, number, number]): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /** The token values as declared, for the light theme and the dark override. */

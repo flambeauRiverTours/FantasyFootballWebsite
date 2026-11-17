@@ -25,6 +25,43 @@ namespace FantasyLeague.Core
                 .ThenBy(name, Names)];
 
         /// <summary>
+        /// Gets the points leaders, the champions of a total-points season (T70).
+        /// </summary>
+        /// <typeparam name="T">Whatever carries a team's points.</typeparam>
+        /// <param name="teams">The table's teams, their points over the counted weeks only.</param>
+        /// <param name="points">Over the counted weeks.</param>
+        /// <returns>Everyone on the top score; none when nobody scored, as in a league read before its first game.</returns>
+        public static IReadOnlyList<T> PointsLeaders<T>(IEnumerable<T> teams, Func<T, decimal> points) =>
+            Leaders(teams, t => (0d, points(t)));
+
+        /// <summary>
+        /// Gets the record leaders, the champions of a head-to-head season with no playoffs (T70).
+        /// </summary>
+        /// <typeparam name="T">Whatever carries a team's record.</typeparam>
+        /// <param name="teams">The table's teams, never the placeholder (A1).</param>
+        /// <param name="record">Over the counted weeks.</param>
+        /// <returns>
+        /// Everyone level with the leader on win rate and points for: the name orders the
+        /// table but never decides a title. None when nobody scored.
+        /// </returns>
+        public static IReadOnlyList<T> RecordLeaders<T>(IEnumerable<T> teams, Func<T, TeamRecord> record) =>
+            Leaders(teams, t => (WinRate(record(t)), record(t).PointsFor));
+
+        /// <summary>
+        /// Gets everyone level with the best on what decides a place.
+        /// </summary>
+        /// <typeparam name="T">The team type.</typeparam>
+        /// <param name="teams">The table's teams.</param>
+        /// <param name="place">What decides a place, compared in order: a rate, then points.</param>
+        /// <returns>The leaders; none when the best has no points.</returns>
+        private static IReadOnlyList<T> Leaders<T>(IEnumerable<T> teams, Func<T, (double Rate, decimal Points)> place)
+        {
+            var placed = teams.Select(t => (Team: t, Place: place(t))).ToList();
+            var best = placed.Select(p => p.Place).DefaultIfEmpty().Max();
+            return best.Points <= 0m ? [] : [.. placed.Where(p => p.Place == best).Select(p => p.Team)];
+        }
+
+        /// <summary>
         /// Counts games behind the best wins less losses, a tie as half; never below zero.
         /// </summary>
         /// <param name="record">The team's record.</param>

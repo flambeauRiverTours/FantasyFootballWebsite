@@ -38,6 +38,35 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void The_points_champion_is_the_points_leader() =>
+            Standings.PointsLeaders([("A", 90m), ("B", 120m), ("C", 100m)], t => t.Item2).Select(t => t.Item1)
+                .Should().Equal("B");
+
+        [Fact]
+        public void Tied_points_crown_everyone_tied() =>
+            Standings.PointsLeaders([("A", 120m), ("B", 90m), ("C", 120m)], t => t.Item2).Select(t => t.Item1)
+                .Should().Equal("A", "C");
+
+        [Fact]
+        public void A_season_nobody_scored_in_crowns_nobody() =>
+            // a league rolled over and read before a game: complete by the calendar, empty in fact
+            Standings.PointsLeaders([("A", 0m), ("B", 0m)], t => t.Item2).Should().BeEmpty();
+
+        [Fact]
+        public void The_record_champion_leads_on_win_rate_then_points_for() =>
+            Standings.RecordLeaders([Named("Many", 9, 3, 0, 900m), Named("Best", 10, 2, 0, 800m), Named("Same", 10, 2, 0, 700m)], t => t.Record)
+                .Select(t => t.Name).Should().Equal("Best");
+
+        [Fact]
+        public void A_tie_on_win_rate_and_points_for_crowns_both_and_the_name_decides_nothing() =>
+            Standings.RecordLeaders([Named("Zulu", 10, 2, 0, 800m), Named("Alpha", 10, 2, 0, 800m), Named("Low", 1, 11, 0, 800m)], t => t.Record)
+                .Select(t => t.Name).Should().BeEquivalentTo("Zulu", "Alpha");
+
+        [Fact]
+        public void Records_with_no_points_crown_nobody() =>
+            Standings.RecordLeaders([Named("A", 0, 0, 0), Named("B", 0, 0, 0)], t => t.Record).Should().BeEmpty();
+
+        [Fact]
         public void A_tie_leaves_half_a_game()
         {
             TeamRecord[] records = [new(3, 1, 0, 0m, 0m), new(1, 2, 1, 0m, 0m)];

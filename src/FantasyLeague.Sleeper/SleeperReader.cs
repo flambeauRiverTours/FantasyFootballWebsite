@@ -49,6 +49,16 @@ namespace FantasyLeague.Sleeper
         /// <returns>Every startable player by id.</returns>
         /// <exception cref="InvalidDataException">Sleeper answered with no players at all.</exception>
         Task<IReadOnlyDictionary<string, PlayerRef>> GetPlayersAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Gets a league's winners bracket (T69).
+        /// </summary>
+        /// <param name="leagueId">The league.</param>
+        /// <param name="cacheFor">5 minutes for the current season, a day for a past one.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        /// <returns>The matches; empty when Sleeper sent none.</returns>
+        /// <exception cref="InvalidDataException">A match could not be read.</exception>
+        Task<IReadOnlyList<PlayoffMatch>> GetWinnersBracketAsync(string leagueId, TimeSpan cacheFor, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -115,8 +125,17 @@ namespace FantasyLeague.Sleeper
                 SleeperMapper.ToSlots(league),
                 SleeperMapper.ToTeams(users, rosters),
                 league.Settings?.PlayoffWeekStart,
-                SleeperMapper.HasMedianGame(league));
+                SleeperMapper.HasMedianGame(league),
+                league.Settings?.PlayoffRoundType);
         }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<PlayoffMatch>> GetWinnersBracketAsync(string leagueId, TimeSpan cacheFor, CancellationToken cancellationToken) =>
+            await GetOrFetchAsync(
+                $"bracket:{leagueId}",
+                async token => SleeperMapper.ToBracket(await client.GetWinnersBracketAsync(leagueId, token)),
+                new HybridCacheEntryOptions { Expiration = cacheFor },
+                cancellationToken);
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<RosterWeek>> GetWeekAsync(

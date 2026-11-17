@@ -23,6 +23,11 @@ namespace FantasyLeague.Core.Tests
         public string DefaultMatchups { get; set; } = "[]";
         public string Players { get; set; } = Bodies.Players();
 
+        /// <summary>The winners bracket (T69), or null to fail its read with a 500.</summary>
+        public string? Bracket { get; set; } = "[]";
+
+        public int BracketRequests { get; private set; }
+
         /// <summary>League bodies by league id, for a chain of seasons; any other id gets <see cref="League"/>.</summary>
         public Dictionary<string, string> Leagues { get; } = [];
 
@@ -84,7 +89,16 @@ namespace FantasyLeague.Core.Tests
                 Requests.Add(path);
             }
 
-            var body = BodyFor(path);
+            if (path.EndsWith("/winners_bracket", StringComparison.Ordinal))
+            {
+                BracketRequests++;
+                if (Bracket is null)
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+                }
+            }
+
+            var body = path.EndsWith("/winners_bracket", StringComparison.Ordinal) ? Bracket! : BodyFor(path);
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -138,10 +152,10 @@ namespace FantasyLeague.Core.Tests
             return $$"""{"league_id":"L1","previous_league_id":null,"season":"2026","name":"Test","status":"in_season","total_rosters":2,"roster_positions":{{json}}}""";
         }
 
-        public static string League(int season, string? previousLeagueId, string name = "Test", int playoffWeekStart = 0)
+        public static string League(int season, string? previousLeagueId, string name = "Test", int playoffWeekStart = 0, int playoffRoundType = 0)
         {
             var previous = previousLeagueId is null ? "null" : $"\"{previousLeagueId}\"";
-            return $$$"""{"previous_league_id":{{{previous}}},"season":"{{{season}}}","name":"{{{name}}}","roster_positions":["QB","RB","FLEX","BN"],"settings":{"playoff_week_start":{{{playoffWeekStart}}}}}""";
+            return $$$"""{"previous_league_id":{{{previous}}},"season":"{{{season}}}","name":"{{{name}}}","roster_positions":["QB","RB","FLEX","BN"],"settings":{"playoff_week_start":{{{playoffWeekStart}}},"playoff_round_type":{{{playoffRoundType}}}}}""";
         }
 
         public static string Users() =>

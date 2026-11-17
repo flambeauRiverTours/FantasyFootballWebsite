@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { settledIdeal } from '../api/calculations';
 import type { Standing } from '../api/calculations';
+import ChampionName from './ChampionName';
 import RecordCell from './RecordCell';
 import Spoken from './Spoken';
 
@@ -19,7 +20,12 @@ export interface StandingsColumn {
   cell: (row: Standing) => ReactNode;
 }
 
-const TeamColumn: StandingsColumn = { key: 'team', label: 'Team', cell: ({ team }) => team.name };
+const TeamColumn: StandingsColumn = {
+  key: 'team',
+  label: 'Team',
+  cell: ({ team, champion }) =>
+    champion ? <ChampionName name={team.name} title={champion} /> : team.name,
+};
 
 const ByPoints: readonly StandingsColumn[] = [
   TeamColumn,
@@ -50,7 +56,8 @@ function byRecord(showTies: boolean, hasMedianGame: boolean): readonly Standings
       label: <Spoken shown="#" spoken="Rank" />,
       lead: true,
       muted: true,
-      cell: ({ rank }) => rank,
+      cell: ({ rank, tied }) =>
+        tied ? <Spoken shown={`T${rank}`} spoken={`tied for ${rank}`} /> : rank,
     },
     TeamColumn,
     {

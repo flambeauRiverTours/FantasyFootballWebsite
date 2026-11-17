@@ -38,6 +38,15 @@ actually returns.
   for a week with no games; when present, `games` is never empty and every game
   has exactly two teams. `matchups.median` (A43) is absent in a league without a
   median game.
+- `champions` (A45) is optional. It is absent until the season is complete; when present
+  it is never empty, and every id is a `rosterId` in `teams` or a side of the bracket's final
+  (an excluded roster that wins it, Q9, A46).
+- `seasonEndWeek` and `isComplete` (A46) are present in every body from T69 on; a body
+  cached before it has neither, and the page falls back to `finalThroughWeek >=
+  lastRegularWeek`. `isComplete` is true for every past season.
+- `playoffs` (A46) is optional: head-to-head with playoffs, once the bracket can be shown.
+  When present `rounds` is never empty, every match has exactly two `sides`, and every
+  non-null `rosterId` is a roster in the league (not necessarily in `teams`).
 
 ## Why this matters
 

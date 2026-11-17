@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { isSeasonComplete } from '../src/api/types';
 import type { TeamPayload, TeamRecord, WeekPayload } from '../src/api/types';
 import {
   canPlotMedian,
+  championNames,
   canPlotSigma,
   canZoom,
   cumulative,
@@ -35,7 +37,7 @@ import {
   vsMedian,
   weeklyMedians,
 } from '../src/api/calculations';
-import { headToHead, payload } from './fixture';
+import { bracket, headToHead, payload } from './fixture';
 import type { GamePayload } from '../src/api/types';
 
 function weeks(...rows: [number, number, number, boolean][]): WeekPayload[] {
@@ -244,8 +246,65 @@ describe('standings', () => {
     expect(rows.map((r) => r.gamesBack)).toEqual([1, 0, 1, 4]);
   });
 
+  it('marks the champion, a shared title as co-champions, and nobody without one', () => {
+    expect(standings({ ...payload, champions: [2] }).map((r) => r.champion)).toEqual([
+      null,
+      'Champion',
+      null,
+    ]);
+    expect(standings({ ...payload, champions: [1, 2] }).map((r) => r.champion)).toEqual([
+      'Co-champion',
+      'Co-champion',
+      null,
+    ]);
+    expect(standings(payload).every((r) => r.champion === null)).toBe(true);
+  });
+
+  it('shares a place between teams level on what decides it, and skips the places they fill', () => {
+    // Bravo and Charlie are both 3-1 with 250.7 points for: the name orders them, but does not separate them
+    const level = headToHead.teams.map((t) =>
+      t.name === 'Bravo'
+        ? { ...t, record: { ...t.record!, wins: 3, losses: 1, pointsFor: 250.7 } }
+        : t,
+    );
+    const rows = standings({ ...headToHead, teams: level });
+    expect(rows.map((r) => r.team.name)).toEqual(['Bravo', 'Charlie', 'Alpha']);
+    expect(rows.map((r) => [r.rank, r.tied])).toEqual([
+      [1, true],
+      [1, true],
+      [3, false],
+    ]);
+  });
+
+  it('ties teams in the points table only on equal points', () => {
+    expect(standings(payload).map((r) => [r.rank, r.tied])).toEqual([
+      [1, false],
+      [2, false],
+      [3, false],
+    ]);
+  });
+
   it('has no games back without records', () => {
     expect(standings(payload).every((r) => r.gamesBack === null)).toBe(true);
+  });
+});
+
+describe('the season s end', () => {
+  it('takes the server s word for whether the season is complete', () => {
+    expect(isSeasonComplete({ ...payload, finalThroughWeek: 20, isComplete: false })).toBe(false);
+    expect(isSeasonComplete({ ...payload, finalThroughWeek: 1, isComplete: true })).toBe(true);
+  });
+
+  it('falls back to the last counted week for a body cached before the server said', () => {
+    expect(isSeasonComplete({ ...payload, finalThroughWeek: 14, lastRegularWeek: 14 })).toBe(true);
+    expect(isSeasonComplete({ ...payload, finalThroughWeek: 13, lastRegularWeek: 14 })).toBe(false);
+  });
+
+  it('names champions from the table, or from the bracket for one with no row', () => {
+    expect(championNames({ ...headToHead, champions: [3] })).toEqual(['Charlie']);
+    expect(championNames({ ...headToHead, champions: [9], playoffs: bracket })).toEqual([
+      'Placeholder',
+    ]);
   });
 });
 

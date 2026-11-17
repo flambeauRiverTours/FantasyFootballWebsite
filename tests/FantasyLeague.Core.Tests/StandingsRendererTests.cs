@@ -86,6 +86,50 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public void The_bracket_is_listed_a_match_a_line()
+        {
+            // playoffs from week 2, a week a round: the semifinal (week 2) is settled, the final (week 3) to come
+            var snapshot = Snapshot([InGames("Alpha", 1, (100m, 1), (50m, 0)), InGames("Bravo", 2, (10m, 1), (40m, 0))],
+                currentWeek: 3, finalThroughWeek: 2, cutoff: 1, format: LeagueFormat.HeadToHead) with
+            {
+                Bracket =
+                [
+                    new PlayoffMatch(1, 1, new BracketSide(1, BracketSource.None, 0), new BracketSide(2, BracketSource.None, 0), 1, null),
+                    new PlayoffMatch(2, 2, new BracketSide(1, BracketSource.WinnerOf, 1), new BracketSide(null, BracketSource.None, 0), null, 1),
+                ],
+            };
+
+            var output = Render(snapshot);
+
+            output.Should().Contain($"R1  {"Semifinal 1",-12} Alpha 50.0 - Bravo 40.0   W Alpha{Environment.NewLine}");
+            output.Should().Contain($"R2  {"Final",-12} Alpha - TBD   live{Environment.NewLine}");
+        }
+
+        [Fact]
+        public void A_settled_match_whose_winner_is_on_neither_side_still_renders()
+        {
+            var snapshot = Snapshot([InGames("Alpha", 1, (100m, 1), (50m, 0)), InGames("Bravo", 2, (10m, 1), (40m, 0))],
+                currentWeek: 3, finalThroughWeek: 2, cutoff: 1, format: LeagueFormat.HeadToHead) with
+            {
+                Bracket = [new PlayoffMatch(1, 1, new BracketSide(1, BracketSource.None, 0), new BracketSide(2, BracketSource.None, 0), 5, 1)],
+            };
+
+            Render(snapshot).Should().Contain("settled");
+        }
+
+        [Fact]
+        public void A_complete_season_names_its_champion()
+        {
+            var output = Render(Snapshot([Team("Alpha", 1, (10m, 20m, true)), Team("Bravo", 2, (30m, 40m, true))], currentWeek: 1, finalThroughWeek: 1, cutoff: 1));
+
+            output.Should().Contain($"champion     Bravo{Environment.NewLine}");
+        }
+
+        [Fact]
+        public void A_season_in_progress_names_no_champion() =>
+            Render(Snapshot([Team("Alpha", 1, (10m, 20m, true))])).Should().NotContain("champion ");
+
+        [Fact]
         public void Head_to_head_keeps_the_points_table_until_every_record_is_known()
         {
             // no matchup ids: the records are unknown, as on the page (hasRecords)

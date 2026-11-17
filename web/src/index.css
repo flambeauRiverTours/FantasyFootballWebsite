@@ -32,6 +32,10 @@ svg {
   --accent: oklch(52% 0.13 165);
   --accent-weak: oklch(52% 0.13 165 / 0.12);
 
+  /* the champion (T70): the crown clears 3:1 on either ground */
+  --gold: oklch(56% 0.12 80);
+  --gold-weak: oklch(80% 0.13 85 / 0.16);
+
   /* diverging pair, T50 */
   --above: oklch(52% 0.13 165);
   --below: oklch(58% 0.15 25);
@@ -71,6 +75,9 @@ svg {
 
     --accent: oklch(72% 0.13 165);
     --accent-weak: oklch(72% 0.13 165 / 0.16);
+
+    --gold: oklch(82% 0.14 85);
+    --gold-weak: oklch(82% 0.14 85 / 0.12);
 
     --above: oklch(72% 0.13 165);
     --below: oklch(70% 0.15 25);
@@ -202,6 +209,8 @@ h1 {
 }
 
 .panel {
+  /* a column that can shrink, so a wide child (the bracket) scrolls inside it, not the page */
+  grid-template-columns: minmax(0, 1fr);
   min-height: calc(100svh - var(--masthead-h));
   scroll-snap-align: start;
   display: grid;
@@ -275,6 +284,118 @@ td:first-child {
 td:first-child {
   font-variant-numeric: normal;
   font-weight: var(--weight-medium);
+}
+
+/* champion */
+/* an image, so the tint lies over the sorted and hovered cells' own backgrounds */
+tr.is-champion td {
+  background-image: linear-gradient(var(--gold-weak), var(--gold-weak));
+}
+
+.champion {
+  position: relative;
+}
+
+.champion-lead {
+  white-space: nowrap;
+}
+
+.crown {
+  width: 1em;
+  height: 1em;
+  margin-right: 0.3em;
+  vertical-align: -0.125em;
+  fill: var(--gold);
+}
+
+/* inside the cell's padding: the table scrolls sideways, so anything outside it is clipped */
+.sparkles {
+  position: absolute;
+  top: -0.4em;
+  left: -0.4em;
+  width: 1.8em;
+  height: 1.6em;
+  pointer-events: none;
+}
+
+/* four-point stars, so they read as sparkle and not as dust */
+.sparkle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  background: var(--gold);
+  animation: twinkle 2.4s ease-in-out infinite;
+}
+
+.sparkle:nth-child(1) {
+  top: 0;
+  left: 0;
+}
+
+.sparkle:nth-child(2) {
+  top: 0.15em;
+  right: 0;
+  animation-delay: 0.8s;
+}
+
+.sparkle:nth-child(3) {
+  bottom: 0;
+  left: 0.15em;
+  animation-delay: 1.6s;
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* bracket: a column per round when wide, stacked on phones */
+.bracket {
+  display: grid;
+  gap: var(--space-6);
+  margin-top: var(--space-6);
+}
+
+.bracket-round h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.bracket-round .matchups {
+  margin-top: var(--space-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bracket-label {
+  margin: 0 0 var(--space-1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.matchup-side.is-unknown {
+  color: var(--fg-muted);
+}
+
+.bracket:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+@media (min-width: 40.0625rem) {
+  .bracket {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(13rem, 1fr);
+    overflow-x: auto;
+  }
 }
 
 /* rank column */
@@ -781,6 +902,10 @@ td.is-sorted {
 /* reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
+  /* still, and the crown stays */
+  .sparkle {
+    animation: none;
+  }
   .panels {
     scroll-snap-type: none;
   }

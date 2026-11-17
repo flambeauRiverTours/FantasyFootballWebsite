@@ -162,6 +162,114 @@ namespace FantasyLeague.Core.Tests
         }
 
         [Fact]
+        public async Task After_a_reset_week_18_is_read_even_when_the_store_stops_short_of_it()
+        {
+            // A46: Sleeper may reset straight from week 18 to week 1, so week 18 never became final while live
+            var socket = TwoSeasons();
+            socket.State = Bodies.State(week: 1);
+            var store = new SeasonStore().With("L1", 2026, [.. Enumerable.Range(1, 17).Select(w => Week(1, w, 10m))]);
+            var (service, _) = await BuildAsync(socket, store);
+
+            await service.BuildAsync(Token);
+
+            socket.Requests.Should().Contain(p => p.EndsWith("/matchups/18", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task A_week_that_goes_back_mid_season_reads_no_week_past_the_store()
+        {
+            // a blip in Sleeper's state must not read, mark final and so store weeks nobody has played
+            var socket = TwoSeasons();
+            socket.State = Bodies.State(week: 2);
+            var store = new SeasonStore().With("L1", 2026, [.. Enumerable.Range(1, 9).Select(w => Week(1, w, 10m))]);
+            var (service, _) = await BuildAsync(socket, store);
+
+            var snapshot = await service.BuildAsync(Token);
+
+            socket.Requests.Should().NotContain(p => p.Contains("/matchups/", StringComparison.Ordinal));
+            snapshot.Teams[0].Weeks.Select(w => w.Week).Should().Equal(Enumerable.Range(1, 9));
+        }
+
+        [Fact]
+        public async Task A_failed_bracket_read_is_held_across_every_instance_of_the_service()
+        {
+            // the service is created per request; the hold must outlive it (A46)
+            var socket = TwoSeasons();
+            socket.Leagues["L0"] = Bodies.League(2025, null, "Last Year", playoffWeekStart: 2);
+            socket.Bracket = null;
+            var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(1, 2, 80m), Week(2, 1, 70m), Week(2, 2, 60m));
+            var services = TestServices.Create();
+            services.AddSingleton<IFinalizedWeekStore>(store);
+            services.AddSleeperClient(o => o.Retry.Delay = TimeSpan.Zero).ConfigurePrimaryHttpMessageHandler(() => socket);
+            services.AddSeasonServiceWithNullStores();
+            services.AddSingleton(Options.Create(new LeagueOptions { CurrentLeagueId = "L1", Format = LeagueFormat.HeadToHead }));
+            using var provider = services.BuildServiceProvider();
+            await provider.GetRequiredService<IPlayerMapRefresher>().RefreshAsync(Token);
+
+            await provider.GetRequiredService<ISeasonService>().BuildPastAsync(2025, Token);
+            var afterFirst = socket.BracketRequests;
+            await provider.GetRequiredService<ISeasonService>().BuildPastAsync(2025, Token);
+
+            afterFirst.Should().BeGreaterThan(0);
+            socket.BracketRequests.Should().Be(afterFirst);
+        }
+
+        [Fact]
+        public async Task The_bracket_is_read_only_in_head_to_head_with_playoffs_from_their_first_week()
+        {
+            var socket = TwoSeasons();
+            socket.Leagues["L1"] = Bodies.League(2026, "L0", playoffWeekStart: 3);
+            var h2h = new LeagueOptions { CurrentLeagueId = "L1", Format = LeagueFormat.HeadToHead };
+
+            socket.State = Bodies.State(week: 2);
+            var (before, _) = await BuildAsync(socket, new SeasonStore(), h2h);
+            await before.BuildAsync(Token);
+            socket.BracketRequests.Should().Be(0, "week 2 is before the playoffs");
+
+            socket.State = Bodies.State(week: 3);
+            var (during, _) = await BuildAsync(socket, new SeasonStore(), h2h);
+            await during.BuildAsync(Token);
+            socket.BracketRequests.Should().Be(1);
+
+            var (points, _) = await BuildAsync(socket, new SeasonStore());
+            await points.BuildAsync(Token);
+            socket.BracketRequests.Should().Be(1, "a total-points league never reads the bracket");
+        }
+
+        [Fact]
+        public async Task A_failed_bracket_read_is_held_and_never_fails_the_season()
+        {
+            var socket = TwoSeasons();
+            socket.Leagues["L0"] = Bodies.League(2025, null, "Last Year", playoffWeekStart: 2);
+            socket.Bracket = null;
+            var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(1, 2, 80m), Week(2, 1, 70m), Week(2, 2, 60m));
+            var (service, _) = await BuildAsync(socket, store, new LeagueOptions { CurrentLeagueId = "L1", Format = LeagueFormat.HeadToHead });
+
+            var first = await service.BuildPastAsync(2025, Token);
+            var afterFirst = socket.BracketRequests;
+            var second = await service.BuildPastAsync(2025, Token);
+
+            first!.Bracket.Should().BeNull("the season is served without it");
+            second!.Bracket.Should().BeNull();
+            afterFirst.Should().BeGreaterThan(0);
+            socket.BracketRequests.Should().Be(afterFirst, "a failure is held, not retried at once");
+        }
+
+        [Fact]
+        public async Task A_past_season_reads_its_bracket_outside_its_day_long_cache()
+        {
+            var socket = TwoSeasons();
+            socket.Leagues["L0"] = Bodies.League(2025, null, "Last Year", playoffWeekStart: 2);
+            socket.Bracket = """[{"r":1,"m":1,"t1":1,"t2":2,"w":1,"l":2,"p":1}]""";
+            var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(1, 2, 80m), Week(2, 1, 70m), Week(2, 2, 60m));
+            var (service, _) = await BuildAsync(socket, store, new LeagueOptions { CurrentLeagueId = "L1", Format = LeagueFormat.HeadToHead });
+
+            var snapshot = (await service.BuildPastAsync(2025, Token))!;
+
+            snapshot.Bracket.Should().ContainSingle().Which.Winner.Should().Be(1);
+        }
+
+        [Fact]
         public async Task A_past_season_stored_short_of_week_18_ends_at_its_last_played_week()
         {
             var store = new SeasonStore().With("L0", 2025, Week(1, 1, 90m), Week(1, 2, 80m));

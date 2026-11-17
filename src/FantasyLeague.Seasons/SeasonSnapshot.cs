@@ -19,6 +19,8 @@ namespace FantasyLeague.Seasons
     /// <param name="Format">The deployment's format, applied to every season, past ones included (Q10, A38).</param>
     /// <param name="ExcludedTeams">The rosters A1 leaves out of every metric, kept apart so nothing that counts reads them. Stored, and paired in head-to-head, since a game against the placeholder counts (T68).</param>
     /// <param name="HasMedianGame">Whether each week adds a result against that week's median score (Q12, T68).</param>
+    /// <param name="Bracket">The winners bracket (T69), or null when not read: not a playoff league in head-to-head, before the playoffs, or the read failed.</param>
+    /// <param name="PlayoffRoundType">Sleeper's <c>playoff_round_type</c>; see <see cref="Playoffs.RoundWeeks"/>.</param>
     /// <param name="RecordCheck">Our records against Sleeper's (T68), mismatches reported like <see cref="Violations"/>; null until run, or when our records are incomplete.</param>
     /// <remarks>
     /// An excluded roster is left out of every metric but still checked: a
@@ -41,8 +43,65 @@ namespace FantasyLeague.Seasons
         LeagueFormat Format,
         IReadOnlyList<TeamSeason> ExcludedTeams,
         bool HasMedianGame,
-        RecordCheck? RecordCheck)
+        RecordCheck? RecordCheck,
+        IReadOnlyList<PlayoffMatch>? Bracket = null,
+        int PlayoffRoundType = 0)
     {
+        /// <summary>
+        /// Gets the first playoff week, or 0 without playoffs.
+        /// </summary>
+        public int PlayoffWeekStart => HasPlayoffs ? RegularSeasonCutoff + 1 : 0;
+
+        /// <summary>
+        /// Gets whether the title is the bracket's: head-to-head with playoffs (A46).
+        /// </summary>
+        public bool HasBracket => Format == LeagueFormat.HeadToHead && HasPlayoffs;
+
+        /// <summary>
+        /// Gets the last week whose results stand: a past season's are all settled, its last weeks stored or not.
+        /// </summary>
+        public int SettledThroughWeek => IsCurrent ? FinalThroughWeek : int.MaxValue;
+
+        /// <summary>
+        /// Gets the bracket's rounds in weeks (T69), or null when there is no bracket to show:
+        /// not head-to-head with playoffs, not read, empty, or not placeable (A46).
+        /// </summary>
+        public IReadOnlyDictionary<int, IReadOnlyList<int>>? PlayoffRounds =>
+            HasBracket && Bracket is { } bracket
+                ? Playoffs.Weeks(bracket, PlayoffWeekStart, PlayoffRoundType)
+                : null;
+
+        /// <summary>
+        /// Gets the final, the match deciding first place, when the bracket can be shown.
+        /// </summary>
+        public PlayoffMatch? Final => PlayoffRounds is not null && Bracket is { } bracket ? bracket.FirstOrDefault(m => m.Placement == 1) : null;
+
+        /// <summary>
+        /// Gets the week the season ends (A46): its final's last week in head-to-head with playoffs,
+        /// week 18 when that bracket cannot be shown, else the last counted week.
+        /// </summary>
+        public int SeasonEndWeek =>
+            !HasBracket ? LastCountedWeek
+            : PlayoffRounds is { } rounds ? rounds.Values.Max(w => w[^1])
+            : RegularSeason.NFLWeeks;
+
+        /// <summary>
+        /// Gets whether the season is over: what stops the page polling, says "Season completed"
+        /// and crowns a champion (A45, A46). A past season always is.
+        /// </summary>
+        public bool IsComplete =>
+            !IsCurrent
+            || (Final is { } final && PlayoffRounds is { } rounds
+                ? Playoffs.IsSettled(final, rounds[final.Round], FinalThroughWeek)
+                : FinalThroughWeek >= SeasonEndWeek);
+
+        /// <summary>
+        /// Gets whether the league schedules playoffs (T70): if so its champion is the bracket's (T69),
+        /// not the table's. A cut-off short of the NFL's 18 is exactly a playoff start of 2 to 18
+        /// (<see cref="RegularSeason.LastWeek"/>), so it is read from the cut-off, never kept beside it.
+        /// </summary>
+        public bool HasPlayoffs => RegularSeasonCutoff < RegularSeason.NFLWeeks;
+
         /// <summary>
         /// Gets the last week that counts: the cut-off, less any settled weeks at its end nobody scored in (A37).
         /// </summary>

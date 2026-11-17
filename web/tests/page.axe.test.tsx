@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import App from '../src/App';
 import type { SeasonPayload } from '../src/api/types';
-import { headToHead, payload } from './fixture';
+import { bracket, headToHead, payload } from './fixture';
 import { serveApi } from './api';
 
 // the whole page in each of its states, so a panel added later is checked
@@ -58,6 +58,20 @@ describe('The page', () => {
     const waiting = render(<App />);
     await screen.findByText(/records are still loading/i);
     expect(await violations(waiting.container)).toEqual([]);
+  });
+
+  it('has no axe violations with a champion crowned', async () => {
+    serveApi({ ...payload, finalThroughWeek: 14, champions: [1] });
+    const { container } = render(<App />);
+    await screen.findByRole('img', { name: 'Champion' });
+    expect(await violations(container)).toEqual([]);
+  });
+
+  it('has no axe violations in the playoffs', async () => {
+    serveApi({ ...headToHead, playoffs: bracket });
+    const { container } = render(<App />);
+    await screen.findByRole('region', { name: 'Playoffs' });
+    expect(await violations(container)).toEqual([]);
   });
 
   it('has no axe violations while the season is loading', async () => {

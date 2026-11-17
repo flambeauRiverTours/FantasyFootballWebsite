@@ -2,14 +2,14 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A44. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A46. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
 - **Cost:** about $0.25 a month, with an alert at $0.50 (§13)
 - **Sleeper load:** about 4.4 requests a minute per instance, capped at 25 (§07)
 - **League:** six rosters, five of them scoring. One is a placeholder team and is excluded from everything (A1)
-- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Head-to-head and this week's matchups are built and can be switched on (A44); divisions, playoffs and a champion are next (T72b, T69, T70)
+- **Status:** built and deployed, including past seasons and the season picker (A34), counting the regular season only (A37). Head-to-head and this week's matchups are built and can be switched on (A44), a complete season crowns its champion (A45), and a playoff league shows its bracket, its season ending at the final (A46); divisions are next (T72b)
 
 ## 01 · Scope
 
@@ -17,7 +17,7 @@ One public, read-only page for one league: a standings table and some charts, up
 
 The league is decided on **total season points**, the sum of every week's actual score. Consistency and ideal points are just commentary; neither decides anything.
 
-Out of scope: logins, writes of any kind, trades, and anything needing a Sleeper account. Head-to-head is a `League:Format` setting, `TotalPoints` unless the deployment sets it (A38, A44); playoffs and a champion follow it; playoff weeks never count toward the standings (A33, A37). The site reads one league ID from configuration and nothing else.
+Out of scope: logins, writes of any kind, trades, and anything needing a Sleeper account. Head-to-head is a `League:Format` setting, `TotalPoints` unless the deployment sets it (A38, A44); in head-to-head with playoffs the winners bracket is shown and decides the champion (A46); the losers bracket is out of scope; playoff weeks never count toward the standings (A33, A37). The site reads one league ID from configuration and nothing else.
 
 Sleeper's API has no projections, so there's no projected-points column and no scoring engine. Sleeper's own scored points are used as-is.
 
@@ -168,6 +168,7 @@ Steady state on a Sunday afternoon. Because every read goes through the server, 
 | finished weeks | memory 6 h, then blob, then SQL | 0 once stored |
 | past seasons | weeks from SQL; league, users, rosters and the chain walk 24 h (A34) | <0.01 per season |
 | matchup backfill | daily, at most 12 weeks a run; once complete, the cached chain only (A39) | 12 once a day, until complete |
+| winners bracket | H2H with playoffs only: 5 min, a day for a past season; a failure held a minute (A46) | ≤ 0.2 |
 | **Total** | | **≈ 4.4** |
 
 A 15 s matchup cache plus the 30 s poll means a score is at most 45 s old.
@@ -177,6 +178,7 @@ A 15 s matchup cache plus the 30 s poll means a score is at most 45 s old.
 Two situations cost more:
 
 - **Between Sunday night and Tuesday's job**, the just-finished week isn't stored yet, so it's fetched like the live one: about 8.4 a minute.
+- **After the NFL state resets in January**, week 18 is read from Sleeper on each rebuild until Tuesday's job stores it: about 4 a minute more (A46).
 - **If the blob and the database both fail**, every finished week is rebuilt from Sleeper. By week 7 that exceeds the limit, which then starts refusing requests. Failed reads are never cached, so it recovers as soon as storage does.
 
 Two things enforce the budget, and the second is the real guarantee:
@@ -270,7 +272,15 @@ ETag: W/"2026-wk7-…"
     "games": [{ "matchupId": 1, "teams": [
       { "rosterId": 3, "name": "Bijan Mustard", "actual": 46.20 },
       { "rosterId": 5, "name": "…", "actual": 38.10 } ] }]
-  }
+  },
+  "champions": [3],               // absent mid-season; shown for shape. Once complete, every leader (A45)
+  "seasonEndWeek": 18,            // the last counted week; the final's last week with playoffs in head-to-head (A46)
+  "isComplete": false,            // the page stops polling on it
+  "playoffs": { "rounds": [{      // head-to-head with playoffs, once the bracket can be shown (A46)
+    "round": 3, "weeks": [17], "name": "Final",
+    "matches": [{ "match": 6, "label": "Final", "placement": 1, "isSettled": false, "sides": [
+      { "rosterId": 3, "name": "…", "from": { "winnerOf": 3 }, "points": 61.30, "won": false },
+      { "rosterId": null, "name": null, "from": { "winnerOf": 4 }, "points": null, "won": false } ] }] }] }
 }
 
 GET /api/seasons          (cached a day, with an ETag)
@@ -306,7 +316,7 @@ I use D3's scales, line generators and tick logic, and render the results as JSX
 
 #### Chart controls
 
-- **Season:** from `/api/seasons`, so a new year appears on its own. The picker is hidden until there are two seasons (A34). Choosing a past season stops polling and swaps "updated" for the season's final week. The current season says "Season completed" and stops polling once its last counted week is final (A37).
+- **Season:** from `/api/seasons`, so a new year appears on its own. The picker is hidden until there are two seasons (A34). Choosing a past season stops polling and swaps "updated" for the season's final week. The current season says "Season completed" and stops polling once the server says it is complete: its last counted week final, or with playoffs in head-to-head its final settled; in between the masthead says "Playoffs · Week N" (A46).
 - **Teams:** multi-select, all on by default, each team keeping its own colour everywhere (A25).
 - **Metric:** points, ideal or σ. Only one at a time, because σ's scale would flatten into the bottom of a shared axis.
 - **Mode** for points and ideal: running total, per week, or vs the league median. For σ: expanding or rolling, raw or CV (D3).
@@ -323,6 +333,14 @@ The standings table works with no interaction: tabular figures, the sorted colum
 #### This week's matchups
 
 Under the table, a head-to-head league gets one week's games, a card per game: "Week 7 · upcoming" before kick-off, "Week 7 · live" while live, "Week 7 results" once final. Each side is a line of text, name then points, with the higher score in bold, and neither of a tie (A42); once final the winner's whole line is bold, and a screen reader hears who leads or won. The placeholder's side has a ring for a swatch and "(not ranked)". Under the cards, once the week has started, the median game's line (two decimals) with who is above and on it, and, while live, that the table adds these scores once the week is final (A43). Panels are a screen tall, so a few cards fill one; accepted (A41).
+
+#### The champion
+
+Once a season is complete, its champion's row gets a crown before the name, a gold tint and three star sparkles that hold still under reduced motion, and a line under the table names the champion: the points leader, or in head-to-head without playoffs the record leader. A tie crowns everyone tied, as co-champions (A45). With playoffs, the bracket's final decides (T69). Teams level on what decides a place share it: T1, T1, then 3.
+
+#### The playoffs
+
+A head-to-head league with playoffs shows its winners bracket in the matchups panel's place from its first playoff week: a column per round, its heading naming the round, its week and whether it is live or settled ("Semifinals · Week 16 · live"), stacked on phones; each match a card labelled in words ("Final", "3rd place", "Semifinal 1"), its sides drawn as the matchups' are, a side still to come named by its source's label ("Winner of Semifinal 1"), and a tiebreak win marked "(tiebreak)". When its columns overflow, the bracket scrolls on its own, a named region a keyboard can reach. The final's winner wears the crown once it is settled. Meanwhile the masthead says "Playoffs · Week N" and the page keeps polling until the final (A46).
 
 #### Motion
 
@@ -415,13 +433,13 @@ All but one are answered; the reasoning is in [`amendments.md`](amendments.md). 
 - **Q6 open:** should the default be σ or CV? D3 picks σ for readability. If the gap between the highest- and lowest-scoring teams' averages passes about 30 points, CV is the fairer default.
 - **Q7 answered:** 2026 is the league's first season, so a null `previous_league_id` is expected (A4).
 - **Q8 answered:** eight distinct slots, which is readable as a radar.
-- **Q9 answered:** an excluded roster in the bracket is shown, and crowned if it wins.
+- **Q9 answered:** an excluded roster in the bracket is shown, and crowned if it wins (T69; the table never crowns it, A45).
 - **Q10 answered:** every season renders in the deployment's format.
-- **Q11 answered:** no seeds.
+- **Q11 answered:** no seeds (A46: Sleeper's bracket has none).
 - **Q12 answered:** a median game counts in W-L, as in Sleeper.
 - **Q13 answered:** the matchups view shows the current week only.
 - **Q14 answered:** division standings are head-to-head only.
-- **Q15 answered:** build order T68 → T71 → T72 → T69 → T70.
+- **Q15 answered:** build order T68 → T71 → T72 → T69 → T70; revised to T72a → T70 → T72b → T69 (A44, A45), what the real league can see first.
 
 ## 15 · Build order
 

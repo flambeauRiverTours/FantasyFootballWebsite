@@ -4,8 +4,8 @@ Reasons live in [`docs/amendments.md`](../docs/amendments.md); finished work's d
 git history.
 `±` marks an estimate that could run double.
 
-**Status (2026-11-16).** M0–M7 built and deployed. T64, T66–T68, T71 and T73 merged, with
-head-to-head still gated; T72a (lift the gate) next, then T72b, T69, T70. One T61 check left.
+**Status (2026-11-17).** M0–M7 built and deployed. T64, T66–T68, T71, T72a and T73 merged;
+head-to-head can be switched on (A44). T70 and T69 built together on one branch; T72b next. One T61 check left.
 
 ## Open
 
@@ -19,41 +19,8 @@ head-to-head still gated; T72a (lift the gate) next, then T72b, T69, T70. One T6
 - [ ] **T66–T72 · Zoom, head-to-head, matchups, divisions, playoffs, a champion** (A36,
       planned 2026-11-15, revised after design review). Reverses §01's "out of scope:
       head-to-head, playoffs" for leagues configured that way. T64, T66, T67 and T68 are merged
-      (Done table). Next: T72a → T72b → T69 → T70. The real league has no divisions and no
-      playoffs (captured settings), so T72a goes first: it is the part that league sees.
-  - [ ] **T72a** Lift the head-to-head gate — 2 h `±`. Split from T72 (A44). Preconditions met
-       2026-11-16 (A44): the backfill read 0 weeks on its last two runs, logged "Matchups
-       complete" for every season with stored weeks and no "Could not backfill" error; no record
-       mismatch logged in 30 days. Design reviewed: green with changes, folded in below.
-    1. **The gate.** `LeagueOptions.Format` takes `[AllowedValues(TotalPoints, HeadToHead)]`, not
-       `[EnumDataType]` (both refuse `"7"`; the list makes a later format opt-in). `Anything_but_total_points_is_refused_until_T72_is_built` becomes
-       `Head_to_head_binds` (by name, any case) plus `An_undefined_format_is_refused` ("7").
-       `"1"` and `"TotalPoints,HeadToHead"` parse to `HeadToHead`: accepted, as the binder
-       accepts any enum this way; a test pins it so it is a decision, not an accident.
-    2. **One ranking rule, in Core.** `Standings.RankByRecord(teams, record, name)` and
-       `GamesBack`: win rate (a tie as half a win), then points for, then name compared with
-       `InvariantCulture` as `localeCompare` does; games back from the best margin. Tested
-       against the same cases as `calculations.test.ts`, plus "alpha"/"Bravo" in both.
-    3. **The CLI in `HeadToHead`.** Ranked by record, with RECORD (no median split: the page has
-       it), GB, PF and PA in place of POINTS, SPREAD and GAP, once every record is known
-       (else the points table, as the page falls back); `TotalPoints` unchanged. `RecordCheck`
-       counts compared and skipped rosters, so the footer says `OK` only when it compared some,
-       `not run` otherwise, lists mismatches, and a mismatch fails the exit code. Run against the real league before
-       the switch (Jack runs it; the league id stays in user-secrets).
-    4. **`infra/`** (asked for in A38's last bullet): `@allowed(['TotalPoints', 'HeadToHead'])
-       param leagueFormat string = 'TotalPoints'` and the `League__Format` app setting.
-       **`.github/workflows/deploy.yml`** passes `leagueFormat="${LEAGUE_FORMAT:-TotalPoints}"` from
-       a repository variable, as `OVERRIDE_LEAGUE_NAME` is. Merging changes nothing; setting the
-       variable and redeploying is the switch, and clearing it switches back.
-    5. **Runbook:** "Switching to head-to-head" under Ongoing maintenance: the CLI check first,
-       the exact spelling, running the deploy by hand (a variable starts none), every past season
-       checked for "still loading", and switching back; `LEAGUE_FORMAT` in Step 5.
-    6. **Docs:** A44 (the split, the preconditions and their evidence, `AllowedValues`); design
-       status line and §01 scope; A38's gate bullet points to A44.
-    7. **Tests, red first:** the binding cases; `RankByRecord` (win rate, tie as half, points
-       for, name, no records); the CLI table in both formats from a captured-shape snapshot.
-       Then the page against the invented season with `HeadToHead` bound for real (the local
-       Functions host, not the static file), at 360 px and desktop.
+      (Done table). T70 and T69 built together; next T72b. The real league has no divisions and
+      no playoffs (captured settings), so what it sees went first: T72a, then the champion.
   - [ ] **T72b** Division standings, H2H only (Q14) — 4 h `±`. After T72a; the rest of the old
        T72, minus its gate step.
     1. Capture first: the script already keeps `divisions` and each roster's `division`; add
@@ -67,31 +34,75 @@ head-to-head still gated; T72a (lift the gate) next, then T72b, T69, T70. One T6
     4. The table grouped by division, each ranked by `rankByRecord`, the leader marked, a
        division with no name shown as "Division N". An excluded roster's division is not shown.
     5. Tests: two divisions, a league with none, an unnamed division, a past season.
-  - [ ] **T69** Playoff bracket, H2H only — 6 h `±`.
-    1. Sleeper: `/v1/league/{id}/winners_bracket`, fetched only in H2H once
-       `week ≥ playoff_week_start`; cached 5 min live, a day past (≤ 0.2 req/min on §07).
-       Plus `settings.playoff_week_start` and `playoff_round_type` (0: a week per round;
-       1: two-week final; 2: two weeks per round).
-    2. Payload `playoffs`: rounds → matches with `p` (placement: 1 final, 3, 5…) and each side's
-       `from` (winner or loser of match m; none for a round-1 bye), the teams, points summed
-       over the round's weeks and a winner shown only when all of them are final (R1). No
-       seeds (Sleeper's bracket has none; Q11). The losers bracket is out of scope.
-    3. A Playoffs panel, a round per column, connected by `from`; a stacked list on phones.
-       From `playoff_week_start` on it replaces T71's matchups panel, which until then shows the
-       last regular week.
-    4. Tests: an invented bracket for each `playoff_round_type`, placement games and a bye.
-  - [ ] **T70** The champion — 2 h `±`. A server-side `champion` (roster id or null):
-       `TotalPoints`: the points leader once every regular-season week is final (ties crown
-       everyone tied). `HeadToHead`: the winner of the `p = 1` match once final; **with no
-       playoffs** (`playoff_week_start` 0, as the real league has), the record leader by the
-       ranking rule once every regular-season week is final (A43). Past seasons
-       too. A crown before the name with the text alternative "Champion", a gold tint on the
-       row, and a few gold sparkles (`aria-hidden`) that twinkle; under reduced motion they
-       are still and the crown stays. The bracket's final is crowned the same way.
-       An excluded roster that wins **is crowned** (Q9): it has no table row, so the crown
-       goes on the bracket's final and on a line above the table naming it. Capture `state/nfl` in January to
-       check it does not reset after the NFL season and empty the current season and its crown.
-       Tests: the champion in both formats and in a past season.
+  - [ ] **T69** The playoff bracket, H2H only — 6 h `±`. Designed 2026-11-17, built on the T70
+       branch at Jack's request (one PR). Design-reviewed three times: not green, then Jack decided
+       the two questions (below), then green with changes, folded in. The reasoning is A46.
+    0. **A playoff league's season ends at its final** (Jack): `SeasonSnapshot.SeasonEndWeek` and
+       `IsComplete`, sent as `seasonEndWeek` and `isComplete`; the page polls through the
+       playoffs, the masthead says "Playoffs · Week N", and T70's champion waits. With playoffs
+       but no bracket the season ends at week 18 and nobody is crowned. A past season is complete.
+    1. **Sleeper:** `winners_bracket` read tolerantly (`t1`/`t2` an id or `{w|l: m}`, `p` optional,
+       `null`/`[]` empty), `playoff_round_type` (0 a week per round, 1 a two-week final, 2 two
+       weeks per round: an assumption, A46; unknown shows no bracket).
+    2. **Kept** on the snapshot as `Bracket`, fetched in H2H with playoffs once the snapshot's
+       week reaches the start (a past season always), cached 5 min / a day; a failure held a
+       minute; a past build never caches a failed read.
+    3. **Core `Playoffs`:** rounds to weeks; a round past week 18 drops the bracket; a match is
+       settled when its weeks are final and Sleeper set `w`, or, **for week 18 (Jack), once `w`
+       is set**. After a reset week 18 is always read, any format (§07 notes the cost).
+    4. **Payload `playoffs`:** rounds (named "Final" for the round with `p = 1`, "Semifinals"
+       before it, else "Round N") of matches (placement, settled, two sides: roster, name, from,
+       points summed over the round's weeks, won). The bracket's champion is the final's `w`;
+       an excluded winner is crowned (Q9) and named from the bracket.
+    5. **Page:** a Playoffs panel in the matchups panel's place; a column per round on desktop,
+       stacked on phones; cards with visible labels, reusing the matchup side; unknown sides as
+       "Winner of match 2"; the crown on the final; no connectors.
+    6. **CLI:** a line per match.
+    7. **Tests, red first;** the browser against an invented season with a bracket.
+  - [ ] **T70** The champion, without a bracket — 3 h `±`. Revised 2026-11-16: the bracket
+       does not exist until T69, and the real league has no playoffs, so T70 crowns the table's
+       leader once the regular season is final; T69 adds the bracket's final.
+    1. **When:** the season is complete (with playoffs in head-to-head, at its final: A46, T69),
+       `FinalThroughWeek ≥ LastCountedWeek`, the rule the
+       page's `isSeasonComplete` already uses (A37), and the leader has scored (an empty league
+       read in January is complete by the calendar). Taken from the trimmed weeks only. Current and
+       past seasons alike; a past season is settled to its end.
+    2. **Who, in Core (`Standings`):**
+       - `TotalPoints`: the points leader; a tie crowns everyone tied (as planned).
+       - `HeadToHead` **without playoffs** (`SeasonSnapshot.HasPlayoffs`, read from the cut-off: a
+         `playoff_week_start` of 0, 1, none, or past 18 schedules no playoff week): the record leader by
+         `RankByRecord`'s win rate, then points for. A tie on both crowns everyone tied: the name
+         orders the table but never decides a title.
+       - `HeadToHead` **with playoffs:** none until T69 crowns its final.
+       - `HeadToHead` with records unknown (A39): none.
+       - **Only the table's teams.** The placeholder never leads the table (A1); Q9's "an
+         excluded roster that wins is crowned" is about the bracket, so it moves to T69.
+    3. **Payload:** `SeasonPayload` gains `[JsonIgnore(WhenWritingNull)] IReadOnlyList<int>?
+       Champions`, roster ids, absent until there is one. A `TotalPoints` body changes only once
+       a season is complete; the pinned-ETag test (a live week) stays as it is, and a test pins
+       that an incomplete season carries no key.
+    4. **Page:** in the standings row of each champion, a crown (inline SVG, `role="img"`,
+       accessible name "Champion") before the name, a gold tint on the row (new `--gold` and
+       `--gold-weak` tokens, light and dark: the crown ≥ 3:1 and text ≥ 4.5:1 on the tinted row),
+       and three small star sparkles (`aria-hidden`) that twinkle in CSS. The tint is a background image on
+       the cells, so the sorted and hovered cells keep it; the crown keeps to the first word. Under `prefers-reduced-motion` they
+       are still and the crown stays. In both tables (points and record). No `aria-live`.
+       Under the table, in words: "Season complete. Champion: X." or "Co-champions: X and Y.",
+       since a phone hides the masthead's status; on a tie the crown reads "Co-champion". Teams
+       level on what decides a place show T1, T1 and the next place is 3 (Jack, 2026-11-16).
+       The CLI adds a footer line `champion     Name`.
+    5. **Docs:** A45; design §09 (`champions`), §10 (the crown), §14 Q9 pointing to T69;
+       `api-contract.md`: `champions` optional, ids of rows in `teams`.
+    6. **Tests, red first:** Core: points leader, tied points, record leader, tie on win rate and
+       points for, records unknown, with playoffs, not complete, placeholder with the best score
+       (not crowned). Mapper: a complete past season, a current one at its last week final and
+       one week short, `HeadToHead` with playoffs. Web: the crown and its name, the tint, the
+       sparkles hidden, none when absent, co-champions and the line in words, T1 places; axe;
+       text on the tint (contrast). Reduced motion checked in the browser (jsdom cannot
+       evaluate the media query). CLI: the footer line. Browser: the invented season, made complete, at
+       360 px and desktop, light and dark.
+    7. **Not here:** capturing `state/nfl` in January to check it does not reset and empty the
+       current season and its crown; that check stays on the list for January.
 - [ ] **T65** `League:SeasonOverrides` (D8, deferred by A34): a year → league ID map merged over
       the chain, for a league recreated from scratch. Not needed while the chain is intact.
 - [ ] **T61** Domain 4b, item 16: try dropping the queue and table storage roles now that identity
@@ -119,7 +130,7 @@ head-to-head still gated; T72a (lift the gate) next, then T72b, T69, T70. One T6
 | M7 Motion | T51–T55 | Optional; built |
 | Past seasons | T29, T56 | Chain walk, season picker (A34) |
 | Portfolio | T59–T60 | Consistency panel (A33); standards and seven domain reviews (A19–A33) |
-| Formats | T64, T66–T68, T71 | Regular season only (A37), chart zoom (A36), `League:Format` (A38), the head-to-head record (A39), this week's matchups (A41–A43), gated until T72a |
+| Formats | T64, T66–T68, T71, T72a | Regular season only (A37), chart zoom (A36), `League:Format` (A38), the head-to-head record (A39), this week's matchups (A41–A43), the gate lifted, switched by `LEAGUE_FORMAT` (A44) |
 | Cleanup | T73 | Repo-wide simplification and standards pass; the deploy's migrate sign-in (A40) |
 
 Settled questions: Q1–Q15, in design §14. Fixtures B1–B3, B5 captured.

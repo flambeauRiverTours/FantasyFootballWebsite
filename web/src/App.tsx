@@ -6,6 +6,7 @@ import ChartPanel from './components/ChartPanel';
 import RadarPanel from './components/RadarPanel';
 import ConsistencyPanel from './components/ConsistencyPanel';
 import MatchupsPanel from './components/MatchupsPanel';
+import PlayoffsPanel from './components/PlayoffsPanel';
 import { consistencyRows } from './api/calculations';
 import { useRelativeTime } from './hooks/useRelativeTime';
 import { useElapsedSince } from './hooks/useElapsedSince';
@@ -76,7 +77,10 @@ export default function App() {
 
             <main className="panels">
               <StandingsPanel payload={payload} />
-              {payload.matchups ? (
+              {/* in the playoffs the bracket takes this week's matchups' place (A46) */}
+              {payload.playoffs ? (
+                <PlayoffsPanel payload={payload} playoffs={payload.playoffs} />
+              ) : payload.matchups ? (
                 <MatchupsPanel payload={payload} matchups={payload.matchups} />
               ) : null}
               {consistency.length > 0 ? (
