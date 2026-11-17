@@ -20,5 +20,6 @@
     /// </summary>
     /// <param name="PlayoffWeekStart">The first playoff week. Zero, or absent, when the league has no playoffs.</param>
     /// <param name="LeagueAverageMatch">1 when the league plays a median game each week (Q12), else 0 or absent.</param>
-    internal sealed record LeagueSettingsDto(int? PlayoffWeekStart, int? LeagueAverageMatch);
+    /// <param name="PlayoffRoundType">How many weeks each playoff round takes (T69); see <see cref="Core.Playoffs.RoundWeeks"/>.</param>
+    internal sealed record LeagueSettingsDto(int? PlayoffWeekStart, int? LeagueAverageMatch, int? PlayoffRoundType);
 }

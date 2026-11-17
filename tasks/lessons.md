@@ -41,6 +41,7 @@ incident itself belongs in the commit or the amendment.
 - UI whose job is timing must be watched with the slow case forced; tests cannot see it.
 - Chrome anchors scrolling to SVG text, so a redrawn chart can drag the page; test changes with the viewport's top edge cutting through the chart.
 - Leave more than the focus ring's 4px between adjacent controls, and check new controls by tabbing to them.
+- A test name with an apostrophe goes in double quotes; a single-quoted one fails the whole file's parse.
 
 ## Shell and CI
 

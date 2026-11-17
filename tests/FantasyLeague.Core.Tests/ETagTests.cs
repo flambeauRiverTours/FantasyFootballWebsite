@@ -118,6 +118,16 @@ namespace FantasyLeague.Core.Tests
             SeasonETag.CacheControl(Payload(isCurrent: true)).Should().Be("public, max-age=5");
 
         [Fact]
+        public void A_past_playoff_season_missing_its_bracket_is_cached_a_minute() =>
+            // A46: its bracket read failed; a day in the browser would keep it bare for a day
+            SeasonETag.CacheControl(Payload(isCurrent: false) with
+            {
+                Format = LeagueFormat.HeadToHead,
+                LastRegularWeek = 14,
+                SeasonEndWeek = RegularSeason.NFLWeeks,
+            }).Should().Be("public, max-age=60");
+
+        [Fact]
         public void A_completed_season_is_cached_for_a_day() =>
             // A38: its scores cannot change, but the format it is shown in can
             SeasonETag.CacheControl(Payload(isCurrent: false)).Should().Be("public, max-age=86400");

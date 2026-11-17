@@ -1,4 +1,5 @@
-﻿using FantasyLeague.Core;
+﻿using System.Text.Json;
+using FantasyLeague.Core;
 
 namespace FantasyLeague.Sleeper
 {
@@ -98,6 +99,50 @@ namespace FantasyLeague.Sleeper
                     (s.Fpts ?? 0) + ((s.FptsDecimal ?? 0) / 100m),
                     (s.FptsAgainst ?? 0) + ((s.FptsAgainstDecimal ?? 0) / 100m))
                 : null;
+
+        /// <summary>
+        /// Maps the winners bracket (T69), reading each side tolerantly (A46).
+        /// </summary>
+        /// <param name="matches">Sleeper's matches; null when it sent none.</param>
+        /// <returns>The bracket; empty for none.</returns>
+        /// <exception cref="InvalidDataException">A match or a side could not be read.</exception>
+        internal static IReadOnlyList<PlayoffMatch> ToBracket(IReadOnlyList<BracketMatchDto?>? matches) =>
+            matches is null
+                ? []
+                : [.. matches.Select(m => m is null
+                    ? throw new InvalidDataException("Sleeper sent a null bracket match.")
+                    : new PlayoffMatch(m.R, m.M, ToSide(m.T1, m.T1From), ToSide(m.T2, m.T2From), m.W, m.P))];
+
+        /// <summary>
+        /// Reads one side: a roster id, a reference standing in for one, or nothing yet.
+        /// </summary>
+        /// <param name="team">Sleeper's <c>t1</c> or <c>t2</c>.</param>
+        /// <param name="from">Sleeper's <c>t1_from</c> or <c>t2_from</c>.</param>
+        /// <returns>The side.</returns>
+        private static BracketSide ToSide(JsonElement? team, JsonElement? from)
+        {
+            // a reference in place of the roster says where the side comes from; else its own from does
+            var (source, match) =
+                team is { ValueKind: JsonValueKind.Object } stand ? ToReference(stand)
+                : from is { ValueKind: JsonValueKind.Object } reference ? ToReference(reference)
+                : (BracketSource.None, 0);
+            return team switch
+            {
+                { ValueKind: JsonValueKind.Number } id => new BracketSide(id.GetInt32(), source, match),
+                null or { ValueKind: JsonValueKind.Object or JsonValueKind.Null or JsonValueKind.Undefined } => new BracketSide(null, source, match),
+                _ => throw new InvalidDataException("Sleeper sent a bracket side that is neither a roster nor a reference."),
+            };
+        }
+
+        /// <summary>
+        /// Reads <c>{"w": m}</c> or <c>{"l": m}</c>.
+        /// </summary>
+        /// <param name="reference">The object.</param>
+        /// <returns>The source and its match.</returns>
+        private static (BracketSource Source, int Match) ToReference(JsonElement reference) =>
+            reference.TryGetProperty("w", out var w) && w.ValueKind == JsonValueKind.Number ? (BracketSource.WinnerOf, w.GetInt32())
+            : reference.TryGetProperty("l", out var l) && l.ValueKind == JsonValueKind.Number ? (BracketSource.LoserOf, l.GetInt32())
+            : throw new InvalidDataException("Sleeper sent a bracket reference that is neither a winner nor a loser.");
 
         /// <summary>
         /// Whether the league plays a median game: each week, a second result against the league's median score (Q12).

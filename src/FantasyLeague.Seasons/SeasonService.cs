@@ -83,6 +83,7 @@ namespace FantasyLeague.Seasons
     /// <param name="options">The configured league and its local rules.</param>
     /// <param name="time">Clock for the build's duration.</param>
     /// <param name="reported">What this instance has already logged.</param>
+    /// <param name="bracketFailures">Bracket reads that failed, held a minute across requests (A46).</param>
     /// <param name="chain">League ids of earlier seasons (D8).</param>
     internal sealed class SeasonService(
         ISleeperReader sleeper,
@@ -92,6 +93,7 @@ namespace FantasyLeague.Seasons
         IOptions<LeagueOptions> options,
         TimeProvider time,
         ReportedProblems reported,
+        BracketFailures bracketFailures,
         ISeasonChain chain,
         ILogger<SeasonService> logger) : ISeasonService
     {
@@ -130,12 +132,52 @@ namespace FantasyLeague.Seasons
             (await sleeper.GetNFLStateAsync(cancellationToken)).Season;
 
         /// <inheritdoc />
-        public async Task<SeasonSnapshot?> BuildPastAsync(int season, CancellationToken cancellationToken) =>
-            await cache.GetOrCreateAsync(
+        public async Task<SeasonSnapshot?> BuildPastAsync(int season, CancellationToken cancellationToken)
+        {
+            var snapshot = await cache.GetOrCreateAsync(
                 $"past:{season}",
                 async token => new PastBuild(await BuildPastUncachedAsync(season, options.Value, token)),
                 PastSeason,
-                cancellationToken: cancellationToken) is { Snapshot: var snapshot } ? snapshot : null;
+                cancellationToken: cancellationToken) is { Snapshot: var built } ? built : null;
+
+            // the bracket is cached on its own, outside the day-long build, so a failed read is not kept a day
+            if (snapshot is null || snapshot.Format != LeagueFormat.HeadToHead || !snapshot.HasPlayoffs)
+            {
+                return snapshot;
+            }
+
+            var leagueId = (await chain.GetAsync(cancellationToken))[season];
+            return snapshot with { Bracket = await ReadBracketAsync(leagueId, TimeSpan.FromDays(1), cancellationToken) };
+        }
+
+        /// <summary>
+        /// Reads a league's bracket, holding a failure for a minute (A46).
+        /// </summary>
+        /// <param name="leagueId">The league.</param>
+        /// <param name="cacheFor">How long a successful read is kept.</param>
+        /// <returns>The bracket, or null when it could not be read: the season is served without it.</returns>
+        private async Task<IReadOnlyList<PlayoffMatch>?> ReadBracketAsync(string leagueId, TimeSpan cacheFor, CancellationToken cancellationToken)
+        {
+            if (bracketFailures.IsHeld(leagueId))
+            {
+                return null;
+            }
+
+            try
+            {
+                return await sleeper.GetWinnersBracketAsync(leagueId, cacheFor, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                bracketFailures.Record(leagueId);
+                if (reported.IsNew("bracket-read"))
+                {
+                    logger.LogWarning(ex, "Could not read the playoff bracket; the season is shown without it.");
+                }
+
+                return null;
+            }
+        }
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<int>> GetAvailableSeasonsAsync(CancellationToken cancellationToken)
@@ -205,12 +247,20 @@ namespace FantasyLeague.Seasons
             // debug: under load this runs every 5 s, and App Insights already times each request
             logger.LogDebug("Built season snapshot in {ElapsedMilliseconds}ms.", (long)time.GetElapsedTime(started).TotalMilliseconds);
 
+            // the snapshot's week, after any reset, so a January reset keeps the bracket and its crown
+            var bracket = configured.Format == LeagueFormat.HeadToHead
+                && RegularSeason.HasPlayoffs(league.PlayoffWeekStart)
+                && weeks.CurrentWeek >= league.PlayoffWeekStart
+                ? await ReadBracketAsync(configured.CurrentLeagueId, TimeSpan.FromMinutes(5), cancellationToken)
+                : null;
+
             var snapshot = Assemble(
                 league, configured, excluded, weeks.TeamWeeks, state.Season,
                 weeks.CurrentWeek, WeekFinality.FinalThroughWeek(weeks.CurrentWeek), isCurrent: true) with
             {
                 UnresolvedPlayerIds = [.. weeks.Unresolved.Distinct()],
                 Violations = weeks.Violations,
+                Bracket = bracket,
             };
 
             return snapshot with { RecordCheck = RecordCheck.Run(snapshot.Records, league.Teams) };
@@ -251,7 +301,9 @@ namespace FantasyLeague.Seasons
                 configured.Format,
                 GroupTeams(weeks, league.Teams, excluded.Contains),
                 league.HasMedianGame,
-                null);
+                null,
+                null,
+                league.PlayoffRoundType ?? 0);
 
         /// <summary>
         /// Resolves the configured owner ids to this season's rosters (A1).
@@ -300,7 +352,10 @@ namespace FantasyLeague.Seasons
             // past them; a week behind them means the state reset, and the stored season stands.
             // Equal is not a reset: the live week is read from Sleeper whatever the store holds for it
             var wentBack = state.Week < storedThrough;
-            var lastRead = Math.Max(state.Week, storedThrough);
+            // after a reset, week 18 alone is read once weeks to 17 are stored: Sleeper may reset straight
+            // from it, so it never became final while live (A46). Never more: a mid-season blip must not
+            // read, mark final and so store weeks nobody has played
+            var lastRead = wentBack && storedThrough == RegularSeason.NFLWeeks - 1 ? RegularSeason.NFLWeeks : Math.Max(state.Week, storedThrough);
             // a reset comes after the NFL's regular season, so every week to 18 has settled, stored or not
             weeks.CurrentWeek = wentBack ? Math.Max(storedThrough, RegularSeason.NFLWeeks) + 1 : state.Week;
             if (wentBack && reported.IsNew($"week-back:{state.Season}:{state.Week}"))

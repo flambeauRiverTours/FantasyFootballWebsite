@@ -2,6 +2,7 @@ import { median } from 'd3-array';
 import { hasConsistency } from './types';
 import type {
   ConsistentTotals,
+  BracketMatchPayload,
   GamePayload,
   MatchupsPayload,
   MatchupTeamPayload,
@@ -156,10 +157,14 @@ export interface Standing {
   team: TeamPayload;
   /** Points behind the leader. Zero for the leader. */
   gap: number;
-  /** 1 for the top row. */
+  /** The place: 1 for the top row, shared by teams level on what decides it, the next place skipped. */
   rank: number;
+  /** Shares its place with another team: shown as T1. */
+  tied: boolean;
   /** Games behind the leader; ties count half. */
   gamesBack: number | null;
+  /** Crowned once the season is complete (T70): co-champion when the title is shared. */
+  champion: 'Champion' | 'Co-champion' | null;
 }
 
 /** Teams ranked by points, highest first. Points decide the league. */
@@ -239,12 +244,49 @@ export function recordSpoken({ wins, losses, ties }: Results, showTies: boolean)
   return (showTies ? [...parts, counted(ties, 'tie', 'ties')] : parts).join(', ');
 }
 
+/** The champions' names: from the table, else from the bracket for one with no row (Q9). */
+export function championNames(payload: SeasonPayload): string[] {
+  const sides = payload.playoffs?.rounds.flatMap((r) => r.matches.flatMap((m) => m.sides)) ?? [];
+  return (payload.champions ?? []).map(
+    (id) =>
+      payload.teams.find((t) => t.rosterId === id)?.name ??
+      sides.find((s) => s.rosterId === id)?.name ??
+      `Roster ${id}`,
+  );
+}
+
+/** The live leader of a bracket card; none once settled (the winner's whole line is bold) or when level. */
+export function bracketLeader({ isSettled, sides: [a, b] }: BracketMatchPayload): 0 | 1 | null {
+  return isSettled ? null : leaderOf(a.points, b.points);
+}
+
+/** Screen reader result per bracket side (A43): "won, on tiebreak" when Sleeper's tiebreak decided it. */
+export function bracketSpoken(match: BracketMatchPayload): [string, string] {
+  const [a, b] = match.sides;
+  if (match.isSettled) {
+    const word = a.points !== null && a.points === b.points ? 'won, on tiebreak' : 'won';
+    return [a.won ? word : '', b.won ? word : ''];
+  }
+  if (a.points === null || b.points === null || (a.points === 0 && b.points === 0)) {
+    return ['', ''];
+  }
+  if (a.points === b.points) {
+    return ['level', 'level'];
+  }
+  return a.points > b.points ? ['leading', ''] : ['', 'leading'];
+}
+
 /** Index of the side ahead; null when level. */
 export function matchupLeader({ teams: [a, b] }: GamePayload): 0 | 1 | null {
-  if (a.actual === b.actual) {
+  return leaderOf(a.actual, b.actual);
+}
+
+/** The index of the higher of two scores; null when level or either is unknown. */
+function leaderOf(a: number | null, b: number | null): 0 | 1 | null {
+  if (a === null || b === null || a === b) {
     return null;
   }
-  return a.actual > b.actual ? 0 : 1;
+  return a > b ? 0 : 1;
 }
 
 /** Screen reader result per side (A43). */
@@ -292,12 +334,25 @@ export function standings(payload: SeasonPayload): Standing[] {
   const best = hasRecords(payload)
     ? Math.max(...payload.teams.map((t) => margin(t.record!)))
     : null;
-  return ranked.map((team, i) => ({
-    team,
-    gap: leader - team.totals.actual,
-    rank: i + 1,
-    gamesBack: best === null ? null : (best - margin(team.record!)) / 2,
-  }));
+  const champions = new Set(payload.champions);
+  const title = champions.size > 1 ? 'Co-champion' : 'Champion';
+  const places = ranked.map((team) => place(team, best !== null));
+  return ranked.map((team) => {
+    const key = place(team, best !== null);
+    return {
+      team,
+      gap: leader - team.totals.actual,
+      rank: places.indexOf(key) + 1,
+      tied: places.indexOf(key) !== places.lastIndexOf(key),
+      gamesBack: best === null ? null : (best - margin(team.record!)) / 2,
+      champion: champions.has(team.rosterId) ? title : null,
+    };
+  });
+}
+
+/** What decides a place, as one comparable string: win rate then points for, else points; never the name. */
+function place(team: TeamPayload, byRecord: boolean): string {
+  return byRecord ? `${winRate(team.record!)}|${team.record!.pointsFor}` : `${team.totals.actual}`;
 }
 
 /** Final weeks before sigma draws a line: four for its first value (D1), one more for a second. */

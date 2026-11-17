@@ -25,6 +25,13 @@
             playoffWeekStart is > 1 and var start ? Math.Min(start - 1, NFLWeeks) : NFLWeeks;
 
         /// <summary>
+        /// Gets whether a playoff week is scheduled inside the NFL season: exactly when <see cref="LastWeek"/> stops short of it.
+        /// </summary>
+        /// <param name="playoffWeekStart">The league's first playoff week as Sleeper sends it.</param>
+        /// <returns>True for a start of 2 to 18.</returns>
+        public static bool HasPlayoffs(int? playoffWeekStart) => LastWeek(playoffWeekStart) < NFLWeeks;
+
+        /// <summary>
         /// Gets the last week that counts once weeks nobody played are taken off the end.
         /// </summary>
         /// <param name="lastWeek">The cut-off from <see cref="LastWeek"/>.</param>

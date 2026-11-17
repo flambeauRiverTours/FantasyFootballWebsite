@@ -1,4 +1,4 @@
-import type { SeasonPayload, TeamPayload } from '../src/api/types';
+import type { PlayoffsPayload, SeasonPayload, TeamPayload } from '../src/api/types';
 
 const NoConsistency = { sigma: null, cv: null, mean: null, min: null, max: null };
 
@@ -43,6 +43,66 @@ function result(wins: number, losses: number, ties: number) {
  * A head-to-head season whose records rank the teams in the reverse of their
  * points, so anything still ordered by points shows (T68).
  */
+/** A two-round bracket: semifinals settled (the second on a tiebreak, won by roster 9, which has no table row), the final to come (T69). */
+export const bracket: PlayoffsPayload = {
+  rounds: [
+    {
+      round: 1,
+      weeks: [15],
+      name: 'Semifinals',
+      matches: [
+        {
+          match: 1,
+          label: 'Semifinal 1',
+          placement: null,
+          isSettled: true,
+          sides: [
+            { rosterId: 1, name: 'Alpha', from: null, points: 120.5, won: true },
+            { rosterId: 2, name: 'Bravo', from: null, points: 99, won: false },
+          ],
+        },
+        {
+          match: 2,
+          label: 'Semifinal 2',
+          placement: null,
+          isSettled: true,
+          sides: [
+            { rosterId: 3, name: 'Charlie', from: null, points: 80, won: false },
+            { rosterId: 9, name: 'Placeholder', from: null, points: 80, won: true },
+          ],
+        },
+      ],
+    },
+    {
+      round: 2,
+      weeks: [16],
+      name: 'Final',
+      matches: [
+        {
+          match: 3,
+          label: 'Final',
+          placement: 1,
+          isSettled: false,
+          sides: [
+            { rosterId: 1, name: 'Alpha', from: { winnerOf: 1 }, points: 50, won: false },
+            { rosterId: null, name: null, from: { winnerOf: 2 }, points: null, won: false },
+          ],
+        },
+        {
+          match: 4,
+          label: '3rd place',
+          placement: 3,
+          isSettled: false,
+          sides: [
+            { rosterId: null, name: null, from: { loserOf: 1 }, points: null, won: false },
+            { rosterId: null, name: null, from: null, points: null, won: false },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 export const headToHead: SeasonPayload = {
   ...payload,
   format: 'HeadToHead',

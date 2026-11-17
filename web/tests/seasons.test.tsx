@@ -37,6 +37,37 @@ describe('Masthead', () => {
     expect(document.querySelector('.masthead p')).toHaveTextContent('2026 · Season completed');
   });
 
+  it('says playoffs while the bracket is still being played', () => {
+    const playoffs = {
+      ...payload,
+      currentWeek: 16,
+      finalThroughWeek: 15,
+      lastRegularWeek: 14,
+      seasonEndWeek: 17,
+      isComplete: false,
+    };
+    render(<Masthead payload={playoffs} updatedAgo="just now" />);
+
+    expect(document.querySelector('.masthead p')).toHaveTextContent('2026 · Playoffs · Week 16');
+  });
+
+  it('takes the server s word for when the season is complete', () => {
+    render(<Masthead payload={{ ...payload, isComplete: true }} updatedAgo="just now" />);
+
+    expect(document.querySelector('.masthead p')).toHaveTextContent('2026 · Season completed');
+  });
+
+  it('settles a past playoff season on its final s week', () => {
+    render(
+      <Masthead
+        payload={{ ...past, finalThroughWeek: 14, lastRegularWeek: 14, seasonEndWeek: 17 }}
+        updatedAgo="just now"
+      />,
+    );
+
+    expect(document.querySelector('.masthead p')).toHaveTextContent('· Final · Week 17');
+  });
+
   it('offers every season, newest first, once there are two', () => {
     render(
       <Masthead

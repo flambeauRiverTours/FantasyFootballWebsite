@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text.Json;
+using FantasyLeague.Core;
 using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
 
@@ -26,7 +27,21 @@ namespace FantasyLeague.Seasons
         /// the daily check a 304.
         /// </remarks>
         public static string CacheControl(SeasonPayload payload) =>
-            payload.IsCurrent ? "public, max-age=5" : "public, max-age=86400";
+            payload.IsCurrent ? "public, max-age=5"
+            : MissingItsBracket(payload) ? "public, max-age=60"
+            : "public, max-age=86400";
+
+        /// <summary>
+        /// Whether a head-to-head season with playoffs came without its bracket: its read failed,
+        /// and a day in the browser would keep it bare for a day (A46).
+        /// </summary>
+        /// <param name="payload">The response body.</param>
+        /// <returns>True when its season ends at week 18 for want of a bracket.</returns>
+        private static bool MissingItsBracket(SeasonPayload payload) =>
+            payload.Format == LeagueFormat.HeadToHead
+            && payload.Playoffs is null
+            && payload.SeasonEndWeek == RegularSeason.NFLWeeks
+            && payload.LastRegularWeek < RegularSeason.NFLWeeks;
 
         /// <summary>
         /// Builds a validator for the seasons list.

@@ -48,6 +48,13 @@ namespace FantasyLeague.Sleeper
             httpClient.GetFromJsonAsync<IReadOnlyList<MatchupDto?>>($"league/{leagueId}/matchups/{week}", SleeperJson.Options, cancellationToken);
 
         /// <summary>
+        /// Reads <c>/league/{id}/winners_bracket</c>: the playoff bracket (T69).
+        /// </summary>
+        /// <returns>The matches, or null.</returns>
+        internal Task<IReadOnlyList<BracketMatchDto?>?> GetWinnersBracketAsync(string leagueId, CancellationToken cancellationToken = default) =>
+            httpClient.GetFromJsonAsync<IReadOnlyList<BracketMatchDto?>>($"league/{leagueId}/winners_bracket", SleeperJson.Options, cancellationToken);
+
+        /// <summary>
         /// Reads <c>/players/nfl</c>: the 14 MB dump of every NFL player.
         /// </summary>
         /// <returns>Every player by id, or null.</returns>

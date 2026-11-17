@@ -25,6 +25,48 @@ export interface SeasonPayload {
    * Only in `HeadToHead`, and only when that week has games; a missing one means no panel.
    */
   matchups?: MatchupsPayload;
+  /** The table's champions once the season is complete (T70); absent until then. */
+  champions?: number[];
+  /** The week the season ends (A46); absent in a body cached before T69. */
+  seasonEndWeek?: number;
+  /** Whether the season is over (A46); absent in a body cached before T69. */
+  isComplete?: boolean;
+  /** The winners bracket (T69); absent without one to show. */
+  playoffs?: PlayoffsPayload;
+}
+
+/** The winners bracket (T69, A46). */
+export interface PlayoffsPayload {
+  rounds: RoundPayload[];
+}
+
+/** One round: "Final", "Semifinals" or "Round N". */
+export interface RoundPayload {
+  round: number;
+  weeks: number[];
+  name: string;
+  matches: BracketMatchPayload[];
+}
+
+/** One match; its sides in Sleeper's order. */
+export interface BracketMatchPayload {
+  match: number;
+  /** What the card says: "Final", "3rd place", "Semifinal 1". */
+  label: string;
+  placement: number | null;
+  /** Every week final and Sleeper's winner set. */
+  isSettled: boolean;
+  sides: [BracketSidePayload, BracketSidePayload];
+}
+
+/** One side of a bracket match; an unknown one has no roster and says where it comes from. */
+export interface BracketSidePayload {
+  rosterId: number | null;
+  name: string | null;
+  from: { winnerOf?: number; loserOf?: number } | null;
+  /** Summed over the round's weeks so far; null before it starts. */
+  points: number | null;
+  won: boolean;
 }
 
 /** One week's games, in matchup id order. */
@@ -58,7 +100,8 @@ export type LeagueFormat = 'TotalPoints' | 'HeadToHead';
  * page can change after it, so it says so and stops polling (A37).
  */
 export function isSeasonComplete(payload: SeasonPayload): boolean {
-  return payload.finalThroughWeek >= payload.lastRegularWeek;
+  // the server's word (A46); a body cached before it said falls back to the old rule, as format does (A38)
+  return payload.isComplete ?? payload.finalThroughWeek >= payload.lastRegularWeek;
 }
 
 /**
