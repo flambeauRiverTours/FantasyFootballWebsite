@@ -2,7 +2,7 @@
 
 A live standings board for my Sleeper fantasy league. We compete on total points over the season, so that's what the board ranks on. Beside it sit two extra stats: how steady each team's scoring is, and how many points each team left on the bench.
 
-This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A48. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
+This document describes the system as it's built. The history of how it got here (what I got wrong, and why it changed) is in [`amendments.md`](amendments.md), A1–A49. Section numbers and the D/R/Q labels are referenced from the code and the other docs, so they stay fixed.
 
 - **Data:** the Sleeper API
 - **Stack:** .NET 10 Azure Functions, React, Azure SQL and blob storage
@@ -211,7 +211,7 @@ A season is about 6 × 18 = 108 rows, a few hundred KB.
 
 The free SQL offer gives 100k vCore-seconds a month, so it has to auto-pause: running continuously would use about 1.3M. A paused database takes 30–60 s to resume, which the first visitor after an idle hour had to sit through. That wasn't acceptable.
 
-So the Tuesday finalize job writes the season to SQL **and** to a blob, and requests read the blob first (A16). The two have different jobs (A20): the blob caches the current season, and SQL is the permanent record of every season. A read that falls back to SQL writes the blob, so it repairs itself after a deploy. Past seasons still come from SQL, and occasionally pay the resume.
+So the Tuesday finalize job writes the season to SQL **and** to a blob, and requests read the blob first (A16). The two have different jobs (A20): the blob caches the current season, and SQL is the permanent record of every season. A read that falls back to SQL writes the blob, so it repairs itself after a deploy. Past seasons still come from SQL, and occasionally pay the resume. The finalize job wakes the paused database every Tuesday; its first connection is refused while it resumes and a retry gets in, so that attempt and the retry are logged at Debug, not as errors (A49).
 
 The free tier is set to **pause when the limit is hit**, not to continue and bill.
 

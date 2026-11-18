@@ -396,6 +396,10 @@ az ad app federated-credential list --id "$APP_ID" --query "[].{name:name, subje
 
 A new deployment environment or a renamed branch changes the subject GitHub sends. Each needs its own entry.
 
+### App Insights shows a SQL error on a Tuesday at noon
+
+Probably not, since A49: the Tuesday finalize wakes the paused database, its first connection is refused, and a retry gets in. That is logged at Debug now. If an error does show, the retries ran out: look for a failed `FinalizeWeek` run at the same time, and run it again from the portal once the database answers.
+
 ### The standings look wrong
 
 Check that the dummy team from Step 5 is excluded. Included, it skews every league average.

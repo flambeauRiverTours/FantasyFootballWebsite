@@ -2,6 +2,7 @@
 using Azure.Storage.Blobs;
 using FantasyLeague.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -30,9 +31,16 @@ namespace FantasyLeague.Data
             // error 40613 ("not currently available, retry later") while it wakes
             // up in the background - a bigger Connect Timeout does nothing against
             // that, only retrying with backoff does (D7, A16's cold-start follow-up).
+            // The failed attempt and the retry are then routine, the Tuesday finalize's wake-up
+            // every week, so both are logged at Debug, which the host drops (A49). A real outage
+            // still shows: retries exhausted or a non-transient error throw, and the function fails.
             services.AddDbContextFactory<FantasyDataContext>(
-                options => options.UseSqlServer(connectionString,
-                    sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)));
+                options => options
+                    .UseSqlServer(connectionString,
+                        sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null))
+                    .ConfigureWarnings(w => w.Log(
+                        (RelationalEventId.ConnectionError, LogLevel.Debug),
+                        (CoreEventId.ExecutionStrategyRetrying, LogLevel.Debug))));
 
             services.AddHybridCache();
             services.TryAddSingleton(TimeProvider.System);

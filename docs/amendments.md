@@ -1,6 +1,6 @@
 # Amendments
 
-A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A48 so they don't clash with the design's D/R/Q labels, and the code cites them.
+A decision log. [`design.md`](design.md) describes what's built; this file says why, and what changed along the way. Entries are numbered A1–A49 so they don't clash with the design's D/R/Q labels, and the code cites them.
 
 The open questions, Q1–Q15, and their answers are in [design §14](design.md#14--open-questions).
 
@@ -405,6 +405,16 @@ Not done here: the champion. T70 crowns the winner of the final playoff game, bu
 - **Within the division:** rank, T1 ties and games back, by the league's own rule (A39). Sleeper's division tiebreaks are undocumented and not copied. The leader is the rank-1 row, with no badge: a second mark would compete with the crown. The champion is unchanged (A45, A46).
 - **Omitted, not null.** `divisions` and each team's `division` are left out of a body that is not grouped, as every optional field is, so no existing body or ETag changes.
 - **One table, a body per division,** each opened by a `scope="rowgroup"` header row spanning the columns. Screen readers vary in announcing it; the markup is valid and passes axe. Rows slide within their own body (T74). While records are loading the points table stands in, ungrouped.
+
+## A49 · The database's wake-up is not an error
+
+2026-11-18. Noticed in App Insights as a weekly SQL error.
+
+- **What it was:** every Tuesday at 12:00 UTC, seven weeks running from 6 October, the finalize job's first connection found the database auto-paused. SQL replied at once with error 40613, "not currently available, retry later"; EF Core's retry (A16's follow-up) got in about 12 s later, and every run stored its weeks within a minute.
+- **Why it looked like an error:** EF Core logs the failed attempt (`ConnectionError`) at Error, and the retry (`ExecutionStrategyRetrying`) at Information with the exception attached, which App Insights files as an exception. Two alarms a week for a routine, handled event teach the eye to skip the exceptions table.
+- **The fix:** those two events are logged at Debug, which the host drops. Only those two: a category filter would hide every other connection and infrastructure message too.
+- **A real outage still shows.** Once the retries are spent, or on an error that is not transient (a login failure), the exception reaches the function, `FinalizeWeek` fails, and the host records the failed run and its exception.
+- **Not this:** a 20 October cold start where one page request timed out waiting for the function to start ("Timed out waiting for the function start call"); it has not recurred, and is the host, not SQL.
 
 ## What the original design got wrong
 
