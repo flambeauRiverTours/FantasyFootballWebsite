@@ -2,8 +2,12 @@
 using FantasyLeague.Seasons;
 using FantasyLeague.Sleeper;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FantasyLeague.Core.Tests
@@ -188,6 +192,24 @@ namespace FantasyLeague.Core.Tests
             using var provider = services.BuildServiceProvider(Validated);
 
             provider.GetRequiredService<IFinalizedWeekStore>().Should().NotBeOfType<NullFinalizedWeekStore>();
+        }
+
+        [Theory]
+        [InlineData(nameof(RelationalEventId.ConnectionError))]
+        [InlineData(nameof(CoreEventId.ExecutionStrategyRetrying))]
+        public void A_database_waking_from_auto_pause_logs_nothing_the_host_keeps(string eventName)
+        {
+            // A49: the Tuesday finalize wakes the paused database every week, and the retry handles it
+            var services = TestServices.Create();
+            services.AddFantasyData("Server=unused;Database=unused");
+            using var provider = services.BuildServiceProvider(Validated);
+            using var context = provider.GetRequiredService<IDbContextFactory<FantasyDataContext>>().CreateDbContext();
+            var warnings = context.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()!.WarningsConfiguration;
+            var eventId = eventName == nameof(RelationalEventId.ConnectionError)
+                ? RelationalEventId.ConnectionError
+                : CoreEventId.ExecutionStrategyRetrying;
+
+            warnings.GetLevel(eventId).Should().Be(LogLevel.Debug);
         }
 
         [Fact]

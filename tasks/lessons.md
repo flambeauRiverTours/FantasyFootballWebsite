@@ -56,6 +56,7 @@ incident itself belongs in the commit or the amendment.
 ## Azure
 
 - Verify a setting on the resource that enforces it: workspace-based App Insights caps on the workspace.
+- `az monitor app-insights query` searches only a short default window whatever the KQL says: pass `--offset 45d`. KQL's `dayofweek` counts from Sunday, so 2 is Tuesday.
 - A template that builds is not one Azure accepts; `infra/` changes are verified by a what-if.
 
 ## Secrets (A2)
